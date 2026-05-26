@@ -350,6 +350,26 @@ def build_html(balances, wise_bal, sol_balance, sol_usd, txns):
     all_cats = list(dict.fromkeys(t["category"] for t in txns))
     donut_colors_js = json.dumps({cat: DONUT_COLORS[i % len(DONUT_COLORS)] for i, cat in enumerate(all_cats)})
 
+    # ── Account name map + default colors ───────────────────────────────────
+    # Default palette per account (stable order by first appearance)
+    ACC_DEFAULT_PALETTE = [
+        "#4fc978",  # vert
+        "#c97ef7",  # purple
+        "#f7c948",  # jaune
+        "#4f86f7",  # bleu
+        "#f7964f",  # orange
+        "#4ff7e8",  # cyan
+        "#f74fc9",  # rose
+        "#f76e6e",  # rouge
+        "#a8f74f",  # lime
+        "#93c5fd",  # bleu pâle
+    ]
+    acc_ids_ordered = list(dict.fromkeys(t["account"] for t in txns))
+    acc_name_map = {aid: balances[aid]["name"] if aid in balances else aid for aid in acc_ids_ordered}
+    acc_default_colors = {aid: ACC_DEFAULT_PALETTE[i % len(ACC_DEFAULT_PALETTE)] for i, aid in enumerate(acc_ids_ordered)}
+    acc_name_map_js   = json.dumps(acc_name_map)
+    acc_default_colors_js = json.dumps(acc_default_colors)
+
     generated_at = datetime.now().strftime("%B %d, %Y at %H:%M")
 
     return f"""<!DOCTYPE html>
@@ -420,6 +440,11 @@ def build_html(balances, wise_bal, sol_balance, sol_usd, txns):
   .legend-item {{ display: flex; align-items: center; gap: 8px; font-size: 0.75rem; font-weight: 500; }}
   .legend-dot {{ width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }}
   .legend-val {{ margin-left: auto; color: var(--muted); font-size: 0.7rem; }}
+
+  /* Account legend */
+  .acc-legend-item {{ display: inline-flex; align-items: center; gap: 5px; font-size: 0.72rem; font-weight: 600; color: #ccc; cursor: pointer; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 20px; padding: 3px 10px; transition: background 0.15s; }}
+  .acc-legend-item:hover {{ background: rgba(255,255,255,0.12); }}
+  .acc-legend-dot {{ width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }}
 
   /* Table */
   .table-card {{ background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; margin-bottom: 40px; overflow-x: auto; }}
@@ -548,7 +573,10 @@ def build_html(balances, wise_bal, sol_balance, sol_usd, txns):
   <!-- Tab: Transactions -->
   <div id="tab-txns" class="tab-panel">
     <div class="table-card">
-      <h2 style="margin-bottom:16px">Toutes les transactions</h2>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px">
+        <h2 style="margin:0">Toutes les transactions</h2>
+        <div id="acc-legend" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center"></div>
+      </div>
       <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px">
         <input id="txn-search" type="text" placeholder="Rechercher…"
           oninput="renderTxns(this.value,document.getElementById('txn-acct').value,document.getElementById('txn-cat').value)"
@@ -590,11 +618,54 @@ def build_html(balances, wise_bal, sol_balance, sol_usd, txns):
 
 <script>
 // ── Data ──────────────────────────────────────────────────────────────────────
-const ALL_TXNS     = {all_txns_json};
-const CAT_COLORS   = {donut_colors_js};
+const ALL_TXNS          = {all_txns_json};
+const CAT_COLORS        = {donut_colors_js};
+const ACC_NAME_MAP      = {acc_name_map_js};
+const ACC_DEFAULT_COLORS= {acc_default_colors_js};
 const OVERRIDES    = JSON.parse(localStorage.getItem('catOverrides') || '{{}}');
 const NAMES        = JSON.parse(localStorage.getItem('nameOverrides') || '{{}}');
+const SELF_PAYS    = JSON.parse(localStorage.getItem('selfPayIds') || '[]');
+const SELF_PAY_SET = new Set(SELF_PAYS);
 window.OVERRIDES   = OVERRIDES;
+
+// ── Couleurs comptes (custom ou défaut) ───────────────────────────────────────
+function getAccColors() {{
+  const saved = JSON.parse(localStorage.getItem('accColors') || '{{}}');
+  return Object.assign({{}}, ACC_DEFAULT_COLORS, saved);
+}}
+function setAccColor(accId, color) {{
+  const saved = JSON.parse(localStorage.getItem('accColors') || '{{}}');
+  saved[accId] = color;
+  localStorage.setItem('accColors', JSON.stringify(saved));
+}}
+function resetAccColor(accId) {{
+  const saved = JSON.parse(localStorage.getItem('accColors') || '{{}}');
+  delete saved[accId];
+  localStorage.setItem('accColors', JSON.stringify(saved));
+}}
+function getAccName(accId) {{
+  return ACC_NAME_MAP[accId] || accId;
+}}
+
+// ── Self-payment toggle ────────────────────────────────────────────────────────
+function toggleSelfPay(id) {{
+  if (SELF_PAY_SET.has(id)) {{
+    SELF_PAY_SET.delete(id);
+    const idx = SELF_PAYS.indexOf(id);
+    if (idx !== -1) SELF_PAYS.splice(idx, 1);
+  }} else {{
+    SELF_PAY_SET.add(id);
+    SELF_PAYS.push(id);
+  }}
+  localStorage.setItem('selfPayIds', JSON.stringify(SELF_PAYS));
+  renderTxns(
+    document.getElementById('txn-search')?.value||'',
+    document.getElementById('txn-acct')?.value||'',
+    document.getElementById('txn-cat')?.value||''
+  );
+  if (window.initializedTabs?.has('budget')) renderBudget(getFilteredTxns(currentDays));
+  if (window.initializedTabs?.has('overview')) refreshAll();
+}}
 
 // ── Tab switching ─────────────────────────────────────────────────────────────
 let initializedTabs = new Set(['overview']);
@@ -789,7 +860,7 @@ function renderWeekly(txns) {{
 }}
 
 // ── Budget ────────────────────────────────────────────────────────────────────
-const SKIP_CATS = new Set(['Cash/Virements','Investissements']);
+const SKIP_CATS = new Set(['Cash/Virements','Investissements','Paiement propre']);
 const CAT_ICONS = {{
   'Bouffe/Resto':'🍔','Épicerie':'🛒','Gaz':'⛽','Shopping':'🛍️',
   'Divertissement':'🎮','Gym':'💪','Télécom':'📱','Business/Tech':'💻',
@@ -861,7 +932,7 @@ function renderBudget(txns) {{
 
   // Avg monthly par cat sur toutes les données
   const allMonths = {{}};
-  ALL_TXNS.filter(t => t.amount > 0 && !SKIP_CATS.has(OVERRIDES[t.id] || t.category)).forEach(t => {{
+  ALL_TXNS.filter(t => t.amount > 0 && !SKIP_CATS.has(OVERRIDES[t.id] || t.category) && !SELF_PAY_SET.has(t.id)).forEach(t => {{
     const mk = t.date.substring(0,7); const cat = OVERRIDES[t.id] || t.category;
     if (!allMonths[mk]) allMonths[mk] = {{}};
     allMonths[mk][cat] = (allMonths[mk][cat]||0) + t.amount;
@@ -873,7 +944,7 @@ function renderBudget(txns) {{
 
   // Dépenses période filtrée
   const spent = {{}};
-  txns.filter(t => t.amount > 0 && !SKIP_CATS.has(OVERRIDES[t.id] || t.category)).forEach(t => {{
+  txns.filter(t => t.amount > 0 && !SKIP_CATS.has(OVERRIDES[t.id] || t.category) && !SELF_PAY_SET.has(t.id)).forEach(t => {{
     const cat = OVERRIDES[t.id] || t.category;
     spent[cat] = (spent[cat]||0) + t.amount;
   }});
@@ -1097,16 +1168,54 @@ function syncCatDropdown() {{
 function initTxns() {{
   const acctSel = document.getElementById('txn-acct');
   const accts   = [...new Set(ALL_TXNS.map(t => t.account))];
-  accts.forEach(a => {{ const o=document.createElement('option'); o.value=a; o.textContent=a; acctSel.appendChild(o); }});
+  accts.forEach(a => {{ const o=document.createElement('option'); o.value=a; o.textContent=getAccName(a); acctSel.appendChild(o); }});
   syncCatDropdown();
+  renderAccLegend();
   renderTxns('','','');
   renderRules();
 }}
 
+function renderAccLegend() {{
+  const el = document.getElementById('acc-legend');
+  if (!el) return;
+  const accts  = [...new Set(ALL_TXNS.map(t => t.account))];
+  const colors = getAccColors();
+  el.innerHTML = accts.map(a => {{
+    const color = colors[a] || '#777';
+    const name  = getAccName(a);
+    return `<span class="acc-legend-item" title="Cliquer pour changer la couleur" onclick="pickAccColor('${{a}}',this)">
+      <span class="acc-legend-dot" id="dot-${{a}}" style="background:${{color}}"></span>
+      <span>${{name}}</span>
+    </span>`;
+  }}).join('');
+}}
+
+function pickAccColor(accId, el) {{
+  const inp = document.createElement('input');
+  inp.type = 'color';
+  const colors = getAccColors();
+  inp.value = colors[accId] || '#777777';
+  inp.style.cssText = 'position:absolute;width:0;height:0;opacity:0';
+  el.appendChild(inp);
+  inp.click();
+  inp.addEventListener('input', () => {{
+    setAccColor(accId, inp.value);
+    renderAccLegend();
+    renderTxns(
+      document.getElementById('txn-search')?.value||'',
+      document.getElementById('txn-acct')?.value||'',
+      document.getElementById('txn-cat')?.value||''
+    );
+  }});
+  inp.addEventListener('change', () => {{ inp.remove(); }});
+  inp.addEventListener('blur',   () => {{ inp.remove(); }});
+}}
+
 function renderTxns(filter='', acct='', cat='') {{
-  const q    = filter.toLowerCase();
-  const pool = getFilteredTxns(currentDays);   // respect period filter
-  const rows = pool.filter(t => {{
+  const q      = filter.toLowerCase();
+  const pool   = getFilteredTxns(currentDays);
+  const colors = getAccColors();
+  const rows   = pool.filter(t => {{
     const ec = OVERRIDES[t.id]||t.category;
     const en = NAMES[t.id]||t.name;
     if (acct && t.account !== acct) return false;
@@ -1115,17 +1224,32 @@ function renderTxns(filter='', acct='', cat='') {{
     return true;
   }});
   document.getElementById('txn-tbody').innerHTML = rows.map(t => {{
-    const ec  = OVERRIDES[t.id]||t.category;
-    const en  = NAMES[t.id]||t.name;
-    const cls = t.amount < 0 ? 'green' : 'red';
-    const amt = t.amount < 0 ? `+$${{Math.abs(t.amount).toFixed(2)}}` : `-$${{t.amount.toFixed(2)}}`;
-    const ns  = NAMES[t.id] ? 'color:#93c5fd;' : '';
-    return `<tr>
+    const ec       = OVERRIDES[t.id]||t.category;
+    const en       = NAMES[t.id]||t.name;
+    const isSelf   = SELF_PAY_SET.has(t.id);
+    const cls      = isSelf ? '' : (t.amount < 0 ? 'green' : 'red');
+    const amt      = t.amount < 0 ? `+$${{Math.abs(t.amount).toFixed(2)}}` : `-$${{t.amount.toFixed(2)}}`;
+    const ns       = NAMES[t.id] ? 'color:#93c5fd;' : '';
+    const dotColor = colors[t.account] || '#777';
+    const accName  = getAccName(t.account);
+    const selfStyle= isSelf ? 'opacity:0.45;text-decoration:line-through;' : '';
+    const selfTip  = isSelf ? 'Marqué comme paiement propre (exclu du budget) — cliquer pour annuler' : 'Marquer comme paiement propre (ex: virement à soi-même)';
+    return `<tr style="${{selfStyle}}">
       <td>${{t.date}}</td>
       <td><span onclick="editName('${{t.id}}',this)" style="cursor:pointer;${{ns}}" title="Cliquer pour renommer">${{en}}</span></td>
-      <td><span class="badge" onclick="editCat('${{t.id}}','${{ec}}',this)">${{ec}}</span></td>
-      <td style="color:#777;font-size:0.8rem">${{t.account}}</td>
-      <td class="${{cls}}" style="text-align:right">${{amt}}</td>
+      <td>
+        <span class="badge" onclick="editCat('${{t.id}}','${{ec}}',this)">${{ec}}</span>
+        <span onclick="toggleSelfPay('${{t.id}}')" title="${{selfTip}}" style="cursor:pointer;font-size:0.7rem;margin-left:4px;opacity:${{isSelf?1:0.3}};transition:opacity 0.2s" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity='${{isSelf?1:0.3}}'">🔄</span>
+      </td>
+      <td>
+        <span style="display:inline-flex;align-items:center;gap:5px;font-size:0.8rem;color:#aaa">
+          <span style="width:8px;height:8px;border-radius:50%;background:${{dotColor}};display:inline-block;flex-shrink:0"></span>
+          ${{accName}}
+        </span>
+      </td>
+      <td class="${{cls}}" style="text-align:right;${{isSelf?'color:#555;':''}}">
+        ${{isSelf ? `<span style="font-size:0.7rem;color:#555">🔄 propre</span>` : amt}}
+      </td>
     </tr>`;
   }}).join('');
   document.getElementById('txn-count').textContent = `${{rows.length}} transactions`;
