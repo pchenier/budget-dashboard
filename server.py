@@ -22,7 +22,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from generate import (
     check_config, get_plaid_balances, get_plaid_transactions,
     get_wise_balances, get_wise_transactions, get_phantom_balance,
-    process_transactions, build_html, OUTPUT_PATH
+    get_questrade_data, process_transactions, build_html, OUTPUT_PATH
 )
 
 REFRESH_DAYS = 7
@@ -63,7 +63,8 @@ def run_generate(force=False):
             raw_txns = get_plaid_transactions()
             wise_txns = get_wise_transactions(wise_balance_ids)
             txns = process_transactions(raw_txns, wise_txns)
-            html = build_html(balances, wise_bal, sol_bal, sol_usd, txns)
+            qt_data = get_questrade_data()
+            html = build_html(balances, wise_bal, sol_bal, sol_usd, txns, qt_data)
             with open(OUTPUT_PATH, "w", encoding="utf-8") as f:
                 f.write(html)
             now = datetime.now().strftime("%Y-%m-%d %H:%M")

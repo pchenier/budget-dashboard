@@ -27,10 +27,14 @@ WISE_PROFILE  = int(os.getenv("WISE_PROFILE_ID", "0"))
 
 PHANTOM_ADDR  = os.getenv("PHANTOM_WALLET", "")
 
+QT_REFRESH    = os.getenv("QUESTRADE_REFRESH_TOKEN", "")
+
 USD_TO_CAD    = float(os.getenv("USD_TO_CAD", "1.38"))
 START_DATE    = os.getenv("START_DATE", "2025-01-01")
 END_DATE      = date.today().isoformat()
 OUTPUT_PATH   = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dashboard.html")
+QT_CACHE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "questrade_cache.json")
+ENV_PATH      = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
 
 
 # ── Validation ────────────────────────────────────────────────────────────────
@@ -204,6 +208,118 @@ def get_phantom_balance():
         return 0.0, 0.0
 
 
+# ── Questrade ─────────────────────────────────────────────────────────────────
+def _qt_update_env_token(new_token):
+    """Remplace QUESTRADE_REFRESH_TOKEN dans .env avec le nouveau token rotatif."""
+    try:
+        if not os.path.exists(ENV_PATH):
+            return
+        with open(ENV_PATH, "r") as f:
+            lines = f.readlines()
+        updated = []
+        found = False
+        for line in lines:
+            if line.startswith("QUESTRADE_REFRESH_TOKEN="):
+                updated.append(f"QUESTRADE_REFRESH_TOKEN={new_token}\n")
+                found = True
+            else:
+                updated.append(line)
+        if not found:
+            updated.append(f"QUESTRADE_REFRESH_TOKEN={new_token}\n")
+        with open(ENV_PATH, "w") as f:
+            f.writelines(updated)
+        # Aussi update la variable globale
+        global QT_REFRESH
+        QT_REFRESH = new_token
+        print(f"  Questrade: nouveau refresh token sauvegardé dans .env")
+    except Exception as e:
+        print(f"  Questrade: impossible de sauvegarder le token → {e}")
+
+
+def get_questrade_data():
+    """
+    Fetch comptes + positions + balances depuis Questrade.
+    Sauvegarde un cache JSON local.
+    Si le token est invalide/absent, retourne le cache existant (données stale).
+    """
+    cache = {}
+    if os.path.exists(QT_CACHE_PATH):
+        try:
+            with open(QT_CACHE_PATH, "r") as f:
+                cache = json.load(f)
+        except Exception:
+            cache = {}
+
+    if not QT_REFRESH:
+        if cache:
+            print("  Questrade: pas de token — données du cache utilisées")
+        else:
+            print("  Questrade: skipped (QUESTRADE_REFRESH_TOKEN manquant)")
+        return cache
+
+    print("  Questrade: authentification...")
+    try:
+        r = requests.post(
+            "https://login.questrade.com/oauth2/token",
+            params={"grant_type": "refresh_token", "refresh_token": QT_REFRESH},
+            timeout=15,
+        )
+        if not r.ok:
+            print(f"  Questrade: token invalide ({r.status_code}) — données du cache utilisées")
+            return cache
+        auth = r.json()
+        access_token = auth["access_token"]
+        new_refresh  = auth["refresh_token"]
+        api_server   = auth["api_server"]
+        _qt_update_env_token(new_refresh)
+        headers = {"Authorization": f"Bearer {access_token}"}
+
+        print("  Questrade: comptes...")
+        r_acc = requests.get(api_server + "v1/accounts", headers=headers, timeout=15)
+        r_acc.raise_for_status()
+        accounts = r_acc.json().get("accounts", [])
+
+        all_positions = []
+        all_balances  = []
+        for acc in accounts:
+            acc_id  = acc["number"]
+            acc_type = acc.get("type", "")
+            acc_name = f"{acc_type} ({acc_id})"
+
+            # Positions
+            rp = requests.get(api_server + f"v1/accounts/{acc_id}/positions", headers=headers, timeout=15)
+            if rp.ok:
+                for pos in rp.json().get("positions", []):
+                    pos["_account"] = acc_name
+                    all_positions.append(pos)
+
+            # Balances
+            rb = requests.get(api_server + f"v1/accounts/{acc_id}/balances", headers=headers, timeout=15)
+            if rb.ok:
+                bal_data = rb.json()
+                for b in bal_data.get("combinedBalances", []):
+                    b["_account"] = acc_name
+                    all_balances.append(b)
+
+        fetched_at = datetime.now().isoformat()
+        data = {
+            "fetched_at":  fetched_at,
+            "accounts":    accounts,
+            "positions":   all_positions,
+            "balances":    all_balances,
+        }
+        with open(QT_CACHE_PATH, "w") as f:
+            json.dump(data, f, indent=2)
+        print(f"  Questrade: {len(all_positions)} positions, {len(accounts)} comptes — cache mis à jour")
+        return data
+
+    except Exception as e:
+        print(f"  Questrade: erreur → {e}")
+        if cache:
+            print("  Questrade: données du cache utilisées comme fallback")
+        return cache
+
+
 # ── Catégories ────────────────────────────────────────────────────────────────
 CATEGORY_RULES = [
     (["metro", "iga", "maxi", "provigo", "superc", "loblaws", "marché elite",
@@ -356,7 +472,7 @@ DONUT_COLORS = [
     "#fd79a8","#6c5ce7","#00b894","#e17055","#74b9ff",
 ]
 
-def build_html(balances, wise_bal, sol_balance, sol_usd, txns):
+def build_html(balances, wise_bal, sol_balance, sol_usd, txns, qt_data=None):
     # ── Net worth ────────────────────────────────────────────────────────────
     checking_total = sum(a["current"] for a in balances.values() if a["type"] == "depository")
     credit_total   = sum(a["current"] for a in balances.values() if a["type"] == "credit")
@@ -444,6 +560,32 @@ def build_html(balances, wise_bal, sol_balance, sol_usd, txns):
     acc_default_colors = {aid: ACC_DEFAULT_PALETTE[i % len(ACC_DEFAULT_PALETTE)] for i, aid in enumerate(acc_ids_ordered)}
     acc_name_map_js   = json.dumps(acc_name_map)
     acc_default_colors_js = json.dumps(acc_default_colors)
+
+    # ── Questrade data pour le tab Investissements ───────────────────────────
+    qt_data = qt_data or {}
+    qt_positions   = qt_data.get("positions", [])
+    qt_balances    = qt_data.get("balances", [])
+    qt_accounts    = qt_data.get("accounts", [])
+    qt_fetched_at  = qt_data.get("fetched_at", "")
+    qt_fetched_str = ""
+    if qt_fetched_at:
+        try:
+            dt = datetime.fromisoformat(qt_fetched_at)
+            qt_fetched_str = dt.strftime("%d %b %Y à %H:%M")
+        except Exception:
+            qt_fetched_str = qt_fetched_at[:16]
+
+    # Calcul total portfolio Questrade en CAD
+    qt_total_cad = 0.0
+    for b in qt_balances:
+        if b.get("currency") == "CAD":
+            qt_total_cad += b.get("totalEquity", 0) or 0
+        elif b.get("currency") == "USD":
+            qt_total_cad += (b.get("totalEquity", 0) or 0) * USD_TO_CAD
+
+    qt_positions_json = json.dumps(qt_positions)
+    qt_balances_json  = json.dumps(qt_balances)
+    qt_accounts_json  = json.dumps(qt_accounts)
 
     generated_at = datetime.now().strftime("%B %d, %Y at %H:%M")
 
@@ -574,6 +716,7 @@ def build_html(balances, wise_bal, sol_balance, sol_usd, txns):
   <button class="tab-btn active" onclick="switchTab('overview')">Vue générale</button>
   <button class="tab-btn"        onclick="switchTab('budget')">Budget</button>
   <button class="tab-btn"        onclick="switchTab('txns')">Transactions</button>
+  <button class="tab-btn"        onclick="switchTab('invest')">Investissements</button>
 </nav>
 
 <div class="main">
@@ -681,7 +824,7 @@ def build_html(balances, wise_bal, sol_balance, sol_usd, txns):
       </div>
     </div>
 
-    <!-- Règles de catégorie -->
+    <!-- Tab: Règles de catégorie -->
     <div class="table-card" style="margin-top:0">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
         <h2 style="margin:0">Règles de catégorie</h2>
@@ -689,6 +832,40 @@ def build_html(balances, wise_bal, sol_balance, sol_usd, txns):
       </div>
       <div id="rules-panel">
         <p style="color:#444;font-size:13px">Aucune règle — change la catégorie d'une transaction pour en créer une.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tab: Investissements -->
+  <div id="tab-invest" class="tab-panel">
+    <div class="table-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:12px">
+        <div>
+          <h2 style="margin:0 0 4px">Portfolio Questrade</h2>
+          {f'<span style="font-size:11px;color:#555">Données du {qt_fetched_str}</span>' if qt_fetched_str else '<span style="font-size:11px;color:#f76e6e">Aucune donnée — ajouter QUESTRADE_REFRESH_TOKEN dans .env</span>'}
+        </div>
+        <div id="qt-total-cad" style="font-size:1.8rem;font-weight:800;background:linear-gradient(90deg,#fff,#93c5fd);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">
+          {fmt_cad(qt_total_cad) if qt_total_cad else "—"}
+        </div>
+      </div>
+
+      <!-- Balances par compte -->
+      <div id="qt-balances" style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:28px"></div>
+
+      <!-- Positions table -->
+      <div style="overflow-x:auto">
+        <table id="qt-table">
+          <thead><tr>
+            <th>Symbole</th><th>Description</th><th>Compte</th>
+            <th style="text-align:right">Qté</th>
+            <th style="text-align:right">Prix moyen</th>
+            <th style="text-align:right">Prix actuel</th>
+            <th style="text-align:right">Valeur marché</th>
+            <th style="text-align:right">G/P $</th>
+            <th style="text-align:right">G/P %</th>
+          </tr></thead>
+          <tbody id="qt-tbody"></tbody>
+        </table>
       </div>
     </div>
   </div>
@@ -701,6 +878,9 @@ const ALL_TXNS          = {all_txns_json};
 const CAT_COLORS        = {donut_colors_js};
 const ACC_NAME_MAP      = {acc_name_map_js};
 const ACC_DEFAULT_COLORS= {acc_default_colors_js};
+const QT_POSITIONS      = {qt_positions_json};
+const QT_BALANCES       = {qt_balances_json};
+const QT_ACCOUNTS       = {qt_accounts_json};
 const OVERRIDES    = JSON.parse(localStorage.getItem('catOverrides') || '{{}}');
 const NAMES        = JSON.parse(localStorage.getItem('nameOverrides') || '{{}}');
 const SELF_PAYS    = JSON.parse(localStorage.getItem('selfPayIds') || '[]');
@@ -751,16 +931,16 @@ let initializedTabs = new Set(['overview']);
 
 function switchTab(name) {{
   document.querySelectorAll('.tab-btn').forEach((b,i) => {{
-    b.classList.toggle('active', ['overview','budget','txns'][i] === name);
+    b.classList.toggle('active', ['overview','budget','txns','invest'][i] === name);
   }});
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
-  // period-bar visible on ALL tabs
   if (!initializedTabs.has(name)) {{
     initializedTabs.add(name);
     const txns = getFilteredTxns(currentDays);
-    if (name === 'budget') renderBudget(txns);
-    if (name === 'txns')   initTxns();
+    if (name === 'budget')  renderBudget(txns);
+    if (name === 'txns')    initTxns();
+    if (name === 'invest')  initInvest();
   }} else if (name === 'txns') {{
     renderTxns(document.getElementById('txn-search')?.value||'', document.getElementById('txn-acct')?.value||'', document.getElementById('txn-cat')?.value||'');
   }}
@@ -1590,7 +1770,68 @@ function refreshAll() {{
 
 window.addEventListener('DOMContentLoaded', () => refreshAll());
 
-// ── Refresh button ────────────────────────────────────────────────────────────
+// ── Investissements (Questrade) ───────────────────────────────────────────────
+function initInvest() {{
+  // Balances par compte
+  const balEl = document.getElementById('qt-balances');
+  if (balEl && QT_BALANCES.length) {{
+    const byAcc = {{}};
+    QT_BALANCES.forEach(b => {{
+      const acc = b._account || 'Inconnu';
+      if (!byAcc[acc]) byAcc[acc] = [];
+      byAcc[acc].push(b);
+    }});
+    balEl.innerHTML = Object.entries(byAcc).map(([acc, bals]) => {{
+      const cad = bals.find(b => b.currency === 'CAD');
+      const usd = bals.find(b => b.currency === 'USD');
+      const totalCAD = (cad?.totalEquity || 0) + (usd?.totalEquity || 0) * {USD_TO_CAD};
+      const cashCAD  = (cad?.cash || 0) + (usd?.cash || 0) * {USD_TO_CAD};
+      return `<div style="background:#181818;border:1px solid #222;border-radius:12px;padding:16px 20px;min-width:200px">
+        <div style="font-size:0.7rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#555;margin-bottom:8px">${{acc}}</div>
+        <div style="font-size:1.3rem;font-weight:800;color:#f1f1f1">$${{totalCAD.toLocaleString('fr-CA',{{minimumFractionDigits:2,maximumFractionDigits:2}})}}</div>
+        <div style="font-size:0.75rem;color:#555;margin-top:4px">Liquidités : $${{cashCAD.toLocaleString('fr-CA',{{minimumFractionDigits:2,maximumFractionDigits:2}})}}</div>
+        ${{usd ? `<div style="font-size:0.7rem;color:#444;margin-top:2px">USD : $${{(usd.totalEquity||0).toLocaleString('en-US',{{minimumFractionDigits:2,maximumFractionDigits:2}})}}</div>` : ''}}
+      </div>`;
+    }}).join('');
+  }} else if (balEl) {{
+    balEl.innerHTML = '<p style="color:#444;font-size:13px">Aucune balance — token Questrade requis</p>';
+  }}
+
+  // Positions table
+  const tbody = document.getElementById('qt-tbody');
+  if (!tbody) return;
+  if (!QT_POSITIONS.length) {{
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#444;padding:24px">Aucune position — token Questrade requis</td></tr>';
+    return;
+  }}
+  // Sort by market value desc
+  const sorted = [...QT_POSITIONS].sort((a,b) => (b.currentMarketValue||0) - (a.currentMarketValue||0));
+  tbody.innerHTML = sorted.map(p => {{
+    const gp     = p.openPnl ?? (p.currentMarketValue - (p.averageEntryPrice * p.openQuantity));
+    const gpPct  = p.averageEntryPrice > 0 ? (gp / (p.averageEntryPrice * p.openQuantity)) * 100 : 0;
+    const cls    = gp >= 0 ? 'green' : 'red';
+    const mv     = p.currentMarketValue || 0;
+    const qty    = p.openQuantity || 0;
+    const avg    = p.averageEntryPrice || 0;
+    const cur    = p.currentPrice || 0;
+    const sym    = p.symbol || '';
+    const desc   = p.symbolId ? (p.description || sym) : sym;
+    const acc    = p._account || '';
+    return `<tr>
+      <td style="font-weight:700;color:#f1f1f1">${{sym}}</td>
+      <td style="color:#aaa;font-size:0.82rem;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${{desc}}">${{desc}}</td>
+      <td style="color:#666;font-size:0.78rem">${{acc}}</td>
+      <td style="text-align:right">${{qty % 1 === 0 ? qty : qty.toFixed(4)}}</td>
+      <td style="text-align:right;color:#aaa">$${{avg.toFixed(2)}}</td>
+      <td style="text-align:right;color:#aaa">$${{cur.toFixed(2)}}</td>
+      <td style="text-align:right;font-weight:600">$${{mv.toLocaleString('fr-CA',{{minimumFractionDigits:2,maximumFractionDigits:2}})}}</td>
+      <td style="text-align:right" class="${{cls}}">${{gp >= 0 ? '+' : ''}}$${{Math.abs(gp).toFixed(2)}}</td>
+      <td style="text-align:right" class="${{cls}}">${{gp >= 0 ? '+' : ''}}${{gpPct.toFixed(1)}}%</td>
+    </tr>`;
+  }}).join('');
+}}
+
+// ── Refresh button ─────────────────────────────────────────────────────────────
 function doRefresh() {{
   const btn  = document.getElementById('refresh-btn');
   const icon = document.getElementById('refresh-icon');
@@ -1643,8 +1884,10 @@ if __name__ == "__main__":
     print("\n⚙️  Traitement...")
     txns = process_transactions(raw_txns, wise_txns)
     print(f"  {len(txns)} transactions après filtrage")
+    print("\n📥 Questrade...")
+    qt_data = get_questrade_data()
     print("\n🎨 Génération HTML...")
-    html = build_html(balances, wise_bal, sol_bal, sol_usd, txns)
+    html = build_html(balances, wise_bal, sol_bal, sol_usd, txns, qt_data)
     with open(OUTPUT_PATH, "w", encoding="utf-8") as f:
         f.write(html)
     print(f"\n✅ Dashboard → {OUTPUT_PATH}\n")
