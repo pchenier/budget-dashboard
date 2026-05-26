@@ -480,7 +480,19 @@ def build_html(balances, wise_bal, sol_balance, sol_usd, txns, qt_data=None):
     wise_cad_val   = wise_bal.get("CAD", 0)
     wise_usd_cad   = wise_usd_val * USD_TO_CAD
     sol_cad        = sol_balance * sol_usd * USD_TO_CAD
-    net_worth      = checking_total + wise_cad_val + wise_usd_cad + sol_cad - credit_total
+
+    # Questrade — totalEquity CAD du premier compte (évite double-comptage)
+    _qt = qt_data or {}
+    _qt_bals = _qt.get("balances", [])
+    _seen = set()
+    qt_equity_cad = 0.0
+    for b in _qt_bals:
+        acc = b.get("_account", "")
+        if b.get("currency") == "CAD" and acc not in _seen:
+            qt_equity_cad += b.get("totalEquity", 0) or 0
+            _seen.add(acc)
+
+    net_worth = checking_total + wise_cad_val + wise_usd_cad + sol_cad + qt_equity_cad - credit_total
 
     # ── Account pills HTML ───────────────────────────────────────────────────
     pills_html = ""
@@ -516,6 +528,12 @@ def build_html(balances, wise_bal, sol_balance, sol_usd, txns, qt_data=None):
     <div class="acc-pill">
       <span class="acc-label">Phantom SOL</span>
       <span class="acc-val wise">{sol_balance:.4f} SOL ≈ {fmt_cad(sol_cad)}</span>
+    </div>"""
+    if qt_equity_cad > 0:
+        pills_html += f"""
+    <div class="acc-pill">
+      <span class="acc-label">Questrade TFSA</span>
+      <span class="acc-val credit">{fmt_cad(qt_equity_cad)}</span>
     </div>"""
 
     # ── Transactions JSON ────────────────────────────────────────────────────
