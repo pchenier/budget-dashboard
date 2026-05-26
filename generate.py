@@ -100,7 +100,7 @@ def get_plaid_transactions():
 def get_wise_balances():
     if not WISE_TOKEN or not WISE_PROFILE:
         print("  Wise: skipped (pas configuré)")
-        return {}
+        return {}, {}
     print("  Wise: balances...")
     try:
         r = requests.get(
@@ -110,14 +110,71 @@ def get_wise_balances():
         )
         r.raise_for_status()
         result = {}
+        balance_ids = {}   # currency → balance id (for statement fetch)
         for b in r.json():
             cur = b["totalWorth"]["currency"]
             amt = b["totalWorth"]["value"]
             result[cur] = amt
-        return result
+            balance_ids[cur] = b.get("id")
+        return result, balance_ids
     except Exception as e:
         print(f"  Wise: erreur → {e}")
-        return {}
+        return {}, {}
+
+
+def get_wise_transactions(balance_ids):
+    """Fetch transactions from Wise statement API for each balance."""
+    if not WISE_TOKEN or not WISE_PROFILE or not balance_ids:
+        return []
+    print("  Wise: transactions...")
+    all_txns = []
+    headers = {"Authorization": f"Bearer {WISE_TOKEN}"}
+    interval_start = START_DATE + "T00:00:00.000Z"
+    interval_end   = END_DATE   + "T23:59:59.999Z"
+    for currency, bid in balance_ids.items():
+        if not bid:
+            continue
+        try:
+            url = (
+                f"https://api.wise.com/v1/profiles/{WISE_PROFILE}"
+                f"/balance-statements/{bid}/statement.json"
+                f"?intervalStart={interval_start}&intervalEnd={interval_end}"
+            )
+            r = requests.get(url, headers=headers, timeout=20)
+            r.raise_for_status()
+            data = r.json()
+            txns = data.get("transactions", [])
+            for t in txns:
+                raw_amt  = t.get("amount", {}).get("value", 0)
+                cur_t    = t.get("amount", {}).get("currency", currency)
+                date_str = t.get("date", "")[:10]   # "2024-01-15T..."
+                t_type   = t.get("type", "")         # "DEBIT" or "CREDIT"
+                details  = t.get("details", {})
+                desc = (
+                    details.get("merchant", {}).get("name", "")
+                    or details.get("description", "")
+                    or details.get("senderName", "")
+                    or "Wise"
+                )
+                if not date_str:
+                    continue
+                # Convert to CAD if USD
+                amt_cad = abs(raw_amt) * USD_TO_CAD if cur_t == "USD" else abs(raw_amt)
+                # Plaid convention: positive = spending (debit), negative = income (credit)
+                plaid_amt = amt_cad if t_type == "DEBIT" else -amt_cad
+                ref = t.get("referenceNumber", "") or f"wise_{currency}_{date_str}_{raw_amt}"
+                all_txns.append({
+                    "date":     date_str,
+                    "amount":   round(plaid_amt, 2),
+                    "name":     desc.strip() or "Wise",
+                    "category": None,
+                    "account":  f"wise_{currency}",
+                    "id":       ref,
+                })
+        except Exception as e:
+            print(f"  Wise {currency}: erreur → {e}")
+    print(f"  Wise: {len(all_txns)} transactions")
+    return all_txns
 
 
 # ── Phantom / Solana ──────────────────────────────────────────────────────────
@@ -253,7 +310,7 @@ def is_skip(txn) -> bool:
     return False
 
 
-def process_transactions(raw_txns):
+def process_transactions(raw_txns, wise_txns=None):
     cleaned = []
     for t in raw_txns:
         if is_skip(t):
@@ -270,6 +327,19 @@ def process_transactions(raw_txns):
             "account": t["account_id"],
             "id":      t.get("transaction_id", ""),
         })
+    # Ajouter les transactions Wise (déjà pré-formatées)
+    for t in (wise_txns or []):
+        cat = t.get("category") or categorize(t["name"], [])
+        dt  = datetime.strptime(t["date"], "%Y-%m-%d")
+        cleaned.append({
+            "date":    dt,
+            "name":    t["name"],
+            "amount":  t["amount"],
+            "category": cat,
+            "account": t["account"],
+            "id":      t["id"],
+        })
+    cleaned.sort(key=lambda x: x["date"], reverse=True)
     return cleaned
 
 
@@ -366,6 +436,11 @@ def build_html(balances, wise_bal, sol_balance, sol_usd, txns):
     ]
     acc_ids_ordered = list(dict.fromkeys(t["account"] for t in txns))
     acc_name_map = {aid: balances[aid]["name"] if aid in balances else aid for aid in acc_ids_ordered}
+    # Noms lisibles pour les comptes Wise
+    for aid in acc_ids_ordered:
+        if aid.startswith("wise_"):
+            cur = aid.replace("wise_", "")
+            acc_name_map[aid] = f"Wise {cur}"
     acc_default_colors = {aid: ACC_DEFAULT_PALETTE[i % len(ACC_DEFAULT_PALETTE)] for i, aid in enumerate(acc_ids_ordered)}
     acc_name_map_js   = json.dumps(acc_name_map)
     acc_default_colors_js = json.dumps(acc_default_colors)
@@ -1516,12 +1591,14 @@ if __name__ == "__main__":
     print("\n📊 Budget Dashboard — génération en cours...\n")
     print("🔗 Connexion aux APIs...")
     balances = get_plaid_balances()
-    wise_bal = get_wise_balances()
+    wise_bal, wise_balance_ids = get_wise_balances()
     sol_bal, sol_usd = get_phantom_balance()
     print("\n📥 Transactions Plaid...")
     raw_txns = get_plaid_transactions()
+    print("\n📥 Transactions Wise...")
+    wise_txns = get_wise_transactions(wise_balance_ids)
     print("\n⚙️  Traitement...")
-    txns = process_transactions(raw_txns)
+    txns = process_transactions(raw_txns, wise_txns)
     print(f"  {len(txns)} transactions après filtrage")
     print("\n🎨 Génération HTML...")
     html = build_html(balances, wise_bal, sol_bal, sol_usd, txns)

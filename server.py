@@ -21,8 +21,8 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(__file__))
 from generate import (
     check_config, get_plaid_balances, get_plaid_transactions,
-    get_wise_balances, get_phantom_balance, process_transactions,
-    build_html, OUTPUT_PATH
+    get_wise_balances, get_wise_transactions, get_phantom_balance,
+    process_transactions, build_html, OUTPUT_PATH
 )
 
 REFRESH_DAYS = 7
@@ -57,10 +57,11 @@ def run_generate(force=False):
     try:
         print("\n🔄 Régénération du dashboard...")
         balances = get_plaid_balances()
-        wise_bal = get_wise_balances()
+        wise_bal, wise_balance_ids = get_wise_balances()
         sol_bal, sol_usd = get_phantom_balance()
         raw_txns = get_plaid_transactions()
-        txns = process_transactions(raw_txns)
+        wise_txns = get_wise_transactions(wise_balance_ids)
+        txns = process_transactions(raw_txns, wise_txns)
         html = build_html(balances, wise_bal, sol_bal, sol_usd, txns)
 
         with open(OUTPUT_PATH, "w", encoding="utf-8") as f:
