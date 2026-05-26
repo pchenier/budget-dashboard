@@ -63,9 +63,6 @@ def run_generate(force=False):
         txns = process_transactions(raw_txns)
         html = build_html(balances, wise_bal, sol_bal, sol_usd, txns)
 
-        # Inject le bouton refresh + banner dans le HTML
-        html = inject_server_ui(html)
-
         with open(OUTPUT_PATH, "w", encoding="utf-8") as f:
             f.write(html)
 
@@ -84,83 +81,6 @@ def run_generate(force=False):
         _refresh_status["running"] = False
 
 
-def inject_server_ui(html: str) -> str:
-    """Injecte le bouton Refresh + badge dans le header HTML."""
-    next_refresh = datetime.now() + timedelta(days=REFRESH_DAYS)
-    next_str = next_refresh.strftime("%d %b %Y")
-    generated_str = datetime.now().strftime("%Y-%m-%d %H:%M")
-
-    refresh_ui = f"""
-  <style>
-    .refresh-btn {{
-      display: inline-flex; align-items: center; gap: 6px;
-      padding: 8px 16px; background: rgba(79,134,247,.15);
-      border: 1px solid rgba(79,134,247,.4); border-radius: 8px;
-      color: #4f86f7; font-size: 13px; font-weight: 600;
-      cursor: pointer; text-decoration: none; transition: all .2s;
-    }}
-    .refresh-btn:hover {{ background: rgba(79,134,247,.3); }}
-    .refresh-btn.loading {{ opacity: .6; pointer-events: none; }}
-    .next-refresh {{ font-size: 11px; color: #666; margin-top: 4px; text-align: right; }}
-    .stale-banner {{
-      background: rgba(247,201,72,.1); border-bottom: 1px solid rgba(247,201,72,.3);
-      padding: 10px 32px; font-size: 13px; color: #f7c948;
-      display: flex; justify-content: space-between; align-items: center;
-    }}
-    @keyframes spin {{ to {{ transform: rotate(360deg); }} }}
-    .spinning {{ display: inline-block; animation: spin 1s linear infinite; }}
-  </style>"""
-
-    # Injecte styles dans <head>
-    html = html.replace("</head>", refresh_ui + "\n</head>", 1)
-
-    # Remplace le header existant pour ajouter le bouton
-    old_header_end = """  <span class="gen">Généré le """ + generated_str + """</span>
-</header>"""
-    new_header_end = f"""  <div style="text-align:right">
-    <a class="refresh-btn" id="refresh-btn" onclick="doRefresh(event)">
-      <span id="refresh-icon">🔄</span> Refresh
-    </a>
-    <div class="next-refresh">Auto-refresh: {next_str}</div>
-  </div>
-</header>"""
-
-    html = html.replace(old_header_end, new_header_end, 1)
-
-    # Ajoute le script refresh
-    refresh_script = f"""
-<script>
-// ── Auto-stale check ──────────────────────────────────────────────────────────
-(function() {{
-  const REFRESH_MS = {REFRESH_DAYS} * 24 * 60 * 60 * 1000;
-  const generated = new Date("{generated_str.replace(' ', 'T')}");
-  const age = Date.now() - generated.getTime();
-  if (age > REFRESH_MS) {{
-    const banner = document.createElement('div');
-    banner.className = 'stale-banner';
-    banner.innerHTML = `⚠️ Dashboard généré il y a ${{Math.floor(age/86400000)}} jours — données possiblement périmées.
-      <a class="refresh-btn" onclick="doRefresh(event)" style="padding:6px 12px; font-size:12px">🔄 Refresh maintenant</a>`;
-    document.querySelector('.tabs').before(banner);
-  }}
-}})();
-
-// ── Refresh function ──────────────────────────────────────────────────────────
-function doRefresh(e) {{
-  e.preventDefault();
-  const btn = document.getElementById('refresh-btn');
-  if (btn) {{ btn.classList.add('loading'); document.getElementById('refresh-icon').className = 'spinning'; document.getElementById('refresh-icon').textContent = '⟳'; }}
-  fetch('/refresh')
-    .then(r => r.json())
-    .then(d => {{
-      if (d.ok) {{ setTimeout(() => location.reload(), 500); }}
-      else {{ alert('Erreur: ' + d.msg); if(btn) btn.classList.remove('loading'); }}
-    }})
-    .catch(() => {{ alert('Serveur non disponible — lance python server.py'); if(btn) btn.classList.remove('loading'); }});
-}}
-</script>"""
-
-    html = html.replace("</body>", refresh_script + "\n</body>", 1)
-    return html
 
 
 # ── HTTP Handler ──────────────────────────────────────────────────────────────
@@ -183,7 +103,8 @@ class Handler(BaseHTTPRequestHandler):
                     content = f.read()
                 self.send_response(200)
                 self.send_header("Content-Type", "text/html; charset=utf-8")
-                self.send_header("Content-Length", len(content))
+                self.send_header("Cache-Control", "no-store, no-cache, must-revalidate")
+                self.send_header("Pragma", "no-cache")
                 self.end_headers()
                 self.wfile.write(content)
             except FileNotFoundError:

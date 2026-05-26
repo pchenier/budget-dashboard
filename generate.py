@@ -1305,7 +1305,7 @@ function renderRules() {{
     .sort((a,b) => b.count - a.count);
 
   if (rules.length === 0) {{
-    panel.innerHTML = '<p style="color:#444;font-size:13px">Aucune règle — change la catégorie d\'une transaction pour en créer une.</p>';
+    panel.innerHTML = `<p style="color:#444;font-size:13px">Aucune règle — change la catégorie d'une transaction pour en créer une.</p>`;
     return;
   }}
 
