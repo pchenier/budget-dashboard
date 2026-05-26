@@ -573,6 +573,17 @@ def build_html(balances, wise_bal, sol_balance, sol_usd, txns):
         </table>
       </div>
     </div>
+
+    <!-- Règles de catégorie -->
+    <div class="table-card" style="margin-top:0">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <h2 style="margin:0">Règles de catégorie</h2>
+        <span style="font-size:12px;color:#444">Appliquées automatiquement à tous les marchands</span>
+      </div>
+      <div id="rules-panel">
+        <p style="color:#444;font-size:13px">Aucune règle — change la catégorie d'une transaction pour en créer une.</p>
+      </div>
+    </div>
   </div>
 
 </div>
@@ -1069,6 +1080,7 @@ function initTxns() {{
   const cats = [...new Set(ALL_TXNS.map(t => OVERRIDES[t.id]||t.category))].sort();
   cats.forEach(c => {{ const o=document.createElement('option'); o.value=c; o.textContent=c; catSel.appendChild(o); }});
   renderTxns('','','');
+  renderRules();
 }}
 
 function renderTxns(filter='', acct='', cat='') {{
@@ -1120,13 +1132,149 @@ function editCat(id, currentCat, el) {{
   sel.style.cssText = 'background:#111;border:1px solid #2563eb;border-radius:4px;padding:2px 6px;color:#93c5fd;font-family:Montserrat;font-size:11px;font-weight:600';
   allCats.forEach(c => {{ const o=document.createElement('option'); o.value=c; o.textContent=c; if(c===currentCat) o.selected=true; sel.appendChild(o); }});
   el.replaceWith(sel); sel.focus();
+  let committed = false;
   function commit() {{
+    if (committed) return; committed = true;
     const val = sel.value;
-    OVERRIDES[id] = val; localStorage.setItem('catOverrides',JSON.stringify(OVERRIDES));
-    renderTxns(document.getElementById('txn-search')?.value||'',document.getElementById('txn-acct')?.value||'',document.getElementById('txn-cat')?.value||'');
-    if (initializedTabs.has('budget')) renderBudget(getFilteredTxns(currentDays));
+    if (val === currentCat) {{
+      renderTxns(document.getElementById('txn-search')?.value||'',document.getElementById('txn-acct')?.value||'',document.getElementById('txn-cat')?.value||'');
+      return;
+    }}
+    // Find all txns with same merchant name
+    const txn     = ALL_TXNS.find(t => t.id === id);
+    const merchant = txn ? (NAMES[txn.id] || txn.name) : null;
+    const matches  = merchant ? ALL_TXNS.filter(t => (NAMES[t.id]||t.name) === merchant) : [];
+    OVERRIDES[id] = val;
+    if (matches.length > 1) {{
+      showBulkToast(merchant, val, matches, currentCat, id);
+    }} else {{
+      localStorage.setItem('catOverrides', JSON.stringify(OVERRIDES));
+      renderTxns(document.getElementById('txn-search')?.value||'',document.getElementById('txn-acct')?.value||'',document.getElementById('txn-cat')?.value||'');
+      if (initializedTabs.has('budget')) renderBudget(getFilteredTxns(currentDays));
+    }}
   }}
   sel.addEventListener('change', commit); sel.addEventListener('blur', commit);
+}}
+
+// ── Bulk category toast ───────────────────────────────────────────────────────
+function showBulkToast(merchant, newCat, matches, oldCat, triggerId) {{
+  // Remove any existing toast
+  document.getElementById('bulk-toast')?.remove();
+
+  const toast = document.createElement('div');
+  toast.id = 'bulk-toast';
+  toast.style.cssText = `
+    position:fixed; bottom:28px; left:50%; transform:translateX(-50%);
+    background:#1a1a1a; border:1px solid #2563eb; border-radius:14px;
+    padding:18px 24px; z-index:9999; min-width:360px; max-width:520px;
+    box-shadow:0 8px 40px rgba(0,0,0,.7); font-family:Montserrat,sans-serif;
+    animation: slide-up .25s cubic-bezier(.4,0,.2,1);
+  `;
+
+  const others = matches.filter(t => t.id !== triggerId);
+
+  toast.innerHTML = `
+    <style>@keyframes slide-up {{ from {{ opacity:0;transform:translateX(-50%) translateY(20px) }} to {{ opacity:1;transform:translateX(-50%) translateY(0) }} }}</style>
+    <div style="font-size:13px;font-weight:700;color:#f1f1f1;margin-bottom:6px">
+      Appliquer à toutes les transactions de <span style="color:#93c5fd">"${{merchant}}"</span> ?
+    </div>
+    <div style="font-size:12px;color:#666;margin-bottom:16px">
+      ${{matches.length}} transaction${{matches.length>1?'s':''}} · <span style="color:#4fc978">→ ${{newCat}}</span>
+    </div>
+    <div style="display:flex;gap:10px">
+      <button id="bulk-yes" style="flex:1;padding:9px;background:#1e3a8a;border:none;border-radius:8px;color:#fff;font-family:Montserrat;font-size:13px;font-weight:600;cursor:pointer">
+        ✓ Appliquer aux ${{matches.length}}
+      </button>
+      <button id="bulk-no" style="padding:9px 16px;background:#181818;border:1px solid #333;border-radius:8px;color:#777;font-family:Montserrat;font-size:13px;cursor:pointer">
+        Juste celle-ci
+      </button>
+      <button id="bulk-cancel" style="padding:9px 16px;background:#181818;border:1px solid #333;border-radius:8px;color:#777;font-family:Montserrat;font-size:13px;cursor:pointer">
+        ✕
+      </button>
+    </div>
+  `;
+
+  document.body.appendChild(toast);
+
+  function save() {{
+    localStorage.setItem('catOverrides', JSON.stringify(OVERRIDES));
+    renderTxns(document.getElementById('txn-search')?.value||'',document.getElementById('txn-acct')?.value||'',document.getElementById('txn-cat')?.value||'');
+    if (initializedTabs.has('budget')) renderBudget(getFilteredTxns(currentDays));
+    renderRules();
+    toast.remove();
+  }}
+
+  document.getElementById('bulk-yes').onclick = () => {{
+    matches.forEach(t => {{ OVERRIDES[t.id] = newCat; }});
+    save();
+  }};
+  document.getElementById('bulk-no').onclick = () => {{
+    // OVERRIDES[triggerId] already set above
+    save();
+  }};
+  document.getElementById('bulk-cancel').onclick = () => {{
+    delete OVERRIDES[triggerId];
+    toast.remove();
+    renderTxns(document.getElementById('txn-search')?.value||'',document.getElementById('txn-acct')?.value||'',document.getElementById('txn-cat')?.value||'');
+  }};
+
+  // Auto-dismiss after 8s
+  setTimeout(() => {{ if (document.getElementById('bulk-toast')) {{ OVERRIDES[triggerId] = oldCat; toast.remove(); }} }}, 8000);
+}}
+
+// ── Rules panel ───────────────────────────────────────────────────────────────
+function renderRules() {{
+  const panel = document.getElementById('rules-panel');
+  if (!panel) return;
+
+  // Build rules: merchant → overridden category (where ALL txns of that merchant share same override)
+  const merchantMap = {{}};
+  ALL_TXNS.forEach(t => {{
+    const name = NAMES[t.id] || t.name;
+    if (!merchantMap[name]) merchantMap[name] = {{ ids:[], cats:new Set(), origCat: t.category }};
+    merchantMap[name].ids.push(t.id);
+    const effective = OVERRIDES[t.id] || t.category;
+    merchantMap[name].cats.add(effective);
+  }});
+
+  // Only show merchants where at least one txn has an override
+  const rules = Object.entries(merchantMap)
+    .filter(([name, d]) => d.ids.some(id => OVERRIDES[id]))
+    .map(([name, d]) => {{
+      const overriddenCat = OVERRIDES[d.ids.find(id => OVERRIDES[id])];
+      const allSame = d.ids.filter(id => OVERRIDES[id]).every(id => OVERRIDES[id] === overriddenCat);
+      return {{ name, count: d.ids.length, cat: overriddenCat, allSame, ids: d.ids, origCat: d.origCat }};
+    }})
+    .sort((a,b) => b.count - a.count);
+
+  if (rules.length === 0) {{
+    panel.innerHTML = '<p style="color:#444;font-size:13px">Aucune règle — change la catégorie d\'une transaction pour en créer une.</p>';
+    return;
+  }}
+
+  panel.innerHTML = rules.map(r => `
+    <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid #1a1a1a">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:600;color:#f1f1f1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${{r.name}}</div>
+        <div style="font-size:11px;color:#555;margin-top:2px">${{r.ids.filter(id=>OVERRIDES[id]).length}} / ${{r.count}} transaction${{r.count>1?'s':''}}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+        <span style="font-size:11px;color:#666">→</span>
+        <span style="background:rgba(37,99,235,0.2);border:1px solid rgba(37,99,235,0.35);color:#93c5fd;border-radius:6px;padding:3px 9px;font-size:11px;font-weight:600">${{r.cat}}</span>
+        <button onclick="clearRule('${{r.name}}')" style="background:none;border:none;color:#333;cursor:pointer;font-size:14px;padding:2px 4px" title="Supprimer la règle" onmouseover="this.style.color='#f76e6e'" onmouseout="this.style.color='#333'">✕</button>
+      </div>
+    </div>
+  `).join('');
+}}
+
+function clearRule(merchantName) {{
+  ALL_TXNS.forEach(t => {{
+    if ((NAMES[t.id]||t.name) === merchantName) delete OVERRIDES[t.id];
+  }});
+  localStorage.setItem('catOverrides', JSON.stringify(OVERRIDES));
+  renderTxns(document.getElementById('txn-search')?.value||'',document.getElementById('txn-acct')?.value||'',document.getElementById('txn-cat')?.value||'');
+  if (initializedTabs.has('budget')) renderBudget(getFilteredTxns(currentDays));
+  renderRules();
 }}
 
 // ── Refresh all ───────────────────────────────────────────────────────────────
