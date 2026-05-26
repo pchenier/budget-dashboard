@@ -12,13 +12,14 @@ Le dashboard se régénère automatiquement si :
   • Tu cliques le bouton Refresh dans l'interface
 """
 
-import os, sys, subprocess, threading, webbrowser, json
+import os, sys, subprocess, threading, webbrowser, json, csv, io, cgi
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from datetime import datetime
 from pathlib import Path
 
 SCRIPT_DIR   = os.path.dirname(os.path.abspath(__file__))
 OUTPUT_PATH  = os.path.join(SCRIPT_DIR, "dashboard.html")
+IMPORTS_DIR  = os.path.join(SCRIPT_DIR, "imports")
 PYTHON       = sys.executable   # même interpréteur que le serveur
 GENERATE     = os.path.join(SCRIPT_DIR, "generate.py")
 
@@ -105,6 +106,62 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             self.wfile.write(body)
+
+        elif self.path == "/upload-csv":
+            try:
+                content_type = self.headers.get("Content-Type", "")
+                length = int(self.headers.get("Content-Length", 0))
+                raw_data = self.rfile.read(length)
+
+                # Parse multipart form data
+                environ = {
+                    "REQUEST_METHOD": "POST",
+                    "CONTENT_TYPE": content_type,
+                    "CONTENT_LENGTH": str(length),
+                }
+                form = cgi.FieldStorage(
+                    fp=io.BytesIO(raw_data),
+                    environ=environ,
+                    keep_blank_values=True,
+                )
+                file_item = form["file"] if "file" in form else None
+                if file_item is None or not file_item.filename:
+                    raise ValueError("Aucun fichier reçu")
+
+                # Sanitize filename
+                safe_name = os.path.basename(file_item.filename.replace("\\", "/"))
+                os.makedirs(IMPORTS_DIR, exist_ok=True)
+                dest = os.path.join(IMPORTS_DIR, safe_name)
+                file_bytes = file_item.file.read()
+                with open(dest, "wb") as f:
+                    f.write(file_bytes)
+
+                # Count rows
+                text = file_bytes.decode("utf-8-sig", errors="replace")
+                rows = max(0, len(list(csv.reader(io.StringIO(text)))) - 1)
+
+                # Trigger regeneration
+                subprocess.Popen(
+                    [PYTHON, GENERATE, "--no-open"],
+                    cwd=SCRIPT_DIR,
+                )
+
+                body = json.dumps({"ok": True, "filename": safe_name, "rows": rows}).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", len(body))
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(body)
+            except Exception as e:
+                body = json.dumps({"ok": False, "error": str(e)}).encode()
+                self.send_response(400)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", len(body))
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(body)
+
         else:
             self._text(404, "Not found")
 
@@ -165,6 +222,18 @@ if __name__ == "__main__":
     print(f"   URL       : {url}")
     print(f"   Refresh   : automatique après {REFRESH_DAYS} jours")
     print(f"   Dashboard : {OUTPUT_PATH}")
+
+    # Check if Plaid is configured
+    try:
+        from dotenv import dotenv_values
+        env_path = os.path.join(SCRIPT_DIR, ".env")
+        env_vals = dotenv_values(env_path) if os.path.exists(env_path) else {}
+        plaid_client = env_vals.get("PLAID_CLIENT_ID", "")
+        if not plaid_client or "xxx" in plaid_client:
+            print(f"\n  📂 Mode CSV — aucune clé API requise")
+            print(f"     Importez vos relevés CSV via l'interface web")
+    except Exception:
+        print(f"\n  📂 Mode CSV — aucune clé API requise")
 
     age = get_dashboard_age()
     if age is None:

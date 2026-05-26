@@ -8,7 +8,7 @@ Usage:
     python generate.py --no-open # génère seulement
 """
 
-import json, os, sys, webbrowser, requests
+import json, os, sys, webbrowser, requests, csv as csv_module
 from datetime import datetime, date
 from collections import defaultdict
 from dotenv import load_dotenv
@@ -35,23 +35,24 @@ END_DATE      = date.today().isoformat()
 OUTPUT_PATH   = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dashboard.html")
 QT_CACHE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "questrade_cache.json")
 ENV_PATH      = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+IMPORTS_DIR   = os.path.join(os.path.dirname(os.path.abspath(__file__)), "imports")
 
 
 # ── Validation ────────────────────────────────────────────────────────────────
 def check_config():
-    errors = []
+    warnings = []
     if not PLAID_CLIENT or PLAID_CLIENT == "xxxxxxxxxxxxxxxxxxxxxxxx":
-        errors.append("PLAID_CLIENT_ID manquant dans .env")
+        warnings.append("PLAID_CLIENT_ID manquant dans .env")
     if not PLAID_SECRET or PLAID_SECRET == "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx":
-        errors.append("PLAID_SECRET manquant dans .env")
+        warnings.append("PLAID_SECRET manquant dans .env")
     if not PLAID_TOKEN or "xxxxxxxx" in PLAID_TOKEN:
-        errors.append("PLAID_ACCESS_TOKEN manquant — lance setup_plaid.py d'abord")
-    if errors:
-        print("\n❌ Config incomplète:")
-        for e in errors:
-            print(f"   • {e}")
-        print("\n→ Copie .env.example → .env et remplis les valeurs\n")
-        sys.exit(1)
+        warnings.append("PLAID_ACCESS_TOKEN manquant — lance setup_plaid.py d'abord")
+    if warnings:
+        print("\n⚠️  Config Plaid incomplète (mode CSV seulement):")
+        for w in warnings:
+            print(f"   • {w}")
+        print("\n→ Pour activer Plaid: copie .env.example → .env et remplis les valeurs")
+        print("→ Mode CSV disponible: importe tes relevés via l'interface web\n")
 
 
 # ── Plaid ─────────────────────────────────────────────────────────────────────
@@ -67,37 +68,51 @@ def plaid_post(endpoint, payload):
 
 
 def get_plaid_balances():
+    if not PLAID_CLIENT or not PLAID_SECRET or not PLAID_TOKEN:
+        print("  Plaid: skipped (pas configuré)")
+        return {}
     print("  Plaid: balances...")
-    data = plaid_post("/accounts/balance/get", {"access_token": PLAID_TOKEN})
-    balances = {}
-    for acc in data["accounts"]:
-        aid = acc["account_id"]
-        balances[aid] = {
-            "name":    acc["name"],
-            "current": acc["balances"]["current"] or 0,
-            "type":    acc["type"],
-            "subtype": acc["subtype"],
-        }
-    return balances
+    try:
+        data = plaid_post("/accounts/balance/get", {"access_token": PLAID_TOKEN})
+        balances = {}
+        for acc in data["accounts"]:
+            aid = acc["account_id"]
+            balances[aid] = {
+                "name":    acc["name"],
+                "current": acc["balances"]["current"] or 0,
+                "type":    acc["type"],
+                "subtype": acc["subtype"],
+            }
+        return balances
+    except Exception as e:
+        print(f"  Plaid: erreur balances → {e}")
+        return {}
 
 
 def get_plaid_transactions():
+    if not PLAID_CLIENT or not PLAID_SECRET or not PLAID_TOKEN:
+        print("  Plaid: skipped (pas configuré)")
+        return []
     print("  Plaid: transactions...")
-    all_txns, offset = [], 0
-    while True:
-        data = plaid_post("/transactions/get", {
-            "access_token": PLAID_TOKEN,
-            "start_date":   START_DATE,
-            "end_date":     END_DATE,
-            "options": {"count": 500, "offset": offset},
-        })
-        batch = data["transactions"]
-        all_txns.extend(batch)
-        if len(all_txns) >= data["total_transactions"] or not batch:
-            break
-        offset += len(batch)
-    print(f"  Plaid: {len(all_txns)} transactions")
-    return all_txns
+    try:
+        all_txns, offset = [], 0
+        while True:
+            data = plaid_post("/transactions/get", {
+                "access_token": PLAID_TOKEN,
+                "start_date":   START_DATE,
+                "end_date":     END_DATE,
+                "options": {"count": 500, "offset": offset},
+            })
+            batch = data["transactions"]
+            all_txns.extend(batch)
+            if len(all_txns) >= data["total_transactions"] or not batch:
+                break
+            offset += len(batch)
+        print(f"  Plaid: {len(all_txns)} transactions")
+        return all_txns
+    except Exception as e:
+        print(f"  Plaid: erreur transactions → {e} (skipped)")
+        return []
 
 
 # ── Wise ──────────────────────────────────────────────────────────────────────
@@ -320,6 +335,142 @@ def get_questrade_data():
         return cache
 
 
+# ── CSV Import ────────────────────────────────────────────────────────────────
+def _parse_date(s):
+    """Try several date formats, return YYYY-MM-DD or None."""
+    for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%d/%m/%Y", "%Y/%m/%d",
+                "%m-%d-%Y", "%d-%m-%Y", "%b %d, %Y", "%d %b %Y"):
+        try:
+            return datetime.strptime(s.strip(), fmt).strftime("%Y-%m-%d")
+        except ValueError:
+            continue
+    return None
+
+
+def _parse_amount(s):
+    """Parse a dollar string like '$1,234.56' or '-500.00' → float."""
+    s = s.strip().replace("$", "").replace(",", "").replace(" ", "")
+    if not s:
+        return None
+    try:
+        return float(s)
+    except ValueError:
+        return None
+
+
+def get_csv_transactions():
+    """Read all .csv files from imports/ and return list of normalized txn dicts."""
+    if not os.path.isdir(IMPORTS_DIR):
+        return []
+    all_txns = []
+    csv_files = sorted(f for f in os.listdir(IMPORTS_DIR) if f.lower().endswith(".csv"))
+    for fname in csv_files:
+        fpath = os.path.join(IMPORTS_DIR, fname)
+        account_id = os.path.splitext(fname)[0]
+        try:
+            with open(fpath, encoding="utf-8-sig", errors="replace") as fh:
+                reader = csv_module.DictReader(fh)
+                headers = [h.strip() for h in (reader.fieldnames or [])]
+                headers_lower = [h.lower() for h in headers]
+
+                # Detect bank format
+                def _h(*names):
+                    """Return actual header matching one of the given names (case-insensitive)."""
+                    for n in names:
+                        for h, hl in zip(headers, headers_lower):
+                            if hl == n.lower():
+                                return h
+                    return None
+
+                # RBC: Transaction Date, Description 1, Description 2, CAD$, USD$
+                # Scotia: Date, Description, Amount
+                # TD: Date, Description, Debit, Credit
+                # Desjardins: Date, Description, Débit, Crédit
+                date_col = _h("Transaction Date", "Date")
+                name_col = _h("Description 1", "Description", "Description 1")
+                name_col2 = _h("Description 2")  # RBC secondary desc
+                amount_col = _h("Amount", "CAD$")
+                debit_col  = _h("Debit", "Débit")
+                credit_col = _h("Credit", "Crédit")
+
+                if not date_col:
+                    # Generic fallback: find first date-like and first amount-like column
+                    for h in headers:
+                        if "date" in h.lower():
+                            date_col = h
+                            break
+                    for h in headers:
+                        if any(k in h.lower() for k in ["amount", "montant", "debit", "credit", "débit", "crédit"]):
+                            amount_col = amount_col or h
+                            break
+
+                if not date_col:
+                    print(f"  CSV {fname}: aucune colonne date trouvée — skipped")
+                    continue
+
+                row_num = 0
+                for row in reader:
+                    row_num += 1
+                    date_raw = row.get(date_col, "").strip()
+                    date_str = _parse_date(date_raw)
+                    if not date_str:
+                        continue
+                    # Filter by date range
+                    if date_str < START_DATE or date_str > END_DATE:
+                        continue
+
+                    # Name
+                    name = ""
+                    if name_col:
+                        name = row.get(name_col, "").strip()
+                    if not name and name_col2:
+                        name = row.get(name_col2, "").strip()
+                    if not name:
+                        name = "CSV Import"
+
+                    # Amount (Plaid convention: positive = spending, negative = income)
+                    amount = None
+                    if debit_col and credit_col:
+                        # TD / Desjardins style: separate debit/credit columns
+                        dval = _parse_amount(row.get(debit_col, ""))
+                        cval = _parse_amount(row.get(credit_col, ""))
+                        if dval is not None and dval != 0:
+                            amount = abs(dval)    # spending = positive
+                        elif cval is not None and cval != 0:
+                            amount = -abs(cval)   # income = negative
+                        else:
+                            amount = 0.0
+                    elif amount_col:
+                        raw = _parse_amount(row.get(amount_col, ""))
+                        if raw is None:
+                            # Try USD$ for RBC
+                            usd_col = _h("USD$")
+                            if usd_col:
+                                raw = _parse_amount(row.get(usd_col, ""))
+                                if raw is not None:
+                                    raw = raw * USD_TO_CAD
+                        if raw is None:
+                            continue
+                        # RBC / Scotia: negative = spending in their convention
+                        # They use negative for debits, positive for credits
+                        amount = -raw  # flip to Plaid convention
+                    else:
+                        continue
+
+                    all_txns.append({
+                        "date":     date_str,
+                        "name":     name,
+                        "amount":   round(amount, 2),
+                        "category": None,
+                        "account":  account_id,
+                        "id":       f"csv_{account_id}_{row_num}",
+                    })
+            print(f"  CSV {fname}: {len([t for t in all_txns if t['account'] == account_id])} transactions")
+        except Exception as e:
+            print(f"  CSV {fname}: erreur → {e}")
+    return all_txns
+
+
 # ── Catégories ────────────────────────────────────────────────────────────────
 CATEGORY_RULES = [
     (["metro", "iga", "maxi", "provigo", "superc", "loblaws", "marché elite",
@@ -426,7 +577,7 @@ def is_skip(txn) -> bool:
     return False
 
 
-def process_transactions(raw_txns, wise_txns=None):
+def process_transactions(raw_txns, wise_txns=None, csv_txns=None):
     cleaned = []
     for t in raw_txns:
         if is_skip(t):
@@ -445,6 +596,18 @@ def process_transactions(raw_txns, wise_txns=None):
         })
     # Ajouter les transactions Wise (déjà pré-formatées)
     for t in (wise_txns or []):
+        cat = t.get("category") or categorize(t["name"], [])
+        dt  = datetime.strptime(t["date"], "%Y-%m-%d")
+        cleaned.append({
+            "date":    dt,
+            "name":    t["name"],
+            "amount":  t["amount"],
+            "category": cat,
+            "account": t["account"],
+            "id":      t["id"],
+        })
+    # Ajouter les transactions CSV
+    for t in (csv_txns or []):
         cat = t.get("category") or categorize(t["name"], [])
         dt  = datetime.strptime(t["date"], "%Y-%m-%d")
         cleaned.append({
@@ -570,11 +733,14 @@ def build_html(balances, wise_bal, sol_balance, sol_usd, txns, qt_data=None):
     ]
     acc_ids_ordered = list(dict.fromkeys(t["account"] for t in txns))
     acc_name_map = {aid: balances[aid]["name"] if aid in balances else aid for aid in acc_ids_ordered}
-    # Noms lisibles pour les comptes Wise
+    # Noms lisibles pour les comptes Wise et CSV
     for aid in acc_ids_ordered:
         if aid.startswith("wise_"):
             cur = aid.replace("wise_", "")
             acc_name_map[aid] = f"Wise {cur}"
+        elif aid not in balances:
+            # CSV account: use readable name (filename without ext)
+            acc_name_map[aid] = aid.replace("_", " ").title()
     acc_default_colors = {aid: ACC_DEFAULT_PALETTE[i % len(ACC_DEFAULT_PALETTE)] for i, aid in enumerate(acc_ids_ordered)}
     acc_name_map_js   = json.dumps(acc_name_map)
     acc_default_colors_js = json.dumps(acc_default_colors)
@@ -814,6 +980,29 @@ def build_html(balances, wise_bal, sol_balance, sol_usd, txns, qt_data=None):
 
   <!-- Tab: Transactions -->
   <div id="tab-txns" class="tab-panel">
+
+    <!-- CSV Import Card -->
+    <div class="table-card" style="margin-bottom:0">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+        <h2 style="margin:0;font-size:1rem">📂 Importer un relevé CSV</h2>
+        <span style="font-size:11px;color:#555">Formats supportés: RBC, Scotia, TD, Desjardins, générique</span>
+      </div>
+      <div id="csv-drop-zone"
+        ondragover="event.preventDefault();this.style.borderColor='#4f86f7'"
+        ondragleave="this.style.borderColor='#333'"
+        ondrop="event.preventDefault();this.style.borderColor='#333';handleCsvFiles(event.dataTransfer.files)"
+        style="border:2px dashed #333;border-radius:10px;padding:20px;text-align:center;cursor:pointer;transition:border-color .2s"
+        onclick="document.getElementById('csv-file-input').click()">
+        <div style="color:#666;font-size:13px;margin-bottom:8px">Glisse un fichier CSV ici ou</div>
+        <button style="background:#23232a;border:1px solid #444;border-radius:6px;color:#f1f1f1;padding:6px 16px;font-size:13px;cursor:pointer;font-family:Montserrat">
+          Choisir un fichier .csv
+        </button>
+        <input id="csv-file-input" type="file" accept=".csv" style="display:none"
+          onchange="handleCsvFiles(this.files)">
+      </div>
+      <div id="csv-status" style="margin-top:10px;font-size:13px;color:#4fc978;display:none"></div>
+    </div>
+
     <div class="table-card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px">
         <h2 style="margin:0">Toutes les transactions</h2>
@@ -1851,6 +2040,46 @@ function initInvest() {{
   }}).join('');
 }}
 
+// ── CSV Import ──────────────────────────────────────────────────────────────
+function handleCsvFiles(files) {{
+  if (!files || files.length === 0) return;
+  const file = files[0];
+  const statusEl = document.getElementById('csv-status');
+  statusEl.style.display = 'block';
+  statusEl.style.color = '#aaa';
+  statusEl.textContent = '⏳ Envoi en cours...';
+
+  const fd = new FormData();
+  fd.append('file', file);
+
+  fetch('/upload-csv', {{method: 'POST', body: fd}})
+    .then(r => r.json())
+    .then(d => {{
+      if (d.ok) {{
+        statusEl.style.color = '#4fc978';
+        statusEl.textContent = d.rows + ' transactions importées — Refresh en cours...';
+        // Poll until regeneration done
+        const poll = setInterval(() => {{
+          fetch('/status').then(r=>r.json()).then(s => {{
+            if (!s.running) {{
+              clearInterval(poll);
+              location.reload();
+            }}
+          }}).catch(() => clearInterval(poll));
+        }}, 1500);
+        // Fallback: reload after 8s regardless
+        setTimeout(() => location.reload(), 8000);
+      }} else {{
+        statusEl.style.color = '#f76e6e';
+        statusEl.textContent = '❌ Erreur: ' + (d.error || 'upload échoué');
+      }}
+    }})
+    .catch(err => {{
+      statusEl.style.color = '#f76e6e';
+      statusEl.textContent = '❌ Serveur non disponible — lance python3 server.py';
+    }});
+}}
+
 // ── Refresh button ─────────────────────────────────────────────────────────────
 function doRefresh() {{
   const btn  = document.getElementById('refresh-btn');
@@ -1901,8 +2130,10 @@ if __name__ == "__main__":
     raw_txns = get_plaid_transactions()
     print("\n📥 Transactions Wise...")
     wise_txns = get_wise_transactions(wise_balance_ids)
+    print("\n📥 Transactions CSV...")
+    csv_txns = get_csv_transactions()
     print("\n⚙️  Traitement...")
-    txns = process_transactions(raw_txns, wise_txns)
+    txns = process_transactions(raw_txns, wise_txns, csv_txns)
     print(f"  {len(txns)} transactions après filtrage")
     print("\n📥 Questrade...")
     qt_data = get_questrade_data()
