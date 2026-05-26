@@ -447,6 +447,7 @@ def build_html(balances, wise_bal, sol_balance, sol_usd, txns):
   .tab-btn.active::after {{ content: ''; position: absolute; bottom: -1px; left: 0; right: 0; height: 2px; background: #2563eb; border-radius: 2px 2px 0 0; }}
   .tab-panel {{ display: none; }}
   .tab-panel.active {{ display: block; }}
+  @keyframes spin-icon {{ to {{ transform: rotate(360deg); }} }}
 </style>
 </head>
 <body>
@@ -457,7 +458,12 @@ def build_html(balances, wise_bal, sol_balance, sol_usd, txns):
       <h1>Net Worth</h1>
       <div class="net-worth-amount">{fmt_cad(net_worth)}</div>
     </div>
-    <div class="generated">Generated {generated_at}</div>
+    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:10px">
+      <div class="generated">Generated {generated_at}</div>
+      <button id="refresh-btn" onclick="doRefresh()" style="display:inline-flex;align-items:center;gap:6px;padding:8px 18px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);border-radius:8px;color:#fff;font-family:Montserrat,sans-serif;font-size:13px;font-weight:600;cursor:pointer;transition:all .2s" onmouseover="this.style.background='rgba(255,255,255,0.18)'" onmouseout="this.style.background='rgba(255,255,255,0.1)'">
+        <span id="refresh-icon">🔄</span> Refresh
+      </button>
+    </div>
   </div>
   <div class="accounts-grid">
     {pills_html}
@@ -1136,6 +1142,40 @@ function refreshAll() {{
 }}
 
 window.addEventListener('DOMContentLoaded', () => refreshAll());
+
+// ── Refresh button ────────────────────────────────────────────────────────────
+function doRefresh() {{
+  const btn  = document.getElementById('refresh-btn');
+  const icon = document.getElementById('refresh-icon');
+  btn.disabled = true;
+  btn.style.opacity = '0.5';
+  icon.style.display = 'inline-block';
+  icon.style.animation = 'spin-icon 1s linear infinite';
+
+  fetch('/refresh', {{method:'POST'}})
+    .then(r => r.json())
+    .then(d => {{
+      if (d.ok) {{
+        // Poll until done
+        const poll = setInterval(() => {{
+          fetch('/status').then(r=>r.json()).then(s => {{
+            if (!s.running) {{
+              clearInterval(poll);
+              location.reload();
+            }}
+          }}).catch(() => clearInterval(poll));
+        }}, 1500);
+      }} else {{
+        alert(d.msg || 'Erreur refresh');
+        btn.disabled = false; btn.style.opacity = '1';
+      }}
+    }})
+    .catch(() => {{
+      // No server running — open same file (no-op graceful)
+      btn.disabled = false; btn.style.opacity = '1';
+      icon.style.animation = '';
+    }});
+}}
 </script>
 </body>
 </html>"""
