@@ -575,13 +575,15 @@ def build_html(balances, wise_bal, sol_balance, sol_usd, txns, qt_data=None):
         except Exception:
             qt_fetched_str = qt_fetched_at[:16]
 
-    # Calcul total portfolio Questrade en CAD
+    # Calcul total portfolio Questrade en CAD — combinedBalances donne le compte
+    # en CAD ET en USD (même argent converti), on prend juste le CAD total
     qt_total_cad = 0.0
+    seen_accounts = set()
     for b in qt_balances:
-        if b.get("currency") == "CAD":
+        acc = b.get("_account", "")
+        if b.get("currency") == "CAD" and acc not in seen_accounts:
             qt_total_cad += b.get("totalEquity", 0) or 0
-        elif b.get("currency") == "USD":
-            qt_total_cad += (b.get("totalEquity", 0) or 0) * USD_TO_CAD
+            seen_accounts.add(acc)
 
     qt_positions_json = json.dumps(qt_positions)
     qt_balances_json  = json.dumps(qt_balances)
@@ -1784,8 +1786,8 @@ function initInvest() {{
     balEl.innerHTML = Object.entries(byAcc).map(([acc, bals]) => {{
       const cad = bals.find(b => b.currency === 'CAD');
       const usd = bals.find(b => b.currency === 'USD');
-      const totalCAD = (cad?.totalEquity || 0) + (usd?.totalEquity || 0) * {USD_TO_CAD};
-      const cashCAD  = (cad?.cash || 0) + (usd?.cash || 0) * {USD_TO_CAD};
+      const totalCAD = cad?.totalEquity || 0;
+      const cashCAD  = cad?.cash || 0;
       return `<div style="background:#181818;border:1px solid #222;border-radius:12px;padding:16px 20px;min-width:200px">
         <div style="font-size:0.7rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#555;margin-bottom:8px">${{acc}}</div>
         <div style="font-size:1.3rem;font-weight:800;color:#f1f1f1">$${{totalCAD.toLocaleString('fr-CA',{{minimumFractionDigits:2,maximumFractionDigits:2}})}}</div>
