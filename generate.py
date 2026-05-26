@@ -824,12 +824,14 @@ function addCustomCat() {{
   const cats = getCustomCats();
   if (!cats.includes(name.trim())) {{ cats.push(name.trim()); saveCustomCats(cats); }}
   if (!isNaN(n) && n > 0) {{ const t = getBudgetTargets(); t[name.trim()] = n; saveBudgetTargets(t); }}
+  syncCatDropdown();  // sync dropdown transactions
   renderBudget(getFilteredTxns(currentDays));
 }}
 
 function deleteCat(cat) {{
   const h = getHiddenCats(); if (!h.includes(cat)) h.push(cat); saveHiddenCats(h);
   const c = getCustomCats().filter(x => x !== cat); saveCustomCats(c);
+  syncCatDropdown();
   renderBudget(getFilteredTxns(currentDays));
 }}
 function restoreHidden() {{ saveHiddenCats([]); renderBudget(getFilteredTxns(currentDays)); }}
@@ -1072,13 +1074,31 @@ function renderBudget(txns) {{
 }}
 
 // ── Transactions tab ──────────────────────────────────────────────────────────
+// ── Source de vérité unique pour les catégories ───────────────────────────────
+function getAllCats() {{
+  const fromTxns   = ALL_TXNS.map(t => OVERRIDES[t.id] || t.category);
+  const fromCustom = getCustomCats();
+  return [...new Set([...fromTxns, ...fromCustom])].sort();
+}}
+
+function syncCatDropdown() {{
+  const sel     = document.getElementById('txn-cat');
+  if (!sel) return;
+  const current = sel.value;
+  sel.innerHTML = '<option value="">Toutes catégories</option>';
+  getAllCats().forEach(c => {{
+    const o = document.createElement('option');
+    o.value = c; o.textContent = c;
+    if (c === current) o.selected = true;
+    sel.appendChild(o);
+  }});
+}}
+
 function initTxns() {{
   const acctSel = document.getElementById('txn-acct');
-  const catSel  = document.getElementById('txn-cat');
   const accts   = [...new Set(ALL_TXNS.map(t => t.account))];
   accts.forEach(a => {{ const o=document.createElement('option'); o.value=a; o.textContent=a; acctSel.appendChild(o); }});
-  const cats = [...new Set(ALL_TXNS.map(t => OVERRIDES[t.id]||t.category))].sort();
-  cats.forEach(c => {{ const o=document.createElement('option'); o.value=c; o.textContent=c; catSel.appendChild(o); }});
+  syncCatDropdown();
   renderTxns('','','');
   renderRules();
 }}
@@ -1127,33 +1147,69 @@ function editName(id, el) {{
 }}
 
 function editCat(id, currentCat, el) {{
-  const allCats = [...new Set(ALL_TXNS.map(t => OVERRIDES[t.id]||t.category))].sort();
+  const allCats = getAllCats();  // source unique partagée avec budget
   const sel = document.createElement('select');
   sel.style.cssText = 'background:#111;border:1px solid #2563eb;border-radius:4px;padding:2px 6px;color:#93c5fd;font-family:Montserrat;font-size:11px;font-weight:600';
-  allCats.forEach(c => {{ const o=document.createElement('option'); o.value=c; o.textContent=c; if(c===currentCat) o.selected=true; sel.appendChild(o); }});
+
+  // Option spéciale "+ Nouvelle catégorie"
+  const newOpt = document.createElement('option');
+  newOpt.value = '__new__'; newOpt.textContent = '+ Nouvelle catégorie';
+  sel.appendChild(newOpt);
+
+  // Séparateur
+  const sep = document.createElement('option'); sep.disabled = true; sep.textContent = '──────────'; sel.appendChild(sep);
+
+  allCats.forEach(c => {{
+    const o = document.createElement('option');
+    o.value = c; o.textContent = c;
+    if (c === currentCat) o.selected = true;
+    sel.appendChild(o);
+  }});
+
   el.replaceWith(sel); sel.focus();
   let committed = false;
-  function commit() {{
-    if (committed) return; committed = true;
-    const val = sel.value;
+
+  function applyNewCat(val) {{
     if (val === currentCat) {{
-      renderTxns(document.getElementById('txn-search')?.value||'',document.getElementById('txn-acct')?.value||'',document.getElementById('txn-cat')?.value||'');
+      renderTxns(document.getElementById('txn-search')?.value||'', document.getElementById('txn-acct')?.value||'', document.getElementById('txn-cat')?.value||'');
       return;
     }}
-    // Find all txns with same merchant name
-    const txn     = ALL_TXNS.find(t => t.id === id);
+    // Ajouter la nouvelle cat aux custom cats si pas déjà présente
+    const custom = getCustomCats();
+    if (!getAllCats().includes(val)) {{
+      custom.push(val); saveCustomCats(custom);
+    }}
+    const txn      = ALL_TXNS.find(t => t.id === id);
     const merchant = txn ? (NAMES[txn.id] || txn.name) : null;
     const matches  = merchant ? ALL_TXNS.filter(t => (NAMES[t.id]||t.name) === merchant) : [];
-    OVERRIDES[id] = val;
+    OVERRIDES[id]  = val;
+    syncCatDropdown();  // sync le dropdown filtre
     if (matches.length > 1) {{
       showBulkToast(merchant, val, matches, currentCat, id);
     }} else {{
       localStorage.setItem('catOverrides', JSON.stringify(OVERRIDES));
-      renderTxns(document.getElementById('txn-search')?.value||'',document.getElementById('txn-acct')?.value||'',document.getElementById('txn-cat')?.value||'');
+      renderTxns(document.getElementById('txn-search')?.value||'', document.getElementById('txn-acct')?.value||'', document.getElementById('txn-cat')?.value||'');
       if (initializedTabs.has('budget')) renderBudget(getFilteredTxns(currentDays));
     }}
   }}
-  sel.addEventListener('change', commit); sel.addEventListener('blur', commit);
+
+  function commit() {{
+    if (committed) return; committed = true;
+    const val = sel.value;
+    if (val === '__new__') {{
+      // Inline création d'une nouvelle cat
+      const name = prompt('Nom de la nouvelle catégorie :');
+      if (!name || !name.trim()) {{
+        renderTxns(document.getElementById('txn-search')?.value||'', document.getElementById('txn-acct')?.value||'', document.getElementById('txn-cat')?.value||'');
+        return;
+      }}
+      applyNewCat(name.trim());
+    }} else {{
+      applyNewCat(val);
+    }}
+  }}
+  sel.addEventListener('change', commit);
+  sel.addEventListener('blur', () => {{ if (!committed) commit(); }});
 }}
 
 // ── Bulk category toast ───────────────────────────────────────────────────────
@@ -1198,6 +1254,7 @@ function showBulkToast(merchant, newCat, matches, oldCat, triggerId) {{
 
   function save() {{
     localStorage.setItem('catOverrides', JSON.stringify(OVERRIDES));
+    syncCatDropdown();
     renderTxns(document.getElementById('txn-search')?.value||'',document.getElementById('txn-acct')?.value||'',document.getElementById('txn-cat')?.value||'');
     if (initializedTabs.has('budget')) renderBudget(getFilteredTxns(currentDays));
     renderRules();
