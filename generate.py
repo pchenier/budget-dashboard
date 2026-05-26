@@ -638,7 +638,11 @@ def build_html(balances, wise_bal, sol_balance, sol_usd, txns):
     <div class="table-card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:12px">
         <h2 id="budget-title">Budget · 30 jours</h2>
-        <button onclick="addCustomCat()" style="background:#1e3a8a;border:none;color:#fff;border-radius:8px;padding:7px 16px;font-family:Montserrat;font-size:12px;font-weight:600;cursor:pointer">+ Ajouter catégorie</button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button onclick="addCustomCat()" style="background:#1e3a8a;border:none;color:#fff;border-radius:8px;padding:7px 16px;font-family:Montserrat;font-size:12px;font-weight:600;cursor:pointer">+ Ajouter catégorie</button>
+          <button onclick="restoreHidden()" style="background:#181818;border:1px solid #333;color:#777;border-radius:8px;padding:7px 14px;font-family:Montserrat;font-size:11px;font-weight:600;cursor:pointer" title="Réafficher les catégories cachées">Afficher cachées</button>
+          <button onclick="restoreDeleted()" style="background:#181818;border:1px solid #333;color:#777;border-radius:8px;padding:7px 14px;font-family:Montserrat;font-size:11px;font-weight:600;cursor:pointer" title="Restaurer les catégories supprimées">Restaurer supprimées</button>
+        </div>
       </div>
       <p style="font-size:12px;color:#444;margin-bottom:20px">Clique sur le montant cible pour modifier · Glisse pour réordonner</p>
       <div id="budget-bars"></div>
@@ -974,13 +978,8 @@ function addCustomCat() {{
   renderBudget(getFilteredTxns(currentDays));
 }}
 
-function deleteCat(cat) {{
-  const h = getHiddenCats(); if (!h.includes(cat)) h.push(cat); saveHiddenCats(h);
-  const c = getCustomCats().filter(x => x !== cat); saveCustomCats(c);
-  syncCatDropdown();
-  renderBudget(getFilteredTxns(currentDays));
-}}
 function restoreHidden() {{ saveHiddenCats([]); renderBudget(getFilteredTxns(currentDays)); }}
+function restoreDeleted() {{ saveDeletedCats(new Set()); renderBudget(getFilteredTxns(currentDays)); syncCatDropdown(); }}
 
 // Drag-and-drop
 let dragSrc = null;
@@ -1066,7 +1065,7 @@ function renderBudget(txns) {{
             ${{over ? `<span style="font-size:11px;color:#f76e6e;margin-left:8px">+$${{overAmt.toFixed(0)}} over</span>` : ''}}
             ${{proj && !over ? `<span style="font-size:11px;color:#555;margin-left:8px">→ $${{proj.toFixed(0)}}/mois</span>` : ''}}
           </div>
-          <button onclick="deleteCat('${{cat}}')" style="background:none;border:none;color:#333;cursor:pointer;font-size:16px;padding:0;line-height:1;flex-shrink:0" onmouseover="this.style.color='#f76e6e'" onmouseout="this.style.color='#333'">✕</button>
+          <button onclick="deleteCatFull('${{cat}}')" style="background:none;border:none;color:#333;cursor:pointer;font-size:16px;padding:0;line-height:1;flex-shrink:0" onmouseover="this.style.color='#f76e6e'" onmouseout="this.style.color='#333'">✕</button>
         </div>
       </div>
       <div style="background:#1a1a1a;border-radius:6px;height:10px;overflow:hidden">
@@ -1221,10 +1220,44 @@ function renderBudget(txns) {{
 
 // ── Transactions tab ──────────────────────────────────────────────────────────
 // ── Source de vérité unique pour les catégories ───────────────────────────────
+const getDeletedCats = () => new Set(JSON.parse(localStorage.getItem('deletedCats') || '[]'));
+const saveDeletedCats = s => localStorage.setItem('deletedCats', JSON.stringify([...s]));
+
 function getAllCats() {{
-  const fromTxns   = ALL_TXNS.map(t => OVERRIDES[t.id] || t.category);
-  const fromCustom = getCustomCats();
+  const deleted  = getDeletedCats();
+  const fromTxns = ALL_TXNS.map(t => OVERRIDES[t.id] || t.category).filter(c => !deleted.has(c));
+  const fromCustom = getCustomCats().filter(c => !deleted.has(c));
   return [...new Set([...fromTxns, ...fromCustom])].sort();
+}}
+
+function deleteCatFull(cat) {{
+  if (!confirm(`Supprimer la catégorie "${{cat}}" ?\n\nToutes les transactions dans cette catégorie seront réassignées à "Autre".`)) return;
+  // Réassigner les overrides de cette cat → "Autre"
+  let changed = false;
+  ALL_TXNS.forEach(t => {{
+    if ((OVERRIDES[t.id] || t.category) === cat) {{
+      OVERRIDES[t.id] = 'Autre';
+      changed = true;
+    }}
+  }});
+  if (changed) localStorage.setItem('catOverrides', JSON.stringify(OVERRIDES));
+  // Retirer des custom cats
+  const custom = getCustomCats().filter(c => c !== cat);
+  saveCustomCats(custom);
+  // Ajouter aux supprimées (pour cacher les cats built-in)
+  const deleted = getDeletedCats();
+  deleted.add(cat);
+  saveDeletedCats(deleted);
+  // Retirer des cachées (plus nécessaire)
+  const hidden = getHiddenCats().filter(c => c !== cat);
+  saveHiddenCats(hidden);
+  syncCatDropdown();
+  renderBudget(getFilteredTxns(currentDays));
+  if (initializedTabs.has('txns')) renderTxns(
+    document.getElementById('txn-search')?.value||'',
+    document.getElementById('txn-acct')?.value||'',
+    document.getElementById('txn-cat')?.value||''
+  );
 }}
 
 function syncCatDropdown() {{
@@ -1346,7 +1379,7 @@ function editName(id, el) {{
 }}
 
 function editCat(id, currentCat, el) {{
-  const allCats = getAllCats();  // source unique partagée avec budget
+  const allCats = getAllCats();
   const sel = document.createElement('select');
   sel.style.cssText = 'background:#111;border:1px solid #2563eb;border-radius:4px;padding:2px 6px;color:#93c5fd;font-family:Montserrat;font-size:11px;font-weight:600';
 
@@ -1354,6 +1387,11 @@ function editCat(id, currentCat, el) {{
   const newOpt = document.createElement('option');
   newOpt.value = '__new__'; newOpt.textContent = '+ Nouvelle catégorie';
   sel.appendChild(newOpt);
+
+  // Option "🗑 Supprimer cette catégorie"
+  const delOpt = document.createElement('option');
+  delOpt.value = '__delete__'; delOpt.textContent = '🗑 Supprimer cette catégorie';
+  sel.appendChild(delOpt);
 
   // Séparateur
   const sep = document.createElement('option'); sep.disabled = true; sep.textContent = '──────────'; sel.appendChild(sep);
@@ -1395,7 +1433,12 @@ function editCat(id, currentCat, el) {{
   function commit() {{
     if (committed) return; committed = true;
     const val = sel.value;
-    if (val === '__new__') {{
+    if (val === '__delete__') {{
+      // Remettre le badge avant de delete pour éviter le DOM zombie
+      renderTxns(document.getElementById('txn-search')?.value||'', document.getElementById('txn-acct')?.value||'', document.getElementById('txn-cat')?.value||'');
+      deleteCatFull(currentCat);
+      return;
+    }} else if (val === '__new__') {{
       // Inline création d'une nouvelle cat
       const name = prompt('Nom de la nouvelle catégorie :');
       if (!name || !name.trim()) {{
