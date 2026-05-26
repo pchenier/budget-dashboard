@@ -54,32 +54,32 @@ def run_generate(force=False):
         _refresh_status["running"] = True
         _refresh_status["last_msg"] = "En cours..."
 
-    try:
-        print("\n🔄 Régénération du dashboard...")
-        balances = get_plaid_balances()
-        wise_bal, wise_balance_ids = get_wise_balances()
-        sol_bal, sol_usd = get_phantom_balance()
-        raw_txns = get_plaid_transactions()
-        wise_txns = get_wise_transactions(wise_balance_ids)
-        txns = process_transactions(raw_txns, wise_txns)
-        html = build_html(balances, wise_bal, sol_bal, sol_usd, txns)
+    def _do():
+        try:
+            print("\n🔄 Régénération du dashboard...")
+            balances = get_plaid_balances()
+            wise_bal, wise_balance_ids = get_wise_balances()
+            sol_bal, sol_usd = get_phantom_balance()
+            raw_txns = get_plaid_transactions()
+            wise_txns = get_wise_transactions(wise_balance_ids)
+            txns = process_transactions(raw_txns, wise_txns)
+            html = build_html(balances, wise_bal, sol_bal, sol_usd, txns)
+            with open(OUTPUT_PATH, "w", encoding="utf-8") as f:
+                f.write(html)
+            now = datetime.now().strftime("%Y-%m-%d %H:%M")
+            msg = f"Régénéré le {now}"
+            _refresh_status["last_msg"] = msg
+            _refresh_status["last_run"] = datetime.now()
+            print(f"✅ Dashboard régénéré → {OUTPUT_PATH}\n")
+        except Exception as e:
+            msg = f"Erreur: {e}"
+            _refresh_status["last_msg"] = msg
+            print(f"❌ {msg}")
+        finally:
+            _refresh_status["running"] = False
 
-        with open(OUTPUT_PATH, "w", encoding="utf-8") as f:
-            f.write(html)
-
-        now = datetime.now().strftime("%Y-%m-%d %H:%M")
-        msg = f"Régénéré le {now}"
-        _refresh_status["last_msg"] = msg
-        _refresh_status["last_run"] = datetime.now()
-        print(f"✅ Dashboard régénéré → {OUTPUT_PATH}\n")
-        return True, msg
-    except Exception as e:
-        msg = f"Erreur: {e}"
-        _refresh_status["last_msg"] = msg
-        print(f"❌ {msg}")
-        return False, msg
-    finally:
-        _refresh_status["running"] = False
+    threading.Thread(target=_do, daemon=True).start()
+    return True, "Refresh lancé en arrière-plan..."
 
 
 
@@ -87,9 +87,31 @@ def run_generate(force=False):
 # ── HTTP Handler ──────────────────────────────────────────────────────────────
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
-        # Silence les logs sauf erreurs
-        if int(args[1]) >= 400:
-            print(f"  [{args[1]}] {args[0]}")
+        try:
+            if int(args[1]) >= 400:
+                print(f"  [{args[1]}] {args[0]}")
+        except (IndexError, ValueError):
+            pass
+
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.end_headers()
+
+    def do_POST(self):
+        if self.path == "/refresh":
+            ok, msg = run_generate(force=True)
+            import json
+            body = json.dumps({"ok": ok, "msg": msg}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", len(body))
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(body)
+        else:
+            self._text(404, "Not found")
 
     def do_GET(self):
         if self.path == "/" or self.path == "/dashboard.html":
@@ -110,18 +132,6 @@ class Handler(BaseHTTPRequestHandler):
                 self.wfile.write(content)
             except FileNotFoundError:
                 self._text(500, "Dashboard pas encore généré")
-
-        elif self.path == "/refresh":
-            # Refresh forcé via bouton
-            ok, msg = run_generate(force=True)
-            import json
-            body = json.dumps({"ok": ok, "msg": msg}).encode()
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", len(body))
-            self.send_header("Access-Control-Allow-Origin", "*")
-            self.end_headers()
-            self.wfile.write(body)
 
         elif self.path == "/status":
             import json
