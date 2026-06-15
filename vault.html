@@ -578,7 +578,7 @@ function pgDashboard(){
     const excl = EXCLUDED_CATS.has(t.cat);
     return`
     <div class="txn" style="${excl?'opacity:.4':''}">
-      <div class="txn-ico">${t.ico||ico('folder',14)}</div>
+      <div class="txn-ico">${ico(t.ico||'folder',14)}</div>
       <div class="txn-info">
         <div class="txn-name">${t.name}</div>
         <div class="txn-sub">${t.cat} · ${t.acc}</div>
@@ -594,7 +594,7 @@ function pgDashboard(){
     const cls=pct>=100?'over':pct>=85?'warn':'ok';
     return`<div class="budget-item">
       <div class="budget-row">
-        <div class="budget-cat"><span class="budget-cat-ico">${b.ico}</span>${b.cat}</div>
+        <div class="budget-cat"><span class="budget-cat-ico">${ico(b.ico,15)}</span>${b.cat}</div>
         <div class="budget-nums">${fmt(b.spent,0)} <span style="color:var(--text4)">/ ${fmt(b.lim,0)}</span></div>
       </div>
       <div class="pbar"><div class="pfill ${cls}" style="width:${pct}%"></div></div>
@@ -1049,7 +1049,7 @@ function renderTxnList(txns){
     const excluded = EXCLUDED_CATS.has(t.cat);
     return`
     <div class="txn" style="padding:10px 0;cursor:pointer;${excluded?'opacity:.45':''}" onclick="openTxnEdit(${i})" title="${excluded?'Excluded from calculations — click to edit':'Click to edit'}">
-      <div class="txn-ico">${t.ico||ico('folder',14)}</div>
+      <div class="txn-ico">${ico(t.ico||'folder',14)}</div>
       <div class="txn-info">
         <div class="txn-name" style="${excluded?'text-decoration:line-through;color:var(--text3)':''}">${t.name}</div>
         <div class="txn-sub">${t.merchant||t.name}</div>
@@ -1372,7 +1372,7 @@ function pgBudget(){
           const showProj = b.lim>0 && dayOfMonth<=20 && (b.spent/b.lim)>=0.8 && projPct>b.lim;
           return`<div class="budget-item" style="padding:14px 0">
             <div class="budget-row">
-              <div class="budget-cat"><span class="budget-cat-ico">${b.ico}</span>${b.cat}</div>
+              <div class="budget-cat"><span class="budget-cat-ico">${ico(b.ico,15)}</span>${b.cat}</div>
               <div style="display:flex;align-items:center;gap:10px">
                 ${remaining!==null&&remaining<0?`<span class="badge b-red">${fmt(Math.abs(remaining),0)} over</span>`:''}
                 <div class="budget-nums">${fmt(b.spent,0)}${b.lim>0?` <span style="color:var(--text4)">/ ${fmt(b.lim,0)}</span>`:' <span style="color:var(--text4)">/ no limit</span>'}</div>
@@ -1401,7 +1401,7 @@ function pgBudget(){
           <div style="font-size:20px;font-weight:600;color:var(--text)">${pctUsed}%</div>
         </div>`:'<div style="font-size:12px;color:var(--text3);padding:8px 0">Set limits to see overview</div>'}
         <div style="display:flex;gap:6px;flex-wrap:wrap">
-          ${visible.filter(b=>b.lim>0).map(b=>`<span class="badge ${b.spent>b.lim?'b-red':b.spent/b.lim>.85?'b-yellow':'b-gray'}">${b.ico} ${b.cat}</span>`).join('')}
+          ${visible.filter(b=>b.lim>0).map(b=>`<span class="badge ${b.spent>b.lim?'b-red':b.spent/b.lim>.85?'b-yellow':'b-gray'}">${ico(b.ico,12)} ${b.cat}</span>`).join('')}
         </div>
       </div>
     </div>
@@ -1428,7 +1428,7 @@ function renderBudgetEditList(){
   el.innerHTML = items.map((b,i)=>`
     <div class="budget-edit-row" data-cat="${b.cat}" style="display:flex;align-items:center;gap:10px;padding:9px 4px;border-bottom:1px solid var(--border2);${b.hidden?'opacity:.4':''}">
       <div style="cursor:grab;color:var(--text4);font-size:16px;user-select:none" draggable="true" onmousedown="budgetDragStart(event,'${b.cat}')">⠿</div>
-      <div style="flex:1;font-size:13px;color:var(--text2)">${b.ico} ${b.cat}</div>
+      <div style="flex:1;font-size:13px;color:var(--text2)">${ico(b.ico,14)} ${b.cat}</div>
       <div style="font-size:11px;color:var(--text3);width:50px;text-align:right">${fmt(b.spent,0)} spent</div>
       <input type="number" min="0" step="10"
         value="${limits[b.cat]||''}"

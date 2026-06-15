@@ -217,7 +217,7 @@ def _build_real_data_js(data):
             "date_iso": t.get("date_iso") or t["date"],  # ISO YYYY-MM-DD from generate_data
             "cat":      t["category"],
             "acc":      acc_name_map.get(t["account"], t["account"]),
-            "ico":      t.get("ico", "📂"),
+            "ico":      t.get("ico", "folder"),
         })
 
     # Budget: already matches mock format (cat, spent, limit, ico)
