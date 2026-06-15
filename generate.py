@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
 Budget Local — Dashboard Generator
-Pulls Plaid + Wise + Phantom (Solana) → génère un dashboard HTML.
+Pulls Plaid + Wise + Phantom (Solana) → generates an HTML dashboard.
 
 Usage:
-    python generate.py           # génère + ouvre le browser
-    python generate.py --no-open # génère seulement
+    python generate.py           # generates + opens browser
+    python generate.py --no-open # generates only
 """
 
 import json, os, sys, webbrowser, requests, csv as csv_module
@@ -48,11 +48,11 @@ def check_config():
     if not PLAID_TOKEN or "xxxxxxxx" in PLAID_TOKEN:
         warnings.append("PLAID_ACCESS_TOKEN manquant — lance setup_plaid.py d'abord")
     if warnings:
-        print("\n⚠️  Config Plaid incomplète (mode CSV seulement):")
+        print("\n⚠️  Incomplete Plaid config (CSV mode only):")
         for w in warnings:
             print(f"   • {w}")
         print("\n→ Pour activer Plaid: copie .env.example → .env et remplis les valeurs")
-        print("→ Mode CSV disponible: importe tes relevés via l'interface web\n")
+        print("→ Mode CSV disponible: import your statements via the web interface\n")
 
 
 # ── Plaid ─────────────────────────────────────────────────────────────────────
@@ -95,7 +95,7 @@ def plaid_post(endpoint, payload, retries=3):
 
 def get_plaid_balances():
     if not PLAID_CLIENT or not PLAID_SECRET or not PLAID_TOKEN:
-        print("  Plaid: skipped (pas configuré)")
+        print("  Plaid: skipped (not configured)")
         return {}
     print("  Plaid: balances...")
     try:
@@ -109,7 +109,7 @@ def get_plaid_balances():
                 "type":    acc["type"],
                 "subtype": acc["subtype"],
             }
-        print(f"  Plaid: {len(balances)} comptes trouvés")
+        print(f"  Plaid: {len(balances)} accounts found")
         return balances
     except Exception as e:
         print(f"  Plaid: erreur balances → {e}")
@@ -118,7 +118,7 @@ def get_plaid_balances():
 
 def get_plaid_transactions():
     if not PLAID_CLIENT or not PLAID_SECRET or not PLAID_TOKEN:
-        print("  Plaid: skipped (pas configuré)")
+        print("  Plaid: skipped (not configured)")
         return []
     print("  Plaid: transactions...")
     try:
@@ -145,7 +145,7 @@ def get_plaid_transactions():
 # ── Wise ──────────────────────────────────────────────────────────────────────
 def get_wise_balances():
     if not WISE_TOKEN or not WISE_PROFILE:
-        print("  Wise: skipped (pas configuré)")
+        print("  Wise: skipped (not configured)")
         return {}, {}
     print("  Wise: balances...")
     try:
@@ -226,7 +226,7 @@ def get_wise_transactions(balance_ids):
 # ── Phantom / Solana ──────────────────────────────────────────────────────────
 def get_phantom_balance():
     if not PHANTOM_ADDR or PHANTOM_ADDR == "YourSolanaPublicKeyHere":
-        print("  Phantom: skipped (pas configuré)")
+        print("  Phantom: skipped (not configured)")
         return 0.0, 0.0
     print("  Phantom: balance SOL...")
     try:
@@ -273,7 +273,7 @@ def _qt_update_env_token(new_token):
         # Aussi update la variable globale
         global QT_REFRESH
         QT_REFRESH = new_token
-        print(f"  Questrade: nouveau refresh token sauvegardé dans .env")
+        print(f"  Questrade: new refresh token saved in .env")
     except Exception as e:
         print(f"  Questrade: impossible de sauvegarder le token → {e}")
 
@@ -282,7 +282,7 @@ def get_questrade_data():
     """
     Fetch comptes + positions + balances depuis Questrade.
     Sauvegarde un cache JSON local.
-    Si le token est invalide/absent, retourne le cache existant (données stale).
+    If token is invalid/missing, returns existing cache (stale data).
     """
     cache = {}
     if os.path.exists(QT_CACHE_PATH):
@@ -294,7 +294,7 @@ def get_questrade_data():
 
     if not QT_REFRESH:
         if cache:
-            print("  Questrade: pas de token — données du cache utilisées")
+            print("  Questrade: pas de token — cache data used")
         else:
             print("  Questrade: skipped (QUESTRADE_REFRESH_TOKEN manquant)")
         return cache
@@ -307,7 +307,7 @@ def get_questrade_data():
             timeout=15,
         )
         if not r.ok:
-            print(f"  Questrade: token invalide ({r.status_code}) — données du cache utilisées")
+            print(f"  Questrade: invalid token ({r.status_code}) — cache data used")
             return cache
         auth = r.json()
         access_token = auth["access_token"]
@@ -352,13 +352,13 @@ def get_questrade_data():
         }
         with open(QT_CACHE_PATH, "w") as f:
             json.dump(data, f, indent=2)
-        print(f"  Questrade: {len(all_positions)} positions, {len(accounts)} comptes — cache mis à jour")
+        print(f"  Questrade: {len(all_positions)} positions, {len(accounts)} accounts — cache updated")
         return data
 
     except Exception as e:
         print(f"  Questrade: erreur → {e}")
         if cache:
-            print("  Questrade: données du cache utilisées comme fallback")
+            print("  Questrade: cache data used as fallback")
         return cache
 
 
@@ -412,13 +412,13 @@ def get_csv_transactions():
                 # RBC: Transaction Date, Description 1, Description 2, CAD$, USD$
                 # Scotia: Date, Description, Amount
                 # TD: Date, Description, Debit, Credit
-                # Desjardins: Date, Description, Débit, Crédit
+                # Desjardins: Date, Description, Debit, Credit
                 date_col = _h("Transaction Date", "Date")
                 name_col = _h("Description 1", "Description", "Description 1")
                 name_col2 = _h("Description 2")  # RBC secondary desc
                 amount_col = _h("Amount", "CAD$")
-                debit_col  = _h("Debit", "Débit")
-                credit_col = _h("Credit", "Crédit")
+                debit_col  = _h("Debit", "Debit")
+                credit_col = _h("Credit", "Credit")
 
                 if not date_col:
                     # Generic fallback: find first date-like and first amount-like column
@@ -432,7 +432,7 @@ def get_csv_transactions():
                             break
 
                 if not date_col:
-                    print(f"  CSV {fname}: aucune colonne date trouvée — skipped")
+                    print(f"  CSV {fname}: no date column found — skipped")
                     continue
 
                 row_num = 0
@@ -498,18 +498,18 @@ def get_csv_transactions():
     return all_txns
 
 
-# ── Catégories ────────────────────────────────────────────────────────────────
+# ── Categories ────────────────────────────────────────────────────────────────
 CATEGORY_RULES = [
     (["metro", "iga", "maxi", "provigo", "superc", "loblaws", "marché elite",
       "marche elite", "épicerie", "epicerie", "grocery", "boucherie",
       "fromagerie", "pc express", "costco", "super c", "rachelle", "naturalia"],
-     "Épicerie"),
+     "Groceries"),
     (["restaurant", "resto", "mcdonalds", "tim horton", "subway", "pizza",
       "sushi", "burger", "café", "cafe", "coffee", "doordash", "uber eat",
       "ubereats", "uber", "skip", "wendy", "a&w", "popeye", "st-hubert",
       "scores", "cora", "boulangerie", "patisserie", "pâtisserie",
       "thai", "ramen", "pho", "dim sum", "bistro", "bar ", "bouffe", "food"],
-     "Bouffe/Resto"),
+     "Food/Dining"),
     (["esso", "shell", "petro", "ultramar", "couche-tard", "gas",
       "essence", "fuel", "station-service"],
      "Gaz"),
@@ -525,7 +525,7 @@ CATEGORY_RULES = [
       "td direct", "nbdb", "bmo investorline", "desjardins courtage",
       "invest", "placement", "bourse", "etf", "mutual fund",
       "crypto", "coinbase", "binance", "kraken", "shakepay", "ndax"],
-     "Investissements"),
+     "Investments"),
     (["intact assurance", "belairdirect", "td assurance", "sonnet",
       "desjardins assur", "intact auto", "saaq", "raq",
       "garage", "mécanique", "mecanique", "carwash", "lavage auto",
@@ -555,22 +555,22 @@ CATEGORY_RULES = [
       "cinema", "cinéma", "concert", "eventbrite", "ticketmaster",
       "jeux", "game", "playstation", "xbox", "steam", "nintendo",
       "twitch", "patreon", "loto", "casino", "nightclub", "livre", "book"],
-     "Divertissement"),
+     "Entertainment"),
     (["pharmaprix", "jean coutu", "shoppers drug", "clinique", "clinic",
       "médecin", "medecin", "dentiste", "dentist", "optique",
       "hospital", "hôpital", "pharmacie", "pharmacy",
       "médicament", "medicament", "santé", "sante", "physio", "psycho"],
-     "Santé"),
+     "Health"),
     (["videotron", "vidéotron", "bell", "rogers", "telus", "fido",
       "koodo", "public mobile", "virgin mobile", "chatr", "lucky mobile",
       "fizz", "freedom", "internet", "cellulaire", "forfait"],
-     "Télécom"),
+     "Phone/Internet"),
     (["loyer", "rent", "hypothèque", "hypotheque", "mortgage", "condo"],
-     "Logement"),
+     "Housing"),
     (["atm", "withdraw", "retrait", "cash", "wire", "virement",
       "transfer", "interac", "e-transfer", "wise", "remittance",
       "western union", "moneygram"],
-     "Cash/Virements"),
+     "Cash/Transfers"),
 ]
 
 
@@ -581,15 +581,15 @@ def categorize(name: str, plaid_cats: list) -> str:
             return cat
     if plaid_cats:
         pc = " ".join(plaid_cats).lower()
-        if "food" in pc or "restaurant" in pc or "grocery" in pc: return "Bouffe/Resto"
+        if "food" in pc or "restaurant" in pc or "grocery" in pc: return "Food/Dining"
         if "travel" in pc or "gas" in pc:                         return "Gaz"
         if "shop" in pc or "retail" in pc:                        return "Shopping"
         if "gym" in pc or "sport" in pc:                          return "Gym"
-        if "entertain" in pc or "recreation" in pc:               return "Divertissement"
-        if "health" in pc or "medical" in pc or "pharmacy" in pc: return "Santé"
-        if "telecom" in pc or "phone" in pc:                      return "Télécom"
-        if "transfer" in pc or "payment" in pc:                   return "Cash/Virements"
-    return "Autre"
+        if "entertain" in pc or "recreation" in pc:               return "Entertainment"
+        if "health" in pc or "medical" in pc or "pharmacy" in pc: return "Health"
+        if "telecom" in pc or "phone" in pc:                      return "Phone/Internet"
+        if "transfer" in pc or "payment" in pc:                   return "Cash/Transfers"
+    return "Other"
 
 
 def is_skip(txn) -> bool:
@@ -621,7 +621,7 @@ def process_transactions(raw_txns, wise_txns=None, csv_txns=None):
             "account": t["account_id"],
             "id":      t.get("transaction_id", ""),
         })
-    # Ajouter les transactions Wise (déjà pré-formatées)
+    # Add Wise transactions (already pre-formatted)
     for t in (wise_txns or []):
         cat = t.get("category") or categorize(t["name"], [])
         dt  = datetime.strptime(t["date"], "%Y-%m-%d")
@@ -671,7 +671,7 @@ def build_html(balances, wise_bal, sol_balance, sol_usd, txns, qt_data=None):
     wise_usd_cad   = wise_usd_val * USD_TO_CAD
     sol_cad        = sol_balance * sol_usd * USD_TO_CAD
 
-    # Questrade — totalEquity CAD du premier compte (évite double-comptage)
+    # Questrade — totalEquity CAD of first account (avoids double-counting)
     _qt = qt_data or {}
     _qt_bals = _qt.get("balances", [])
     _seen = set()
@@ -689,7 +689,7 @@ def build_html(balances, wise_bal, sol_balance, sol_usd, txns, qt_data=None):
     for acc in balances.values():
         is_credit = acc["type"] == "credit"
         cls = "debit" if is_credit else "credit"
-        label = "Dû" if is_credit else ""
+        label = "Owed" if is_credit else ""
         val_str = f"{'-' if is_credit else ''}{fmt_cad(acc['current'])}"
         safe_id = acc['name'].replace(' ', '-').replace("'", "").lower()
         pills_html += f"""
@@ -757,7 +757,7 @@ def build_html(balances, wise_bal, sol_balance, sol_usd, txns, qt_data=None):
         "#f74fc9",  # rose
         "#f76e6e",  # rouge
         "#a8f74f",  # lime
-        "#93c5fd",  # bleu pâle
+        "#93c5fd",  # light blue
     ]
     acc_ids_ordered = list(dict.fromkeys(t["account"] for t in txns))
     acc_name_map = {aid: balances[aid]["name"] if aid in balances else aid for aid in acc_ids_ordered}
@@ -773,7 +773,7 @@ def build_html(balances, wise_bal, sol_balance, sol_usd, txns, qt_data=None):
     acc_name_map_js   = json.dumps(acc_name_map)
     acc_default_colors_js = json.dumps(acc_default_colors)
 
-    # ── Questrade data pour le tab Investissements ───────────────────────────
+    # ── Questrade data for Investments tab ───────────────────────────
     qt_data = qt_data or {}
     qt_positions   = qt_data.get("positions", [])
     qt_balances    = qt_data.get("balances", [])
@@ -783,12 +783,12 @@ def build_html(balances, wise_bal, sol_balance, sol_usd, txns, qt_data=None):
     if qt_fetched_at:
         try:
             dt = datetime.fromisoformat(qt_fetched_at)
-            qt_fetched_str = dt.strftime("%d %b %Y à %H:%M")
+            qt_fetched_str = dt.strftime("%b %d, %Y at %H:%M")
         except Exception:
             qt_fetched_str = qt_fetched_at[:16]
 
     # Calcul total portfolio Questrade en CAD — combinedBalances donne le compte
-    # en CAD ET en USD (même argent converti), on prend juste le CAD total
+    # in CAD and USD (same converted money), just take CAD total
     qt_total_cad = 0.0
     seen_accounts = set()
     for b in qt_balances:
@@ -1204,7 +1204,7 @@ def build_html(balances, wise_bal, sol_balance, sol_usd, txns, qt_data=None):
     <nav class="sidebar-nav">
       <button class="snav-btn active" onclick="switchTab('overview')">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
-        Vue générale
+        Overview
       </button>
       <button class="snav-btn" onclick="switchTab('budget')">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 12h20M2 6h20M2 18h12"/></svg>
@@ -1216,25 +1216,25 @@ def build_html(balances, wise_bal, sol_balance, sol_usd, txns, qt_data=None):
       </button>
       <button class="snav-btn" onclick="switchTab('invest')">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
-        Investissements
+        Investments
       </button>
     </nav>
 
-    <div class="sidebar-section-label">Période</div>
+    <div class="sidebar-section-label">Period</div>
     <div class="sidebar-period">
       <button class="period-btn active" data-days="30"   onclick="setPeriod(30)">30j</button>
       <button class="period-btn"        data-days="60"   onclick="setPeriod(60)">60j</button>
       <button class="period-btn"        data-days="90"   onclick="setPeriod(90)">90j</button>
-      <button class="period-btn"        data-days="180"  onclick="setPeriod(180)">6 mois</button>
-      <button class="period-btn"        data-days="365"  onclick="setPeriod(365)">12 mois</button>
+      <button class="period-btn"        data-days="180"  onclick="setPeriod(180)">6 months</button>
+      <button class="period-btn"        data-days="365"  onclick="setPeriod(365)">12 months</button>
       <button class="period-btn"        data-days="9999" onclick="setPeriod(9999)">Tout</button>
     </div>
 
-    <div class="sidebar-section-label" style="margin-top:8px">Mois</div>
+    <div class="sidebar-section-label" style="margin-top:8px">Month</div>
     <div style="position:relative">
       <button id="cal-btn" onclick="toggleCal()" style="width:100%;background:rgba(255,255,255,0.035);border:1px solid var(--border);border-radius:10px;padding:8px 12px;color:var(--muted2);font-family:var(--sans);font-size:12px;cursor:pointer;display:flex;align-items:center;gap:6px;transition:all 0.2s">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
-        <span id="cal-label">Choisir un mois</span>
+        <span id="cal-label">Choose month</span>
       </button>
       <div id="cal-picker" style="display:none;position:absolute;top:calc(100% + 8px);left:0;z-index:200;background:#0f0f1c;border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:16px;box-shadow:0 16px 48px rgba(0,0,0,.8);min-width:240px">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
@@ -1284,11 +1284,11 @@ def build_html(balances, wise_bal, sol_balance, sol_usd, txns, qt_data=None):
       <!-- ── Income/Expenses summary row ── -->
       <div id="income-summary" style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:32px"></div>
 
-      <div class="section-title">Résumé mensuel</div>
+      <div class="section-title">Monthly Summary</div>
       <div class="monthly-grid" id="monthly-grid"></div>
       <div class="charts-row">
         <div class="chart-card">
-          <h2>Dépenses par catégorie</h2>
+          <h2>Expenses by Category</h2>
           <div class="donut-layout">
             <div style="width:190px;height:190px;flex-shrink:0;position:relative">
               <canvas id="donutChart"></canvas>
@@ -1321,12 +1321,12 @@ def build_html(balances, wise_bal, sol_balance, sol_usd, txns, qt_data=None):
       <!-- Left: rows -->
       <div class="budget-left">
         <div class="budget-header">
-          <span id="budget-title" style="font-size:11px;font-weight:500;letter-spacing:0.18em;text-transform:uppercase;color:var(--muted)">Budget · 30 jours</span>
+          <span id="budget-title" style="font-size:11px;font-weight:500;letter-spacing:0.18em;text-transform:uppercase;color:var(--muted)">Budget · 30 days</span>
           <div style="display:flex;gap:5px">
             <button onclick="addCustomCat()" class="bud-btn bud-btn-accent">+ Cat</button>
             <button onclick="addBudgetDivider()" class="bud-btn">+ Section</button>
-            <button onclick="restoreHidden()" class="bud-btn">Cachées</button>
-            <button onclick="restoreDeleted()" class="bud-btn">Supprimées</button>
+            <button onclick="restoreHidden()" class="bud-btn">Hidden</button>
+            <button onclick="restoreDeleted()" class="bud-btn">Deleted</button>
           </div>
         </div>
         <div id="budget-bars"></div>
@@ -1346,8 +1346,8 @@ def build_html(balances, wise_bal, sol_balance, sol_usd, txns, qt_data=None):
     <!-- CSV Import Card -->
     <div class="table-card" style="margin-bottom:0">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
-        <h2 style="margin:0;font-size:1rem">📂 Importer un relevé CSV</h2>
-        <span style="font-size:11px;color:#555">Formats supportés: RBC, Scotia, TD, Desjardins, générique</span>
+        <h2 style="margin:0;font-size:1rem">📂 Import CSV Statement</h2>
+        <span style="font-size:11px;color:#555">Supported formats: RBC, Scotia, TD, Desjardins, Generic</span>
       </div>
       <div id="csv-drop-zone"
         ondragover="event.preventDefault();this.style.borderColor='#4f86f7'"
@@ -1380,7 +1380,7 @@ def build_html(balances, wise_bal, sol_balance, sol_usd, txns, qt_data=None):
         </select>
         <select id="txn-cat" onchange="renderTxns(document.getElementById('txn-search').value,document.getElementById('txn-acct').value,this.value)"
           style="background:#181818;border:1px solid #333;border-radius:8px;padding:8px 12px;color:#f1f1f1;font-family:'Geist',sans-serif">
-          <option value="">Toutes catégories</option>
+          <option value="">Toutes categorys</option>
         </select>
         <span id="txn-count" style="align-self:center;color:#777;font-size:13px"></span>
         <button onclick="exportFilteredCsv()" style="background:#181818;border:1px solid #b8f566;border-radius:8px;padding:7px 14px;color:#b8f566;font-family:'Geist',sans-serif;font-size:12px;font-weight:600;cursor:pointer;align-self:center">⬇ Exporter CSV</button>
@@ -1388,9 +1388,9 @@ def build_html(balances, wise_bal, sol_balance, sol_usd, txns, qt_data=None):
       <div style="overflow-x:auto">
         <table>
           <thead><tr>
-            <th>Date</th><th>Marchand</th><th>Catégorie</th><th>Compte</th>
-            <th style="text-align:right">Montant</th>
-            <th style="text-align:center;width:36px" title="Documents attachés">📎</th>
+            <th>Date</th><th>Merchant</th><th>Category</th><th>Account</th>
+            <th style="text-align:right">Amount</th>
+            <th style="text-align:center;width:36px" title="Documents attacheds">📎</th>
           </tr></thead>
           <tbody id="txn-tbody"></tbody>
         </table>
@@ -1414,7 +1414,7 @@ def build_html(balances, wise_bal, sol_balance, sol_usd, txns, qt_data=None):
           <p style="margin-top:6px;font-size:0.7rem">JPG, PNG, PDF, HEIC — max 10 MB</p>
         </div>
 
-        <!-- Boutons caméra / galerie (utile mobile) -->
+        <!-- Camera / gallery buttons (useful on mobile) -->
         <div class="doc-btn-row">
           <button class="doc-btn" onclick="document.getElementById('doc-camera-input').click()">
             📷 Prendre une photo
@@ -1432,27 +1432,27 @@ def build_html(balances, wise_bal, sol_balance, sol_usd, txns, qt_data=None):
       </div>
     </div>
 
-    <!-- Inputs cachés -->
+    <!-- Hidden inputs -->
     <input type="file" id="doc-file-input" accept="image/*,application/pdf,.heic,.heif"
       multiple style="display:none" onchange="handleDocFiles(this.files)">
     <input type="file" id="doc-camera-input" accept="image/*" capture="environment"
       style="display:none" onchange="handleDocFiles(this.files)">
 
-    <!-- Tab: Règles de catégorie -->
+    <!-- Tab: Category Rules -->
     <div class="table-card" style="margin-top:0">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-        <h2 style="margin:0">Règles de catégorie</h2>
-        <span style="font-size:12px;color:#444">Appliquées automatiquement à tous les marchands</span>
+        <h2 style="margin:0">Category Rules</h2>
+        <span style="font-size:12px;color:#444">Applied automatically to all merchants</span>
       </div>
       <div id="rules-panel">
-        <p style="color:#444;font-size:13px">Aucune règle — change la catégorie d'une transaction pour en créer une.</p>
+        <p style="color:#444;font-size:13px">No rules — change a transaction's category to create one.</p>
       </div>
     </div>
 
-    <!-- Abonnements détectés -->
+    <!-- Detected Subscriptions -->
     <div class="table-card" style="margin-top:0">
-      <div onclick="toggleAbonnements()" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;user-select:none">
-        <h2 style="margin:0">Abonnements détectés</h2>
+      <div onclick="toggleSubscriptions()" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;user-select:none">
+        <h2 style="margin:0">Detected Subscriptions</h2>
         <span id="abo-chevron" style="font-size:18px;color:#555;transition:transform .2s">▶</span>
       </div>
       <div id="abo-panel" style="display:none;margin-top:16px">
@@ -1462,14 +1462,14 @@ def build_html(balances, wise_bal, sol_balance, sol_usd, txns, qt_data=None):
     </div>
   </div>
 
-  <!-- Tab: Investissements -->
+  <!-- Tab: Investments -->
   <div id="tab-invest" class="tab-panel">
     <div class="main">
     <div class="table-card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:12px">
         <div>
           <h2 style="margin:0 0 4px">Portfolio Questrade</h2>
-          {f'<span style="font-size:11px;color:#555">Données du {qt_fetched_str}</span>' if qt_fetched_str else '<span style="font-size:11px;color:#f76e6e">Aucune donnée — ajouter QUESTRADE_REFRESH_TOKEN dans .env</span>'}
+          {f'<span style="font-size:11px;color:#555">Data from {qt_fetched_str}</span>' if qt_fetched_str else '<span style="font-size:11px;color:#f76e6e">No data — ajouter QUESTRADE_REFRESH_TOKEN dans .env</span>'}
         </div>
         <div id="qt-total-cad" style="font-size:1.8rem;font-weight:800;background:linear-gradient(90deg,#fff,#93c5fd);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">
           {fmt_cad(qt_total_cad) if qt_total_cad else "—"}
@@ -1483,11 +1483,11 @@ def build_html(balances, wise_bal, sol_balance, sol_usd, txns, qt_data=None):
       <div style="overflow-x:auto">
         <table id="qt-table">
           <thead><tr>
-            <th>Symbole</th><th>Description</th><th>Compte</th>
-            <th style="text-align:right">Qté</th>
+            <th>Symbole</th><th>Description</th><th>Account</th>
+            <th style="text-align:right">Qty</th>
             <th style="text-align:right">Prix moyen</th>
             <th style="text-align:right">Prix actuel</th>
-            <th style="text-align:right">Valeur marché</th>
+            <th style="text-align:right">Market Value</th>
             <th style="text-align:right">G/P $</th>
             <th style="text-align:right">G/P %</th>
           </tr></thead>
@@ -1515,7 +1515,7 @@ const SELF_PAYS    = JSON.parse(localStorage.getItem('selfPayIds') || '[]');
 const SELF_PAY_SET = new Set(SELF_PAYS);
 window.OVERRIDES   = OVERRIDES;
 
-// ── Couleurs comptes (custom ou défaut) ───────────────────────────────────────
+// ── Account colors (custom or default) ───────────────────────────────────────
 function getAccColors() {{
   const saved = JSON.parse(localStorage.getItem('accColors') || '{{}}');
   return Object.assign({{}}, ACC_DEFAULT_COLORS, saved);
@@ -1580,7 +1580,7 @@ function switchTab(name) {{
 // ── Period filter ─────────────────────────────────────────────────────────────
 let currentDays = 30, customFrom = null, customTo = null;
 let _calYear = new Date().getFullYear();
-const MONTH_NAMES_SHORT = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
+const MONTH_NAMES_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
 function getFilteredTxns(days) {{
   if (customFrom && customTo) {{
@@ -1597,7 +1597,7 @@ function setPeriod(days) {{
   customFrom = null; customTo = null;
   currentDays = days;
   const rc = document.getElementById('range-clear'); if(rc) rc.style.display='none';
-  const lbl = document.getElementById('cal-label'); if(lbl) lbl.textContent='Mois';
+  const lbl = document.getElementById('cal-label'); if(lbl) lbl.textContent='Month';
   const btn = document.getElementById('cal-btn'); if(btn) btn.style.borderColor='#333';
   document.getElementById('range-from').value = '';
   document.getElementById('range-to').value = '';
@@ -1659,7 +1659,7 @@ function applyRange() {{
 function clearRange() {{
   customFrom = null; customTo = null;
   document.getElementById('range-clear').style.display = 'none';
-  document.getElementById('cal-label').textContent = 'Mois';
+  document.getElementById('cal-label').textContent = 'Month';
   document.getElementById('cal-btn').style.borderColor = '#333';
   document.getElementById('range-from').value = '';
   document.getElementById('range-to').value = '';
@@ -1675,7 +1675,7 @@ function renderMonthly(txns) {{
     if (t.amount < 0) months[mk].in += Math.abs(t.amount);
     else months[mk].out += t.amount;
   }});
-  const MN = {{'01':'Jan','02':'Fév','03':'Mar','04':'Avr','05':'Mai','06':'Jun','07':'Jul','08':'Aoû','09':'Sep','10':'Oct','11':'Nov','12':'Déc'}};
+  const MN = {{'01':'Jan','02':'Feb','03':'Mar','04':'Apr','05':'May','06':'Jun','07':'Jul','08':'Aug','09':'Sep','10':'Oct','11':'Nov','12':'Dec'}};
   const sorted = Object.entries(months).sort((a,b) => a[0].localeCompare(b[0]));
   document.getElementById('monthly-grid').innerHTML = sorted.map(([mk,d]) => {{
     const net = d.in - d.out;
@@ -1689,7 +1689,7 @@ function renderMonthly(txns) {{
       <div class="month-row"><span>Total IN</span><span class="green">+$${{d.in.toFixed(2)}}</span></div>
       <div class="month-row"><span>Total OUT</span><span class="red">-$${{d.out.toFixed(2)}}</span></div>
       <div class="month-row net-row"><span>NET</span><span style="color:${{nc}}">$${{net.toFixed(2)}}</span></div>
-      <div class="month-row" style="margin-top:6px;border-top:1px solid #222;padding-top:6px"><span style="color:#555;font-size:11px">Taux d'épargne</span><span style="color:${{srColor}};font-family:'Geist Mono',monospace;font-size:12px;font-weight:700">${{srTxt}}</span></div>
+      <div class="month-row" style="margin-top:6px;border-top:1px solid #222;padding-top:6px"><span style="color:#555;font-size:11px">Savings rate</span><span style="color:${{srColor}};font-family:'Geist Mono',monospace;font-size:12px;font-weight:700">${{srTxt}}</span></div>
     </div>`;
   }}).join('');
 }}
@@ -1703,7 +1703,7 @@ function renderDonut(txns) {{
     const cat = OVERRIDES[t.id] || t.category;
     cats[cat] = (cats[cat]||0) + t.amount;
   }});
-  const skip = new Set(['Cash/Virements','Investissements','Autre']);
+  const skip = new Set(['Cash/Transfers','Investments','Other']);
   const filtered = Object.entries(cats).filter(([k]) => !skip.has(k)).sort((a,b) => b[1]-a[1]);
   const labels = filtered.map(e => e[0]);
   const values = filtered.map(e => Math.round(e[1]*100)/100);
@@ -1754,12 +1754,12 @@ function renderWeekly(txns) {{
 }}
 
 // ── Budget ────────────────────────────────────────────────────────────────────
-const SKIP_CATS = new Set(['Cash/Virements','Investissements','Paiement propre']);
+const SKIP_CATS = new Set(['Cash/Transfers','Investments','Self Payment']);
 const CAT_ICONS = {{
-  'Bouffe/Resto':'🍔','Épicerie':'🛒','Gaz':'⛽','Shopping':'🛍️',
-  'Divertissement':'🎮','Gym':'💪','Télécom':'📱','Business/Tech':'💻',
-  'Auto':'🚗','Moto':'🏍️','Santé':'💊','Cadeaux':'🎁',
-  'Logement':'🏠','Autre':'💸',
+  'Food/Dining':'🍔','Groceries':'🛒','Gaz':'⛽','Shopping':'🛍️',
+  'Entertainment':'🎮','Gym':'💪','Phone/Internet':'📱','Business/Tech':'💻',
+  'Auto':'🚗','Moto':'🏍️','Health':'💊','Cadeaux':'🎁',
+  'Housing':'🏠','Other':'💸',
 }};
 
 const getBudgetTargets = () => JSON.parse(localStorage.getItem('budgetTargets') || '{{}}');
@@ -1808,7 +1808,7 @@ function editTarget(cat) {{
 }}
 
 function addCustomCat() {{
-  const name = prompt('Nom de la nouvelle catégorie budget :');
+  const name = prompt('Nom de la nouvelle category budget :');
   if (!name || !name.trim()) return;
   const amt = prompt(`Budget mensuel cible pour "${{name.trim()}}" (CAD) :`);
   const n   = parseFloat((amt||'').replace(/[^0-9.]/g,''));
@@ -1847,7 +1847,7 @@ function renderBudget(txns) {{
   const savedOrder = getCatOrder();
   const dividers   = getBudgetDividers();
 
-  // Avg monthly par cat sur toutes les données
+  // Avg monthly per category on all data
   const allMonths = {{}};
   ALL_TXNS.filter(t => t.amount > 0 && !SKIP_CATS.has(OVERRIDES[t.id] || t.category) && !SELF_PAY_SET.has(t.id)).forEach(t => {{
     const mk = t.date.substring(0,7); const cat = OVERRIDES[t.id] || t.category;
@@ -1859,7 +1859,7 @@ function renderBudget(txns) {{
   Object.values(allMonths).forEach(m => Object.entries(m).forEach(([c,a]) => {{ avgMonthly[c] = (avgMonthly[c]||0) + a; }}));
   Object.keys(avgMonthly).forEach(k => avgMonthly[k] /= numMonths);
 
-  // Dépenses période filtrée
+  // Expenses for filtered period
   const spent = {{}};
   txns.filter(t => t.amount > 0 && !SKIP_CATS.has(OVERRIDES[t.id] || t.category) && !SELF_PAY_SET.has(t.id)).forEach(t => {{
     const cat = OVERRIDES[t.id] || t.category;
@@ -1937,7 +1937,7 @@ function renderBudget(txns) {{
     </div>`;
   }}).join('');
 
-  document.getElementById('budget-bars').innerHTML = bars || '<p style="color:#555">Aucune dépense dans cette période.</p>';
+  document.getElementById('budget-bars').innerHTML = bars || '<p style="color:#555">No expenses in this period.</p>';
   // Animate bars in
   requestAnimationFrame(() => requestAnimationFrame(() => {{
     document.querySelectorAll('.brow-fill[data-pct]').forEach(el => {{
@@ -1945,13 +1945,13 @@ function renderBudget(txns) {{
     }});
   }}));
 
-  // Restaurer cachées
+  // Restore hidden
   let restore = document.getElementById('budget-restore');
   if (!restore) {{ restore = document.createElement('div'); restore.id='budget-restore'; document.getElementById('budget-bars').parentElement.appendChild(restore); }}
   const hc = hidden.length;
-  restore.innerHTML = hc > 0 ? `<button onclick="restoreHidden()" style="background:none;border:none;color:#444;font-size:12px;font-family:'Geist',sans-serif;cursor:pointer;margin-top:8px">↩ Restaurer ${{hc}} catégorie${{hc>1?'s':''}} masquée${{hc>1?'s':''}}</button>` : '';
+  restore.innerHTML = hc > 0 ? `<button onclick="restoreHidden()" style="background:none;border:none;color:#444;font-size:12px;font-family:'Geist',sans-serif;cursor:pointer;margin-top:8px">↩ Restore ${{hc}} category${{hc>1?'s':''}} hidden${{hc>1?'s':''}}</button>` : '';
 
-  document.getElementById('budget-title').textContent = `Budget · ${{currentDays >= 9999 ? 'Tout' : currentDays + ' jours'}}`;
+  document.getElementById('budget-title').textContent = `Budget · ${{currentDays >= 9999 ? 'Tout' : currentDays + ' days'}}`;
 
   // ── Gamification ─────────────────────────────────────────────────────────
   let suggEl = document.getElementById('budget-suggestions');
@@ -1959,7 +1959,7 @@ function renderBudget(txns) {{
 
   const savedIncome = parseFloat(localStorage.getItem('finance_monthly_income')||'0');
 
-  const benchmarks = {{'Épicerie':0.15,'Bouffe/Resto':0.10,'Gaz':0.12,'Shopping':0.05,'Télécom':0.05,'Divertissement':0.05,'Santé':0.08,'Gym':0.05}};
+  const benchmarks = {{'Groceries':0.15,'Food/Dining':0.10,'Gaz':0.12,'Shopping':0.05,'Phone/Internet':0.05,'Entertainment':0.05,'Health':0.08,'Gym':0.05}};
 
   const catsWithTarget = Object.entries(targets).filter(([,v])=>v>0);
   let scorePoints=0, maxPoints=0;
@@ -1978,7 +1978,7 @@ function renderBudget(txns) {{
 
   let spendRatio=null, spentMon=null;
   if (savedIncome > 0) {{
-    const totalSpent = Object.entries(spent).filter(([c])=>c!=='Investissements').reduce((s,[,v])=>s+v,0);
+    const totalSpent = Object.entries(spent).filter(([c])=>c!=='Investments').reduce((s,[,v])=>s+v,0);
     spentMon   = ratio > 0 ? totalSpent/ratio : totalSpent;
     spendRatio = spentMon/savedIncome;
     maxPoints += 20;
@@ -1993,12 +1993,12 @@ function renderBudget(txns) {{
 
   let grade, gc, rl, rc2;
   if      (score===null)  {{ grade='—'; gc='#444';    rl='#222';    rc2='Fixe tes cibles budget'; }}
-  else if (score>=90)     {{ grade='S'; gc='#f0c040'; rl='#f0c040'; rc2='Légendaire'; }}
+  else if (score>=90)     {{ grade='S'; gc='#f0c040'; rl='#f0c040'; rc2='Legendary'; }}
   else if (score>=80)     {{ grade='A'; gc='#4fc978'; rl='#4fc978'; rc2='Excellent'; }}
   else if (score>=65)     {{ grade='B'; gc='#93c5fd'; rl='#93c5fd'; rc2='Dans le game'; }}
-  else if (score>=50)     {{ grade='C'; gc='#f59e0b'; rl='#f59e0b'; rc2='À surveiller'; }}
+  else if (score>=50)     {{ grade='C'; gc='#f59e0b'; rl='#f59e0b'; rc2='Watch out'; }}
   else if (score>=30)     {{ grade='D'; gc='#fb923c'; rl='#fb923c'; rc2='Danger zone'; }}
-  else                    {{ grade='F'; gc='#f76e6e'; rl='#f76e6e'; rc2='Budget explosé'; }}
+  else                    {{ grade='F'; gc='#f76e6e'; rl='#f76e6e'; rc2='Budget blown'; }}
 
   const R=72, CIRC=2*Math.PI*R;
   const fillOff = score !== null ? CIRC*(1-score/100) : CIRC;
@@ -2007,9 +2007,9 @@ function renderBudget(txns) {{
   if (savedIncome > 0 && spendRatio !== null) {{
     if (spendRatio > 0.70) {{
       const ov = spentMon - savedIncome*0.70;
-      suggs.push({{type:'warning', msg:`Tu dépenses ${{Math.round(spendRatio*100)}}% de ton revenu (idéal ≤70%).`, impact:`Réduire de $${{ov.toFixed(0)}} libèrerait du cash.`}});
+      suggs.push({{type:'warning', msg:`You spend ${{Math.round(spendRatio*100)}}% of your income (ideal ≤70%).`, impact:`Reducing by ${{ov.toFixed(0)}} would free up cash.`}});
     }} else if (spendRatio < 0.50) {{
-      suggs.push({{type:'good', msg:`Seulement ${{Math.round(spendRatio*100)}}% du revenu en dépenses.`}});
+      suggs.push({{type:'good', msg:`Only ${{Math.round(spendRatio*100)}}% of income on expenses.`}});
     }}
     for (const [cat, idealPct] of Object.entries(benchmarks)) {{
       const s = spent[cat]||0; if (!s) continue;
@@ -2017,21 +2017,21 @@ function renderBudget(txns) {{
       const pct2  = sMon2/savedIncome;
       if (pct2 > idealPct) {{
         const ov = sMon2 - savedIncome*idealPct;
-        suggs.push({{type:'warning', msg:`${{cat}} : ${{Math.round(pct2*100)}}% du revenu (idéal ≤${{Math.round(idealPct*100)}}%).`, impact:`Cibler $${{(savedIncome*idealPct).toFixed(0)}}/mois — économies $${{ov.toFixed(0)}}.`}});
+        suggs.push({{type:'warning', msg:`${{cat}} : ${{Math.round(pct2*100)}}% of income (ideal ≤${{Math.round(idealPct*100)}}%).`, impact:`Target $${{(savedIncome*idealPct).toFixed(0)}}/mo — savings $${{ov.toFixed(0)}}.`}});
       }}
     }}
     const sr = 1 - spendRatio;
-    if      (sr < 0.10) suggs.push({{type:'tip', msg:`Épargne sous 10%.`, impact:`Cible 20% → $${{(savedIncome*0.20).toFixed(0)}}/mois.`}});
-    else if (sr >= 0.20) suggs.push({{type:'good', msg:`Taux d'épargne ${{Math.round(sr*100)}}% — au-dessus de la cible.`}});
+    if      (sr < 0.10) suggs.push({{type:'tip', msg:`Savings under 10%.`, impact:`Target 20% → $${{(savedIncome*0.20).toFixed(0)}}/mo.`}});
+    else if (sr >= 0.20) suggs.push({{type:'good', msg:`Savings rate ${{Math.round(sr*100)}}% — above target.`}});
   }} else if (!savedIncome && catsWithTarget.length > 0) {{
     for (const [cat, res] of Object.entries(catResults)) {{
       if (res.status==='fail'||res.status==='over') {{
         const s = ratio>0?(spent[cat]||0)/ratio:(spent[cat]||0);
-        suggs.push({{type:'warning', msg:`${{cat}} dépasse la cible de $${{(s-(targets[cat]||0)).toFixed(0)}}.`, impact:`Cible : $${{(targets[cat]||0).toFixed(0)}}/mois`}});
+        suggs.push({{type:'warning', msg:`${{cat}} exceeds target by $${{(s-(targets[cat]||0)).toFixed(0)}}.`, impact:`Target: $${{(targets[cat]||0).toFixed(0)}}/mo`}});
       }}
     }}
   }}
-  if (suggs.length===0 && (savedIncome>0||catsWithTarget.length>0)) suggs.push({{type:'good', msg:'Toutes les cibles sont respectées. Continue.'}});
+  if (suggs.length===0 && (savedIncome>0||catsWithTarget.length>0)) suggs.push({{type:'good', msg:'All targets met. Keep.'}});
 
   const suggHTML = suggs.slice(0,3).map(s => {{
     const clr  = s.type==='warning'?'var(--red)':s.type==='good'?'var(--emerald)':'#818cf8';
@@ -2053,9 +2053,9 @@ function renderBudget(txns) {{
     }}).join('')
   }}</div>` : '';
 
-  // ── Investissements par mois ───────────────────────────────────────────────
+  // ── Investments by month ───────────────────────────────────────────────
   const investByMonth = {{}};
-  ALL_TXNS.filter(t => (OVERRIDES[t.id]||t.category) === 'Investissements' && t.amount > 0 && !SELF_PAY_SET.has(t.id))
+  ALL_TXNS.filter(t => (OVERRIDES[t.id]||t.category) === 'Investments' && t.amount > 0 && !SELF_PAY_SET.has(t.id))
     .forEach(t => {{
       const mk = t.date.substring(0,7);
       investByMonth[mk] = (investByMonth[mk]||0) + t.amount;
@@ -2067,8 +2067,8 @@ function renderBudget(txns) {{
   const investHTML = investMonths.length > 0 ? `
   <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
     <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px">
-      <span style="font-size:10px;font-weight:500;letter-spacing:0.18em;text-transform:uppercase;color:var(--muted)">Investissements</span>
-      <span style="font-family:var(--mono);font-size:10px;color:var(--muted2)">moy. $${{investAvg.toFixed(0)}}/mois</span>
+      <span style="font-size:10px;font-weight:500;letter-spacing:0.18em;text-transform:uppercase;color:var(--muted)">Investments</span>
+      <span style="font-family:var(--mono);font-size:10px;color:var(--muted2)">avg. $${{investAvg.toFixed(0)}}/mo</span>
     </div>
     ${{investMonths.map(([mk, amt]) => {{
       const label = new Date(mk+'-01').toLocaleDateString('fr-CA',{{month:'short',year:'2-digit'}});
@@ -2108,7 +2108,7 @@ function renderBudget(txns) {{
       ${{badgesHTML}}
 
       <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border);display:flex;align-items:center;gap:8px">
-        <span style="font-size:11px;color:var(--muted);flex:1">Revenu net / mois</span>
+        <span style="font-size:11px;color:var(--muted);flex:1">Net Income / Month</span>
         <input id="income-input" type="number" value="${{savedIncome||''}}" placeholder="4500"
           oninput="(function(v){{const n=parseFloat(v)||0;localStorage.setItem('finance_monthly_income',n);renderBudget(getFilteredTxns(currentDays));}})(this.value)"
           style="width:64px;background:transparent;border:none;font-family:var(--mono);font-size:13px;font-weight:600;color:var(--text);outline:none;text-align:right"/>
@@ -2138,7 +2138,7 @@ function renderBudget(txns) {{
 }}
 
 // ── Transactions tab ──────────────────────────────────────────────────────────
-// ── Source de vérité unique pour les catégories ───────────────────────────────
+// ── Single source of truth for categories ───────────────────────────────
 const getDeletedCats = () => new Set(JSON.parse(localStorage.getItem('deletedCats') || '[]'));
 const saveDeletedCats = s => localStorage.setItem('deletedCats', JSON.stringify([...s]));
 
@@ -2150,12 +2150,12 @@ function getAllCats() {{
 }}
 
 function deleteCatFull(cat) {{
-  if (!confirm(`Supprimer la catégorie "${{cat}}" ?\n\nToutes les transactions dans cette catégorie seront réassignées à "Autre".`)) return;
-  // Réassigner les overrides de cette cat → "Autre"
+  if (!confirm(`Delete the category "${{cat}}" ?\n\nAll transactions in this category will be reassigned to "Other".`)) return;
+  // Reassign overrides of this category → "Other"
   let changed = false;
   ALL_TXNS.forEach(t => {{
     if ((OVERRIDES[t.id] || t.category) === cat) {{
-      OVERRIDES[t.id] = 'Autre';
+      OVERRIDES[t.id] = 'Other';
       changed = true;
     }}
   }});
@@ -2163,11 +2163,11 @@ function deleteCatFull(cat) {{
   // Retirer des custom cats
   const custom = getCustomCats().filter(c => c !== cat);
   saveCustomCats(custom);
-  // Ajouter aux supprimées (pour cacher les cats built-in)
+  // Add to deleted (to hide built-in cats)
   const deleted = getDeletedCats();
   deleted.add(cat);
   saveDeletedCats(deleted);
-  // Retirer des cachées (plus nécessaire)
+  // Remove from hidden (no longer needed)
   const hidden = getHiddenCats().filter(c => c !== cat);
   saveHiddenCats(hidden);
   syncCatDropdown();
@@ -2183,7 +2183,7 @@ function syncCatDropdown() {{
   const sel     = document.getElementById('txn-cat');
   if (!sel) return;
   const current = sel.value;
-  sel.innerHTML = '<option value="">Toutes catégories</option>';
+  sel.innerHTML = '<option value="">Toutes categorys</option>';
   getAllCats().forEach(c => {{
     const o = document.createElement('option');
     o.value = c; o.textContent = c;
@@ -2200,7 +2200,7 @@ function initTxns() {{
   renderAccLegend();
   renderTxns('','','');
   renderRules();
-  renderAbonnements();
+  renderSubscriptions();
 }}
 
 function renderAccLegend() {{
@@ -2261,11 +2261,11 @@ function renderTxns(filter='', acct='', cat='') {{
     const dotColor = colors[t.account] || '#777';
     const accName  = getAccName(t.account);
     const selfStyle= isSelf ? 'opacity:0.45;text-decoration:line-through;' : '';
-    const selfTip  = isSelf ? 'Marqué comme paiement propre (exclu du budget) — cliquer pour annuler' : 'Marquer comme paiement propre (ex: virement à soi-même)';
+    const selfTip  = isSelf ? 'Marked as self payment (excluded from budget) — click to undo' : 'Mark as self payment (e.g. transfer to self)';
     const txnDocs = getTxnDocs(t.id);
     const hasDoc  = txnDocs.length > 0;
     const docIcon = hasDoc
-      ? `<span style="color:#b8f566;font-size:1rem;cursor:pointer" title="${{txnDocs.length}} doc${{txnDocs.length>1?'s':''}} attaché${{txnDocs.length>1?'s':''}}" onclick="openDocModal('${{t.id}}','${{en.replace(/'/g,"\\\\'")}}')"">📎</span>`
+      ? `<span style="color:#b8f566;font-size:1rem;cursor:pointer" title="${{txnDocs.length}} doc${{txnDocs.length>1?'s':''}} attached${{txnDocs.length>1?'s':''}}" onclick="openDocModal('${{t.id}}','${{en.replace(/'/g,"\\\\'")}}')"">📎</span>`
       : `<span style="color:#333;font-size:1rem;cursor:pointer" title="Attacher un document" onclick="openDocModal('${{t.id}}','${{en.replace(/'/g,"\\\\'")}}')"">📎</span>`;
     return `<tr style="${{selfStyle}}">
       <td>${{t.date}}</td>
@@ -2310,7 +2310,7 @@ function openDocModal(txnId, txnName) {{
   document.getElementById('doc-modal-title').textContent = '📎 Documents — ' + txnName;
   const docs = getTxnDocs(txnId);
   document.getElementById('doc-modal-sub').textContent =
-    docs.length === 0 ? 'Aucun document attaché' : docs.length + ' document' + (docs.length>1?'s':'') + ' attaché' + (docs.length>1?'s':'');
+    docs.length === 0 ? 'No documents attached' : docs.length + ' document' + (docs.length>1?'s':'') + ' attached' + (docs.length>1?'s':'');
   renderDocList();
   document.getElementById('doc-modal-overlay').style.display = 'flex';
   document.body.style.overflow = 'hidden';
@@ -2320,7 +2320,7 @@ function closeDocModal() {{
   document.getElementById('doc-modal-overlay').style.display = 'none';
   document.body.style.overflow = '';
   _docTxnId = null;
-  // Re-render pour mettre à jour l'icône 📎 dans la table
+  // Re-render to update 📎 icon in the table
   renderTxns(
     document.getElementById('txn-search')?.value||'',
     document.getElementById('txn-acct')?.value||'',
@@ -2333,7 +2333,7 @@ function renderDocList() {{
   const docs = getTxnDocs(_docTxnId);
   const el = document.getElementById('doc-list');
   document.getElementById('doc-modal-sub').textContent =
-    docs.length === 0 ? 'Aucun document attaché' : docs.length + ' document' + (docs.length>1?'s':'') + ' attaché' + (docs.length>1?'s':'');
+    docs.length === 0 ? 'No documents attached' : docs.length + ' document' + (docs.length>1?'s':'') + ' attached' + (docs.length>1?'s':'');
   if (docs.length === 0) {{ el.innerHTML = ''; return; }}
   el.innerHTML = docs.map((d, i) => {{
     const isPdf = d.mime === 'application/pdf' || d.name.toLowerCase().endsWith('.pdf');
@@ -2350,7 +2350,7 @@ function renderDocList() {{
         <div class="doc-item-meta">${{sizeLabel}} · ${{d.addedAt||''}}</div>
       </div>
       ${{isPdf ? `<a href="${{d.data}}" download="${{d.name}}" class="doc-btn" style="flex:none;padding:6px 10px;font-size:0.75rem;text-decoration:none">⬇</a>` : ''}}
-      <button class="doc-item-del" onclick="deleteDoc(${{i}})" title="Supprimer">✕</button>
+      <button class="doc-item-del" onclick="deleteDoc(${{i}})" title="Delete">✕</button>
     </div>`;
   }}).join('');
 }}
@@ -2383,7 +2383,7 @@ function handleDocFiles(files) {{
       if (pending === 0) {{
         saveTxnDocs(_docTxnId, docs);
         renderDocList();
-        showToast('✓ ' + files.length + ' document' + (files.length>1?'s':'') + ' ajouté' + (files.length>1?'s':''));
+        showToast('✓ ' + files.length + ' document' + (files.length>1?'s':'') + ' added' + (files.length>1?'s':''));
       }}
     }};
     reader.readAsDataURL(file);
@@ -2436,17 +2436,17 @@ function editCat(id, currentCat, el) {{
   const sel = document.createElement('select');
   sel.style.cssText = 'background:#111;border:1px solid #2563eb;border-radius:4px;padding:2px 6px;color:#93c5fd;font-family:Geist,sans-serif;font-size:11px;font-weight:600';
 
-  // Option spéciale "+ Nouvelle catégorie"
+  // Special option "+ New category"
   const newOpt = document.createElement('option');
-  newOpt.value = '__new__'; newOpt.textContent = '+ Nouvelle catégorie';
+  newOpt.value = '__new__'; newOpt.textContent = '+ Nouvelle category';
   sel.appendChild(newOpt);
 
-  // Option "🗑 Supprimer cette catégorie"
+  // Option "🗑 Delete this category"
   const delOpt = document.createElement('option');
-  delOpt.value = '__delete__'; delOpt.textContent = '🗑 Supprimer cette catégorie';
+  delOpt.value = '__delete__'; delOpt.textContent = '🗑 Delete this category';
   sel.appendChild(delOpt);
 
-  // Séparateur
+  // Separator
   const sep = document.createElement('option'); sep.disabled = true; sep.textContent = '──────────'; sel.appendChild(sep);
 
   allCats.forEach(c => {{
@@ -2464,7 +2464,7 @@ function editCat(id, currentCat, el) {{
       renderTxns(document.getElementById('txn-search')?.value||'', document.getElementById('txn-acct')?.value||'', document.getElementById('txn-cat')?.value||'');
       return;
     }}
-    // Ajouter la nouvelle cat aux custom cats si pas déjà présente
+    // Add the new cat to custom cats if not already present
     const custom = getCustomCats();
     if (!getAllCats().includes(val)) {{
       custom.push(val); saveCustomCats(custom);
@@ -2487,13 +2487,13 @@ function editCat(id, currentCat, el) {{
     if (committed) return; committed = true;
     const val = sel.value;
     if (val === '__delete__') {{
-      // Remettre le badge avant de delete pour éviter le DOM zombie
+      // Restore badge before delete to avoid DOM zombie
       renderTxns(document.getElementById('txn-search')?.value||'', document.getElementById('txn-acct')?.value||'', document.getElementById('txn-cat')?.value||'');
       deleteCatFull(currentCat);
       return;
     }} else if (val === '__new__') {{
-      // Inline création d'une nouvelle cat
-      const name = prompt('Nom de la nouvelle catégorie :');
+      // Inline creation of a new cat
+      const name = prompt('Nom de la nouvelle category :');
       if (!name || !name.trim()) {{
         renderTxns(document.getElementById('txn-search')?.value||'', document.getElementById('txn-acct')?.value||'', document.getElementById('txn-cat')?.value||'');
         return;
@@ -2527,7 +2527,7 @@ function showBulkToast(merchant, newCat, matches, oldCat, triggerId) {{
   toast.innerHTML = `
     <style>@keyframes slide-up {{ from {{ opacity:0;transform:translateX(-50%) translateY(20px) }} to {{ opacity:1;transform:translateX(-50%) translateY(0) }} }}</style>
     <div style="font-size:13px;font-weight:700;color:#f1f1f1;margin-bottom:6px">
-      Appliquer à toutes les transactions de <span style="color:#93c5fd">"${{merchant}}"</span> ?
+      Apply to all transactions from <span style="color:#93c5fd">"${{merchant}}"</span> ?
     </div>
     <div style="font-size:12px;color:#666;margin-bottom:16px">
       ${{matches.length}} transaction${{matches.length>1?'s':''}} · <span style="color:#4fc978">→ ${{newCat}}</span>
@@ -2600,7 +2600,7 @@ function renderRules() {{
     .sort((a,b) => b.count - a.count);
 
   if (rules.length === 0) {{
-    panel.innerHTML = `<p style="color:#444;font-size:13px">Aucune règle — change la catégorie d'une transaction pour en créer une.</p>`;
+    panel.innerHTML = `<p style="color:#444;font-size:13px">No rules — change a transaction's category to create one.</p>`;
     return;
   }}
 
@@ -2613,7 +2613,7 @@ function renderRules() {{
       <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
         <span style="font-size:11px;color:#666">→</span>
         <span style="background:rgba(37,99,235,0.2);border:1px solid rgba(37,99,235,0.35);color:#93c5fd;border-radius:6px;padding:3px 9px;font-size:11px;font-weight:600">${{r.cat}}</span>
-        <button onclick="clearRule('${{r.name}}')" style="background:none;border:none;color:#333;cursor:pointer;font-size:14px;padding:2px 4px" title="Supprimer la règle" onmouseover="this.style.color='#f76e6e'" onmouseout="this.style.color='#333'">✕</button>
+        <button onclick="clearRule('${{r.name}}')" style="background:none;border:none;color:#333;cursor:pointer;font-size:14px;padding:2px 4px" title="Delete rule" onmouseover="this.style.color='#f76e6e'" onmouseout="this.style.color='#333'">✕</button>
       </div>
     </div>
   `).join('');
@@ -2634,7 +2634,7 @@ function clearRule(merchantName) {{
 function renderIncomeSummary(txns) {{
   const el = document.getElementById('income-summary');
   if (!el) return;
-  const skip = new Set(['Cash/Virements','Investissements','Paiement propre']);
+  const skip = new Set(['Cash/Transfers','Investments','Self Payment']);
   let revenus = 0, depenses = 0;
   txns.forEach(t => {{
     if (SELF_PAY_SET.has(t.id)) return;
@@ -2652,8 +2652,8 @@ function renderIncomeSummary(txns) {{
       <div style="font-size:11px;color:#555;margin-top:6px;letter-spacing:.08em;text-transform:uppercase">${{label}}</div>
     </div>`;
   el.innerHTML =
-    card('Revenus', revenus,  '#b8f566') +
-    card('Dépenses', depenses,'#f1f1f1') +
+    card('Income', revenus,  '#b8f566') +
+    card('Expenses', depenses,'#f1f1f1') +
     card('Net',      net,     nc);
 }}
 
@@ -2661,7 +2661,7 @@ function renderIncomeSummary(txns) {{
 function renderTopMerchants(txns) {{
   const el = document.getElementById('top-merchants');
   if (!el) return;
-  const skip = new Set(['Cash/Virements','Investissements','Revenus/Depots','Paiement propre']);
+  const skip = new Set(['Cash/Transfers','Investments','Income/Deposits','Self Payment']);
   const merchants = {{}};
   txns.forEach(t => {{
     if (t.amount <= 0) return;
@@ -2672,7 +2672,7 @@ function renderTopMerchants(txns) {{
     merchants[name] = (merchants[name]||0) + t.amount;
   }});
   const sorted = Object.entries(merchants).sort((a,b)=>b[1]-a[1]).slice(0,10);
-  if (!sorted.length) {{ el.innerHTML = '<p style="color:#555;font-size:13px">Aucune donnée</p>'; return; }}
+  if (!sorted.length) {{ el.innerHTML = '<p style="color:#555;font-size:13px">No data</p>'; return; }}
   const max = sorted[0][1];
   el.innerHTML = sorted.map(([name, total]) => {{
     const pct = Math.round((total/max)*100);
@@ -2689,22 +2689,22 @@ function renderTopMerchants(txns) {{
   }}).join('');
 }}
 
-// ── Abonnements détectés ──────────────────────────────────────────────────────
-function toggleAbonnements() {{
+// ── Detected Subscriptions ──────────────────────────────────────────────────────
+function toggleSubscriptions() {{
   const panel   = document.getElementById('abo-panel');
   const chevron = document.getElementById('abo-chevron');
   if (!panel) return;
   const open = panel.style.display !== 'none';
   panel.style.display   = open ? 'none' : 'block';
   chevron.style.transform = open ? '' : 'rotate(90deg)';
-  if (!open) renderAbonnements();
+  if (!open) renderSubscriptions();
 }}
 
-function renderAbonnements() {{
+function renderSubscriptions() {{
   const el = document.getElementById('abo-list');
   if (!el) return;
 
-  const skip = new Set(['Cash/Virements','Investissements','Revenus/Depots','Paiement propre']);
+  const skip = new Set(['Cash/Transfers','Investments','Income/Deposits','Self Payment']);
   const merchants = {{}};
   ALL_TXNS.forEach(t => {{
     if (t.amount <= 0) return;
@@ -2740,7 +2740,7 @@ function renderAbonnements() {{
   subs.sort((a,b)=>b.total-a.total);
 
   if (!subs.length) {{
-    el.innerHTML = '<p style="color:#555;font-size:13px">Aucun abonnement récurrent détecté.</p>';
+    el.innerHTML = '<p style="color:#555;font-size:13px">No recurring subscriptions detected.</p>';
     return;
   }}
 
@@ -2752,7 +2752,7 @@ function renderAbonnements() {{
         <div style="font-size:11px;color:#555;margin-top:2px">${{s.count}}× · ${{s.freq}}</div>
       </div>
       <div style="text-align:right;flex-shrink:0">
-        <div style="font-family:'Geist Mono',monospace;font-size:13px;font-weight:700;color:#b8f566">$${{fmt(s.avg)}}/mois</div>
+        <div style="font-family:'Geist Mono',monospace;font-size:13px;font-weight:700;color:#b8f566">${{fmt(s.avg)}}/mo</div>
         <div style="font-size:11px;color:#555;margin-top:1px">Total $${{fmt(s.total)}}</div>
       </div>
     </div>
@@ -2774,7 +2774,7 @@ function exportFilteredCsv() {{
     if (q && !en.toLowerCase().includes(q) && !ec.toLowerCase().includes(q)) return false;
     return true;
   }});
-  const headers = ['Date','Marchand','Catégorie','Compte','Montant'];
+  const headers = ['Date','Merchant','Category','Account','Amount'];
   const lines = [headers.join(',')].concat(rows.map(t => {{
     const ec  = OVERRIDES[t.id]||t.category;
     const en  = NAMES[t.id]||t.name;
@@ -2807,7 +2807,7 @@ function refreshAll() {{
 
 window.addEventListener('DOMContentLoaded', () => refreshAll());
 
-// ── Investissements (Questrade) ───────────────────────────────────────────────
+// ── Investments (Questrade) ───────────────────────────────────────────────
 function initInvest() {{
   // Balances par compte
   const balEl = document.getElementById('qt-balances');
@@ -2826,19 +2826,19 @@ function initInvest() {{
       return `<div style="background:#181818;border:1px solid #222;border-radius:12px;padding:16px 20px;min-width:200px">
         <div style="font-size:0.7rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#555;margin-bottom:8px">${{acc}}</div>
         <div style="font-size:1.3rem;font-weight:800;color:#f1f1f1">$${{totalCAD.toLocaleString('fr-CA',{{minimumFractionDigits:2,maximumFractionDigits:2}})}}</div>
-        <div style="font-size:0.75rem;color:#555;margin-top:4px">Liquidités : $${{cashCAD.toLocaleString('fr-CA',{{minimumFractionDigits:2,maximumFractionDigits:2}})}}</div>
+        <div style="font-size:0.75rem;color:#555;margin-top:4px">Cash : $${{cashCAD.toLocaleString('fr-CA',{{minimumFractionDigits:2,maximumFractionDigits:2}})}}</div>
         ${{usd ? `<div style="font-size:0.7rem;color:#444;margin-top:2px">USD : $${{(usd.totalEquity||0).toLocaleString('en-US',{{minimumFractionDigits:2,maximumFractionDigits:2}})}}</div>` : ''}}
       </div>`;
     }}).join('');
   }} else if (balEl) {{
-    balEl.innerHTML = '<p style="color:#444;font-size:13px">Aucune balance — token Questrade requis</p>';
+    balEl.innerHTML = '<p style="color:#444;font-size:13px">No balance — Questrade token required</p>';
   }}
 
   // Positions table
   const tbody = document.getElementById('qt-tbody');
   if (!tbody) return;
   if (!QT_POSITIONS.length) {{
-    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#444;padding:24px">Aucune position — token Questrade requis</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#444;padding:24px">No positions — Questrade token required</td></tr>';
     return;
   }}
   // Sort by market value desc
@@ -2885,7 +2885,7 @@ function handleCsvFiles(files) {{
     .then(d => {{
       if (d.ok) {{
         statusEl.style.color = '#4fc978';
-        statusEl.textContent = d.rows + ' transactions importées — Refresh en cours...';
+        statusEl.textContent = d.rows + ' transactions imported — Refreshing...';
         // Poll until regeneration done
         const poll = setInterval(() => {{
           fetch('/status').then(r=>r.json()).then(s => {{
@@ -2899,7 +2899,7 @@ function handleCsvFiles(files) {{
         setTimeout(() => location.reload(), 8000);
       }} else {{
         statusEl.style.color = '#f76e6e';
-        statusEl.textContent = '❌ Erreur: ' + (d.error || 'upload échoué');
+        statusEl.textContent = '❌ Error: ' + (d.error || 'upload failed');
       }}
     }})
     .catch(err => {{
@@ -3083,7 +3083,7 @@ window.addEventListener('DOMContentLoaded', () => {{
 # ── Main ──────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     check_config()
-    print("\n📊 Budget Dashboard — génération en cours...\n")
+    print("\n📊 Budget Dashboard — generation in progress...\n")
     print("🔗 Connexion aux APIs...")
     balances = get_plaid_balances()
     wise_bal, wise_balance_ids = get_wise_balances()
@@ -3096,10 +3096,10 @@ if __name__ == "__main__":
     csv_txns = get_csv_transactions()
     print("\n⚙️  Traitement...")
     txns = process_transactions(raw_txns, wise_txns, csv_txns)
-    print(f"  {len(txns)} transactions après filtrage")
+    print(f"  {len(txns)} transactions after filtering")
     print("\n📥 Questrade...")
     qt_data = get_questrade_data()
-    print("\n🎨 Génération HTML...")
+    print("\n🎨 Generating HTML...")
     html = build_html(balances, wise_bal, sol_bal, sol_usd, txns, qt_data)
     with open(OUTPUT_PATH, "w", encoding="utf-8") as f:
         f.write(html)

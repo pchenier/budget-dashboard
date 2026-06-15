@@ -14,22 +14,22 @@ sys.path.insert(0, str(Path(__file__).parent))
 import generate as gen
 
 CATEGORY_ICONS = {
-    "Épicerie":         "🛒",
-    "Bouffe/Resto":     "🍽️",
-    "Gaz":              "⛽",
+    "Groceries":         "🛒",
+    "Food/Dining":      "🍽️",
+    "Gas":              "⛽",
     "Transport":        "🚇",
     "Shopping":         "🛍️",
     "Gym":              "💪",
-    "Santé":            "💊",
-    "Télécom":          "📱",
-    "Divertissement":   "🎬",
-    "Abonnements":      "📺",
-    "Logement":         "🏠",
-    "Hydro/Services":   "⚡",
-    "Cash/Virements":   "💸",
-    "Investissements":  "📈",
-    "Revenu":           "💼",
-    "Autre":            "📂",
+    "Health":           "💊",
+    "Phone/Internet":   "📱",
+    "Entertainment":    "🎬",
+    "Subscriptions":    "📺",
+    "Housing":          "🏠",
+    "Utilities":        "⚡",
+    "Cash/Transfers":   "💸",
+    "Investments":     "📈",
+    "Income":           "💼",
+    "Other":            "📂",
 }
 
 ACCOUNT_TYPE_LABELS = {
@@ -295,19 +295,19 @@ def pull_all(config):
     # Budget — auto-build from spending categories
     # ─────────────────────────────────────────────────────────────────────────
     BUDGET_LIMITS = {
-        "Épicerie":        500,
-        "Bouffe/Resto":    300,
+        "Groceries":        500,
+        "Food/Dining":      300,
         "Transport":       200,
-        "Gaz":             150,
+        "Gas":             150,
         "Shopping":        300,
-        "Abonnements":     100,
+        "Subscriptions":   100,
         "Gym":             100,
-        "Santé":           100,
-        "Télécom":         80,
-        "Divertissement":  150,
-        "Hydro/Services":  130,
-        "Logement":        1500,
-        "Autre":           200,
+        "Health":          100,
+        "Phone/Internet":  80,
+        "Entertainment":   150,
+        "Utilities":       130,
+        "Housing":         1500,
+        "Other":           200,
     }
 
     budget = []

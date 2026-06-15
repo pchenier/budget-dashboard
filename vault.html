@@ -425,7 +425,7 @@ button{font-family:var(--font)}
       <svg class="ico" data-feather="percent"></svg> Savings Rate
     </div>
     <div class="nav-item" data-page="subscriptions" onclick="navigate('subscriptions')">
-      <svg class="ico" data-feather="repeat"></svg> Abonnements
+      <svg class="ico" data-feather="repeat"></svg> Subscriptions
     </div>
   </nav>
 
@@ -460,9 +460,9 @@ button{font-family:var(--font)}
       <svg class="ico" data-feather="settings"></svg> Settings
     </div>
     <div class="user-row">
-      <div class="avatar">AM</div>
+      <div class="avatar" id="user-avatar">?</div>
       <div class="user-info">
-        <div class="user-name" id="user-name">Loading...</div>
+        <div class="user-name" id="user-name"></div>
         <div class="user-plan" id="user-email"></div>
       </div>
     </div>
@@ -976,7 +976,7 @@ function getTxnOverrides(){ try{ return JSON.parse(localStorage.getItem(TXN_OVER
 function saveTxnOverride(id, patch){ const o=getTxnOverrides(); o[id]=Object.assign(o[id]||{},patch); localStorage.setItem(TXN_OVERRIDES_KEY,JSON.stringify(o)); }
 function applyOverrides(txns){ const o=getTxnOverrides(); return txns.map(t=>o[t.id||t.name+t.date]?Object.assign({},t,o[t.id||t.name+t.date]):t); }
 
-const DEFAULT_CATS = ['Épicerie','Bouffe/Resto','Gaz','Transport','Shopping','Gym','Santé','Télécom','Divertissement','Abonnements','Logement','Hydro/Services','Cash/Virements','Investissements','Revenu','P2P/Virement perso','Autre'];
+const DEFAULT_CATS = ['Groceries','Food/Dining','Gas','Transport','Shopping','Gym','Health','Phone/Internet','Entertainment','Subscriptions','Housing','Utilities','Cash/Transfers','Investments','Income','P2P/Personal Transfer','Other'];
 const CATS_KEY = 'vault_categories';
 function getCats(){ try{ const s=localStorage.getItem(CATS_KEY); return s?JSON.parse(s):DEFAULT_CATS; }catch(e){return DEFAULT_CATS;} }
 function saveCats(cats){ localStorage.setItem(CATS_KEY,JSON.stringify(cats)); }
@@ -1064,10 +1064,10 @@ function applyQuickRule(nameFragment, cat){
   D.txns = applyRules(D.txns);
   filterTxns();
 }
-const CAT_ICOS = {'Épicerie':'shopping-cart','Bouffe/Resto':'coffee','Gaz':'droplet','Transport':'map','Shopping':'shopping-bag','Gym':'zap','Santé':'heart','Télécom':'smartphone','Divertissement':'film','Abonnements':'monitor','Logement':'home','Hydro/Services':'zap','Cash/Virements':'trending-down','Investissements':'trending-up','Revenu':'briefcase','P2P/Virement perso':'repeat','Autre':'folder'};
+const CAT_ICOS = {'Groceries':'shopping-cart','Food/Dining':'coffee','Gas':'droplet','Transport':'map','Shopping':'shopping-bag','Gym':'zap','Health':'heart','Phone/Internet':'smartphone','Entertainment':'film','Subscriptions':'monitor','Housing':'home','Utilities':'zap','Cash/Transfers':'trending-down','Investments':'trending-up','Income':'briefcase','P2P/Personal Transfer':'repeat','Other':'folder'};
 
 // Categories excluded from spending/budget calculations
-const EXCLUDED_CATS = new Set(['P2P/Virement perso']);
+const EXCLUDED_CATS = new Set(['P2P/Personal Transfer']);
 function catIco(cat){ return CAT_ICOS[cat]||'folder'; }
 
 let _filteredTxns = [];
@@ -1243,19 +1243,19 @@ const BUDGET_HIDDEN = 'vault_budget_hidden';
 const BUDGET_ORDER  = 'vault_budget_order';
 
 const DEFAULT_LIMITS = {
-  'Épicerie':         500,
-  'Bouffe/Resto':     300,
-  'Gaz':              200,
-  'Transport':        150,
-  'Shopping':         300,
-  'Gym':              100,
-  'Santé':            100,
-  'Télécom':          100,
-  'Divertissement':   150,
-  'Abonnements':      100,
-  'Logement':        1300,
-  'Hydro/Services':   150,
-  'Autre':            200,
+  'Groceries':         500,
+  'Food/Dining':       300,
+  'Gas':               200,
+  'Transport':         150,
+  'Shopping':          300,
+  'Gym':               100,
+  'Health':            100,
+  'Phone/Internet':    100,
+  'Entertainment':     150,
+  'Subscriptions':     100,
+  'Housing':          1300,
+  'Utilities':         150,
+  'Other':             200,
 };
 
 function getBudgetLimits(){
@@ -1413,7 +1413,7 @@ function pgBudget(){
             </div>`:''}
             ${showProj?`<div style="margin-top:7px;padding:7px 10px;background:rgba(251,191,36,0.07);border:1px solid rgba(251,191,36,0.2);border-radius:6px;display:flex;align-items:flex-start;gap:8px">
               <span style="font-size:13px;display:inline-flex;align-items:center"><svg data-feather="bar-chart-2" style="width:13px;height:13px"></svg></span>
-              <div style="font-size:11px;color:#fbbf24;line-height:1.5">À ce rythme tu vas dépenser <strong>${fmt(projPct,0)}</strong> ce mois — <strong>${fmt(projPct-b.lim,0)} de plus</strong> que ton budget de ${fmt(b.lim,0)}.</div>
+              <div style="font-size:11px;color:#fbbf24;line-height:1.5">At this rate you will spend <strong>${fmt(projPct,0)}</strong> this month — <strong>${fmt(projPct-b.lim,0)} more</strong> than your budget of ${fmt(b.lim,0)}.</div>
             </div>`:''}
           </div>`;
         }).join('')}
@@ -1555,22 +1555,22 @@ function pgSavings(){
   return`
   <div class="metrics-row mb20">
     <div class="metric">
-      <div class="metric-label">Savings Rate (Ce Mois)</div>
+      <div class="metric-label">Savings Rate (This Month)</div>
       <div class="metric-val" style="color:${rateColor}">${cur.rate.toFixed(1)}%</div>
       <div class="metric-delta ${cur.rate>=20?'up':cur.rate>=10?'flat':'down'}">${cur.rate>=20?'▲ On track':cur.rate>=10?'→ Acceptable':'▼ Needs work'}</div>
     </div>
     <div class="metric">
-      <div class="metric-label">Cashflow Ce Mois</div>
+      <div class="metric-label">Cashflow This Month</div>
       <div class="metric-val" style="color:${cur.cf>=0?'var(--green)':'var(--red)'}">${fmt(cur.cf,0)}</div>
-      <div class="metric-delta flat">Revenu ${fmt(cur.inc,0)} / Dépenses ${fmt(cur.exp,0)}</div>
+      <div class="metric-delta flat">Income ${fmt(cur.inc,0)} / Expenses ${fmt(cur.exp,0)}</div>
     </div>
     <div class="metric">
-      <div class="metric-label">Moyenne 12 Mois</div>
+      <div class="metric-label">12 Month Average</div>
       <div class="metric-val">${avg12.toFixed(1)}%</div>
-      <div class="metric-delta flat">Moy. glissante</div>
+      <div class="metric-delta flat">Rolling avg</div>
     </div>
     <div class="metric">
-      <div class="metric-label">Meilleur Mois</div>
+      <div class="metric-label">Best Month</div>
       <div class="metric-val" style="color:var(--green)">${best.rate.toFixed(1)}%</div>
       <div class="metric-delta up">${best.label}</div>
     </div>
@@ -1578,28 +1578,28 @@ function pgSavings(){
 
   ${cur.rate<10&&cur.inc>0?`<div class="insight mb20" style="border-color:var(--red-br);background:var(--red-bg)">
     <div class="insight-ico" style="background:var(--red-bg)"><svg data-feather="alert-circle" style="width:14px;height:14px"></svg></div>
-    <div><h4 style="color:var(--red)">Savings rate sous 10% ce mois</h4>
-    <p>Tu dépenses ${fmt(cur.exp,0)} sur ${fmt(cur.inc,0)} de revenu. Vise au moins 20% pour construire de la richesse — soit ${fmt(cur.inc*0.2,0)} épargnés ce mois.</p></div>
+    <div><h4 style="color:var(--red)">Savings rate under 10% this month</h4>
+    <p>You spent ${fmt(cur.exp,0)} out of ${fmt(cur.inc,0)} of income. Aim for at least 20% to build wealth — that's ${fmt(cur.inc*0.2,0)} saved this month.</p></div>
   </div>`:cur.rate>=20?`<div class="insight mb20" style="border-color:var(--green-br);background:var(--green-bg)">
     <div class="insight-ico" style="background:var(--green-bg)"><svg data-feather="check-circle" style="width:14px;height:14px"></svg></div>
-    <div><h4 style="color:var(--green)">Excellent — ${cur.rate.toFixed(1)}% d'épargne ce mois</h4>
-    <p>Tu épargnes ${fmt(cur.cf,0)} sur ${fmt(cur.inc,0)} de revenu. C'est au-dessus du seuil de 20% recommandé pour la liberté financière.</p></div>
+    <div><h4 style="color:var(--green)">Excellent — ${cur.rate.toFixed(1)}% savings rate this month</h4>
+    <p>You saved ${fmt(cur.cf,0)} out of ${fmt(cur.inc,0)} of income. That's above the 20% recommended threshold for financial freedom.</p></div>
   </div>`:''}
 
   <div class="card mb20">
-    <div class="sec-hdr"><span class="sec-title">Savings Rate — 12 Mois</span></div>
+    <div class="sec-hdr"><span class="sec-title">Savings Rate — 12 Months</span></div>
     <div class="chart-wrap" style="height:220px"><canvas id="savingsChart"></canvas></div>
   </div>
 
   <div class="card">
-    <div class="sec-hdr"><span class="sec-title">Détail Mensuel</span></div>
+    <div class="sec-hdr"><span class="sec-title">Monthly Detail</span></div>
     <div style="overflow-x:auto">
       <table style="width:100%;border-collapse:collapse;font-size:12px">
         <thead>
           <tr style="color:var(--text3);border-bottom:1px solid var(--border2)">
-            <th style="text-align:left;padding:8px 0;font-weight:500">Mois</th>
-            <th style="text-align:right;padding:8px 0;font-weight:500">Revenu</th>
-            <th style="text-align:right;padding:8px 0;font-weight:500">Dépenses</th>
+            <th style="text-align:left;padding:8px 0;font-weight:500">Month</th>
+            <th style="text-align:right;padding:8px 0;font-weight:500">Income</th>
+            <th style="text-align:right;padding:8px 0;font-weight:500">Expenses</th>
             <th style="text-align:right;padding:8px 0;font-weight:500">Cashflow</th>
             <th style="text-align:right;padding:8px 0;font-weight:500">Rate</th>
           </tr>
@@ -1666,7 +1666,7 @@ function pgSubscriptions(){
   const allTxns = applyOverrides(applyRules(D.txns));
   const txns = allTxns.filter(t => !EXCLUDED_CATS.has(t.cat));
 
-  // All Abonnements transactions (current month + last month for "new" detection)
+  // All Subscriptions transactions (current month + last month for "new" detection)
   const now = new Date();
   const curM = now.getMonth(), curY = now.getFullYear();
   const prevM = curM===0?11:curM-1, prevY = curM===0?curY-1:curY;
@@ -1677,7 +1677,7 @@ function pgSubscriptions(){
     return new Date(raw);
   }
 
-  const subs = txns.filter(t=>t.cat==='Abonnements'&&t.amt<0);
+  const subs = txns.filter(t=>t.cat==='Subscriptions'&&t.amt<0);
   const curSubs  = subs.filter(t=>{ const d=parseDate(t); return d.getMonth()===curM&&d.getFullYear()===curY; });
   const prevSubs = subs.filter(t=>{ const d=parseDate(t); return d.getMonth()===prevM&&d.getFullYear()===prevY; });
 
@@ -1696,9 +1696,9 @@ function pgSubscriptions(){
   });
   const services = Object.values(byName).sort((a,b)=>b.total-a.total);
 
-  // Budget for abonnements
+  // Budget for subscriptions
   const budgetItems = getBudgetItems();
-  const aboBudget = budgetItems.find(b=>b.cat==='Abonnements');
+  const aboBudget = budgetItems.find(b=>b.cat==='Subscriptions');
   const aboBudgetLim = aboBudget?.lim||0;
 
   const noSubs = curSubs.length===0;
@@ -1706,36 +1706,36 @@ function pgSubscriptions(){
   return`
   <div class="metrics-row mb20">
     <div class="metric">
-      <div class="metric-label">Total Ce Mois</div>
+      <div class="metric-label">Total This Month</div>
       <div class="metric-val">${fmt(totalCur,2)}</div>
-      <div class="metric-delta ${diff>0?'down':diff<0?'up':'flat'}">${diff===0?'→ Stable':diff>0?'▲ +'+fmt(Math.abs(diff),2)+' vs mois passé':'▼ '+fmt(Math.abs(diff),2)+' économisés'}</div>
+      <div class="metric-delta ${diff>0?'down':diff<0?'up':'flat'}">${diff===0?'→ Stable':diff>0?'▲ +'+fmt(Math.abs(diff),2)+' vs last month':'▼ '+fmt(Math.abs(diff),2)+' saved'}</div>
     </div>
     <div class="metric">
-      <div class="metric-label">Nbre d'Abonnements</div>
+      <div class="metric-label">Subscriptions Count</div>
       <div class="metric-val">${services.length}</div>
-      <div class="metric-delta flat">Services actifs</div>
+      <div class="metric-delta flat">Active services</div>
     </div>
     <div class="metric">
-      <div class="metric-label">Mois Passé</div>
+      <div class="metric-label">Last Month</div>
       <div class="metric-val">${fmt(totalPrev,2)}</div>
-      <div class="metric-delta flat">Référence</div>
+      <div class="metric-delta flat">Reference</div>
     </div>
     <div class="metric">
-      <div class="metric-label">Budget Abos</div>
-      <div class="metric-val" style="color:${aboBudgetLim>0&&totalCur>aboBudgetLim?'var(--red)':'var(--text)'}">${aboBudgetLim>0?fmt(aboBudgetLim,0):'Non défini'}</div>
-      <div class="metric-delta ${aboBudgetLim>0?totalCur>aboBudgetLim?'down':'up':'flat'}">${aboBudgetLim>0?totalCur>aboBudgetLim?'Dépassé':'Sous budget':'—'}</div>
+      <div class="metric-label">Subs Budget</div>
+      <div class="metric-val" style="color:${aboBudgetLim>0&&totalCur>aboBudgetLim?'var(--red)':'var(--text)'}">${aboBudgetLim>0?fmt(aboBudgetLim,0):'Not set'}</div>
+      <div class="metric-delta ${aboBudgetLim>0?totalCur>aboBudgetLim?'down':'up':'flat'}">${aboBudgetLim>0?totalCur>aboBudgetLim?'Over budget':'Under budget':'—'}</div>
     </div>
   </div>
 
   ${services.filter(s=>s.isNew).length>0?`<div class="insight mb20" style="border-color:var(--yellow-br);background:var(--yellow-bg)">
     <div class="insight-ico" style="background:var(--yellow-bg)"><svg data-feather="plus-circle" style="width:14px;height:14px"></svg></div>
-    <div><h4 style="color:#fbbf24">${services.filter(s=>s.isNew).length} nouvel abonnement${services.filter(s=>s.isNew).length>1?'s':''} ce mois</h4>
-    <p>${services.filter(s=>s.isNew).map(s=>s.name+' ('+fmt(s.total,2)+')').join(', ')} — absent du mois précédent.</p></div>
+    <div><h4 style="color:#fbbf24">${services.filter(s=>s.isNew).length} new subscription${services.filter(s=>s.isNew).length>1?'s':''} this month</h4>
+    <p>${services.filter(s=>s.isNew).map(s=>s.name+' ('+fmt(s.total,2)+')').join(', ')} — not present last month.</p></div>
   </div>`:''}
 
   <div class="card">
-    <div class="sec-hdr"><span class="sec-title">Détail par Service</span></div>
-    ${noSubs?`<div style="padding:32px 0;text-align:center;color:var(--text3);font-size:13px">Aucun abonnement catégorisé ce mois.<br>Assigne la catégorie "Abonnements" à tes transactions récurrentes.</div>`:`
+    <div class="sec-hdr"><span class="sec-title">Detail by Service</span></div>
+    ${noSubs?`<div style="padding:32px 0;text-align:center;color:var(--text3);font-size:13px">No categorized subscriptions this month.<br>Assign the "Subscriptions" category to your recurring transactions.</div>`:`
     <div>
       ${services.map(s=>{
         const pct = totalCur>0?(s.total/totalCur*100):0;
@@ -1743,7 +1743,7 @@ function pgSubscriptions(){
           <div style="flex:1">
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
               <span style="font-size:13px;color:var(--text);font-weight:500">${s.name}</span>
-              ${s.isNew?`<span class="badge b-yellow">Nouveau</span>`:''}
+              ${s.isNew?`<span class="badge b-yellow">New</span>`:''}
               ${s.count>1?`<span class="badge b-gray">${s.count}x</span>`:''}
             </div>
             <div class="pbar" style="height:3px"><div class="pfill ok" style="width:${pct.toFixed(1)}%"></div></div>
@@ -2006,7 +2006,7 @@ const WK_TPLS = {
   'Back & Biceps':   { icon:'activity', exs:['Pull-ups','Barbell row','Cable row','Face pull','Bicep curl','Hammer curl'], dur:'60 min' },
   'Chest & Triceps': { icon:'target', exs:['Bench press','Incline DB','Cable fly','Dips','Pushdown','Skull crushers'], dur:'60 min' },
   'Legs':            { icon:'navigation', exs:['Squat','Romanian DL','Leg press','Leg curl','Hip thrust','Calf raise'], dur:'65 min' },
-  'Épaules':         { icon:'shield', exs:['OHP','Lateral raise','Front raise','Face pull','Shrugs'], dur:'50 min' },
+  'Shoulders':         { icon:'shield', exs:['OHP','Lateral raise','Front raise','Face pull','Shrugs'], dur:'50 min' },
   'Full Body':       { icon:'layers', exs:['Deadlift','Bench press','Pull-ups','OHP','Squat'], dur:'75 min' },
   'Cardio':          { icon:'activity', exs:['Treadmill','Bike','Jump rope','Stair climber'], dur:'30 min' },
   'Abs':             { icon:'target', exs:['Plank','Leg raise','Crunches','Russian twist','Cable crunch'], dur:'20 min' },
@@ -2014,35 +2014,35 @@ const WK_TPLS = {
 const MEAL_TPLS = {
   'Breakfast': [
     { label:'Oatmeal + Whey', foods:'Oatmeal, banana, whey', cal:520, protein:40 },
-    { label:'Eggs & Toast', foods:'3 oeufs, 2 toasts', cal:480, protein:28 },
+    { label:'Eggs & Toast', foods:'3 eggs, 2 toasts', cal:480, protein:28 },
     { label:'Greek yogurt', foods:'Greek yogurt, granola, fruits', cal:380, protein:22 },
-    { label:'Protein shake', foods:'Whey, lait, banana', cal:350, protein:35 },
+    { label:'Protein shake', foods:'Whey, milk, banana', cal:350, protein:35 },
   ],
   'Lunch': [
-    { label:'Chicken & Rice', foods:'Chicken breast, riz, brocoli', cal:650, protein:55 },
-    { label:'Sandwich', foods:'Sandwich dinde, salade', cal:580, protein:35 },
-    { label:'Poke Bowl', foods:'Saumon, riz, edamame', cal:700, protein:45 },
-    { label:'Salade poulet', foods:'Chicken, greens, feta', cal:480, protein:42 },
+    { label:'Chicken & Rice', foods:'Chicken breast, rice, broccoli', cal:650, protein:55 },
+    { label:'Sandwich', foods:'Turkey sandwich, salad', cal:580, protein:35 },
+    { label:'Poke Bowl', foods:'Salmon, rice, edamame', cal:700, protein:45 },
+    { label:'Chicken salad', foods:'Chicken, greens, feta', cal:480, protein:42 },
   ],
   'Dinner': [
-    { label:'Steak & légumes', foods:'Steak, asperges, patate douce', cal:750, protein:60 },
-    { label:'Pasta bolo', foods:'Pasta, boeuf, sauce tomate', cal:800, protein:40 },
-    { label:'Saumon & riz', foods:'Saumon, riz, épinards', cal:680, protein:52 },
-    { label:'Poulet & quinoa', foods:'Chicken, quinoa, légumes', cal:620, protein:50 },
+    { label:'Steak & veggies', foods:'Steak, asparagus, sweet potato', cal:750, protein:60 },
+    { label:'Pasta bolo', foods:'Pasta, beef, tomato sauce', cal:800, protein:40 },
+    { label:'Salmon & rice', foods:'Salmon, rice, spinach', cal:680, protein:52 },
+    { label:'Chicken & quinoa', foods:'Chicken, quinoa, vegetables', cal:620, protein:50 },
   ],
   'Snack': [
-    { label:'Protein shake', foods:'Whey + lait', cal:250, protein:30 },
-    { label:'Fruits & noix', foods:'Pomme, amandes', cal:200, protein:6 },
-    { label:'Cottage cheese', foods:'Cottage, ananas', cal:180, protein:20 },
-    { label:'Toast PB', foods:'Pain blé, beurre arachide', cal:280, protein:10 },
+    { label:'Protein shake', foods:'Whey + milk', cal:250, protein:30 },
+    { label:'Fruits & nuts', foods:'Apple, almonds', cal:200, protein:6 },
+    { label:'Cottage cheese', foods:'Cottage, pineapple', cal:180, protein:20 },
+    { label:'Toast PB', foods:'Whole wheat bread, peanut butter', cal:280, protein:10 },
   ],
   'Pre-workout': [
-    { label:'Banana rapide', foods:'Banana, créatine', cal:100, protein:2 },
+    { label:'Banana quick', foods:'Banana, creatine', cal:100, protein:2 },
     { label:'Toast PB banana', foods:'Toast, PB, banana', cal:350, protein:12 },
   ],
   'Post-workout': [
-    { label:'Protein shake', foods:'Whey, lait, banana', cal:350, protein:35 },
-    { label:'Chicken & riz', foods:'Chicken breast, riz', cal:550, protein:50 },
+    { label:'Protein shake', foods:'Whey, milk, banana', cal:350, protein:35 },
+    { label:'Chicken & rice', foods:'Chicken breast, rice', cal:550, protein:50 },
   ],
 };
 const MEAL_ICOS = {'Breakfast':'sun','Lunch':'coffee','Dinner':'moon','Snack':'star','Pre-workout':'zap','Post-workout':'activity'};
@@ -2391,8 +2391,8 @@ function pgEating(){
     let d;
     if(/^\d{4}-\d{2}-\d{2}$/.test(raw)){const[y,m,day]=raw.split('-').map(Number);d=new Date(y,m-1,day);}else{d=new Date(raw);}
     if(d.getMonth()!==now.getMonth()||d.getFullYear()!==now.getFullYear()) return;
-    if(t.cat==='Bouffe/Resto') diningSpend+=Math.abs(t.amt);
-    if(t.cat==='Épicerie') grocerySpend+=Math.abs(t.amt);
+    if(t.cat==='Food/Dining') diningSpend+=Math.abs(t.amt);
+    if(t.cat==='Groceries') grocerySpend+=Math.abs(t.amt);
   });
 
   const rows = todayM.map(m=>`
@@ -2655,7 +2655,7 @@ function saveCalEvents(e){ localStorage.setItem(CAL_EVENTS_KEY, JSON.stringify(e
 const CAL_EV_TYPES = {
   birthday:   { label:'Birthday',    icon:'gift', color:'#f472b6' },
   event:      { label:'Event',       icon:'calendar', color:'#b8f566' },
-  rdv:        { label:'Rendez-vous', icon:'users', color:'#a78bfa' },
+  rdv:        { label:'Appointment', icon:'users', color:'#a78bfa' },
   reminder:   { label:'Reminder',    icon:'clock', color:'#fbbf24' },
   travel:     { label:'Travel',      icon:'navigation', color:'#60a5fa' },
 };
@@ -2937,9 +2937,9 @@ function pgCalendar(){
         <div>
           <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px">Recurrence</div>
           <select id="cev-repeat" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-sm);padding:7px 10px;color:var(--text);font-family:var(--font);font-size:12px;outline:none">
-            <option value="none">Une fois</option>
-            <option value="yearly">Chaque annee</option>
-            <option value="monthly">Chaque mois</option>
+            <option value="none">Once</option>
+            <option value="yearly">Every year</option>
+            <option value="monthly">Every month</option>
           </select>
         </div>
       </div>
@@ -3370,11 +3370,11 @@ const EVENT_COLORS = {
   travel:   '#38bdf8'
 };
 const EVENT_LABELS = {
-  birthday: 'Anniversaire',
-  event:    'Événement',
-  rdv:      'Rendez-vous',
-  reminder: 'Rappel',
-  travel:   'Voyage'
+  birthday: 'Birthday',
+  event:    'Event',
+  rdv:      'Appointment',
+  reminder: 'Reminder',
+  travel:   'Travel'
 };
 
 function checkCalendarNotifications() {
@@ -3431,9 +3431,9 @@ function checkCalendarNotifications() {
 
         const color = EVENT_COLORS[ev.type] || '#a3e635';
         const label = EVENT_LABELS[ev.type] || ev.type;
-        const dayLabel = minsUntil < 1 ? "Aujourd'hui maintenant"
-                       : minsUntil < 60 ? `Dans ${Math.round(minsUntil)} min`
-                       : `Aujourd'hui`;
+        const dayLabel = minsUntil < 1 ? "Today, now"
+                       : minsUntil < 60 ? `In ${Math.round(minsUntil)} min`
+                       : "Today";
 
         // Browser push notification
         if (Notification.permission === 'granted') {
@@ -3871,8 +3871,12 @@ function loadRealData(){
     if(lsEmail && !D.userEmail) D.userEmail = lsEmail;
     const un=document.getElementById('user-name');
     const ue=document.getElementById('user-email');
-    if(un&&D.userName)un.textContent=D.userName;
-    if(ue&&D.userEmail)ue.textContent=D.userEmail;
+    const av=document.getElementById('user-avatar');
+    const displayName = D.userName || D.userEmail?.split('@')[0] || 'User';
+    const displayEmail = D.userEmail || '';
+    if(un) un.textContent = displayName;
+    if(ue) ue.textContent = displayEmail;
+    if(av) av.textContent = displayName.slice(0,2).toUpperCase();
     navigate('dashboard');
     updateBudgetBadge();
     feather.replace({width:14,height:14});
@@ -3903,8 +3907,12 @@ document.addEventListener('DOMContentLoaded',()=>{
       // Update sidebar user info
       const un=document.getElementById('user-name');
       const ue=document.getElementById('user-email');
-      if(un&&D.userName)un.textContent=D.userName;
-      if(ue&&D.userEmail)ue.textContent=D.userEmail;
+      const av=document.getElementById('user-avatar');
+      const displayName = D.userName || D.userEmail?.split('@')[0] || 'User';
+      const displayEmail = D.userEmail || '';
+      if(un) un.textContent = displayName;
+      if(ue) ue.textContent = displayEmail;
+      if(av) av.textContent = displayName.slice(0,2).toUpperCase();
       // Re-render dashboard with real data
       navigate('dashboard');
       updateBudgetBadge();
