@@ -437,8 +437,8 @@ button{font-family:var(--font)}
     <div class="user-row">
       <div class="avatar">AM</div>
       <div class="user-info">
-        <div class="user-name">Alex Martin</div>
-        <div class="user-plan">Pro plan</div>
+        <div class="user-name" id="user-name">Loading...</div>
+        <div class="user-plan" id="user-email"></div>
       </div>
     </div>
   </div>
@@ -495,6 +495,8 @@ const D = {
   gymDays: [],
   meals: [],
   bills: [],
+  userEmail: '',
+  userName: '',
 };
 
 // ═══════════════════════════ HELPERS ═══════════════════════════
@@ -2969,10 +2971,12 @@ function pgSettings(){
 
   const tog=(on=true)=>`<div class="toggle ${on?'on':''}" onclick="this.classList.toggle('on')"></div>`;
 
+  const userEmail = D.userEmail || 'user@example.com';
+  const userName = D.userName || userEmail.split('@')[0];
   return`
   ${section('Profile',[
-    row('Name','Your display name','<input style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 10px;color:var(--text);font-family:var(--font);font-size:12.5px;outline:none;width:160px" value="Alex Martin">'),
-    row('Email','Account email','<span style="font-size:12.5px;color:var(--text3)">alex@example.com</span>'),
+    row('Name','Your display name','<input style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 10px;color:var(--text);font-family:var(--font);font-size:12.5px;outline:none;width:160px" value="'+userName+'">'),
+    row('Email','Account email','<span style="font-size:12.5px;color:var(--text3)">'+userEmail+'</span>'),
     row('Currency','Display currency','<span class="badge b-gray">CAD $</span>'),
   ].join(''))}
   ${section('Connections',[
@@ -2996,7 +3000,17 @@ function pgSettings(){
     row('Export data','Download all your financial data','<button class="btn btn-ghost btn-sm"><svg data-feather="download"></svg> Export CSV</button>'),
     row('Sync now','Force refresh all accounts','<button class="btn btn-ghost btn-sm"><svg data-feather="refresh-cw"></svg> Sync</button>'),
     row('Delete account','Permanently delete all data','<button class="btn btn-sm" style="background:var(--red-bg);color:var(--red);border:1px solid var(--red-br)">Delete</button>'),
+    row('Sign out','Log out of your account','<button class="btn btn-ghost btn-sm" onclick="doLogout()"><svg data-feather="log-out" style="width:14px;height:14px;vertical-align:middle;margin-right:4px"></svg> Sign out</button>'),
   ].join(''))}`;
+}
+
+// ═══════════════════════════ LOGOUT ═══════════════════════════
+function doLogout(){
+  fetch('/api/auth/logout',{method:'POST',credentials:'include'}).then(()=>{
+    window.location.href='/login';
+  }).catch(()=>{
+    window.location.href='/api/auth/logout';
+  });
 }
 
 // ═══════════════════════════ REFRESH ═══════════════════════════
@@ -3318,6 +3332,24 @@ document.addEventListener('DOMContentLoaded',()=>{
   updateHeaderClock();
   setInterval(updateHeaderClock,30000);
   document.addEventListener('click',closeNotifDropdown);
+  // Load real user data from API
+  fetch('/api/data',{credentials:'include'}).then(r=>{
+    if(r.status===401){window.location.href='/login';return null;}
+    return r.json();
+  }).then(d=>{
+    if(!d)return;
+    // Merge API data into D
+    Object.keys(d).forEach(k=>{if(d[k]!==undefined)D[k]=d[k];});
+    // Update sidebar user info
+    const un=document.getElementById('user-name');
+    const ue=document.getElementById('user-email');
+    if(un&&D.userName)un.textContent=D.userName;
+    if(ue&&D.userEmail)ue.textContent=D.userEmail;
+    // Re-render dashboard with real data
+    navigate('dashboard');
+    updateBudgetBadge();
+    feather.replace({width:14,height:14});
+  }).catch(()=>{});
 });
 </script>
 </body>
