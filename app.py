@@ -491,6 +491,15 @@ def index():
     return build_vault_html(data)
 
 
+@app.route('/login')
+def login_redirect():
+    return redirect(url_for('index'))
+
+@app.route('/register')
+def register_redirect():
+    return redirect(url_for('index'))
+
+
 @app.route('/setup', methods=['GET', 'POST'])
 def setup():
     error = request.args.get('error', '')
