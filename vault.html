@@ -522,6 +522,7 @@ const D = {
   bills: [],
   userEmail: '',
   userName: '',
+  connections: {plaid:false,wise:false,phantom:false,wealthsimple:false,kraken:false},
 };
 
 // ═══════════════════════════ HELPERS ═══════════════════════════
@@ -3224,20 +3225,23 @@ function pgSettings(){
 
   const tog=(on=true)=>`<div class="toggle ${on?'on':''}" onclick="this.classList.toggle('on')"></div>`;
 
-  const userEmail = D.userEmail || 'user@example.com';
-  const userName = D.userName || userEmail.split('@')[0];
+  const cn = D.connections || {};
+  const badge = (on) => on ? '<span class="badge b-green">Connected</span>' : '<span class="badge b-gray" style="opacity:.6">Not connected</span>';
+  const connRow = (name,desc,key,link) => row(name,desc,`<a href="${link}" style="text-decoration:none">${badge(cn[key])}</a>`);
+  const userEmail = D.userEmail || '';
+  const userName = D.userName || '';
   return`
   ${section('Profile',[
     row('Name','Your display name','<input style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 10px;color:var(--text);font-family:var(--font);font-size:12.5px;outline:none;width:160px" value="'+userName+'">'),
-    row('Email','Account email','<span style="font-size:12.5px;color:var(--text3)">'+userEmail+'</span>'),
+    row('Email','Account email','<span style="font-size:12.5px;color:var(--text3)">'+(userEmail||'Not set')+'</span>'),
     row('Currency','Display currency','<span class="badge b-gray">CAD $</span>'),
   ].join(''))}
   ${section('Connections',[
-    row('Plaid','Bank & credit card data','<span class="badge b-green">Connected</span>'),
-    row('Wise','International transfers','<span class="badge b-green">Connected</span>'),
-    row('Wealthsimple','Investment accounts','<span class="badge b-green">Connected</span>'),
-    row('Kraken','Crypto exchange','<span class="badge b-green">Connected</span>'),
-    row('Phantom Wallet','Solana wallet','<span class="badge b-gray">Not connected</span>'),
+    connRow('Plaid','Bank & credit card data','plaid','/setup'),
+    connRow('Wise','International transfers','wise','/setup'),
+    connRow('Wealthsimple','Investment accounts','wealthsimple','/setup'),
+    connRow('Kraken','Crypto exchange','kraken','/setup'),
+    connRow('Phantom Wallet','Solana wallet','phantom','/setup'),
   ].join(''))}
   ${section('Notifications',[
     row('Budget alerts','Notify when over budget',tog(true)),
@@ -3579,60 +3583,144 @@ function closeNotifDropdown(e){
 
 // ═══════════════════════════ ONBOARDING ═══════════════════════════
 const ONBOARDED_KEY = 'vault_onboarded';
-const ONBOARD_STEPS = [
-  { title:'Welcome to Fiscit', sub:'Your finances, finally clear.', icon:'home', desc:'Track spending, investments, habits and more, all in one place.' },
-  { title:'Categories that match your life', sub:'Transactions auto-sort into 16 categories.', icon:'pie-chart', desc:'', cats:true },
-  { title:'Budget your way', sub:'Set monthly limits per category.', icon:'target', desc:'Get alerts when you are over. Drag to reorder what matters most.' },
-  { title:'Investments and Crypto', sub:'All your accounts in one view.', icon:'trending-up', desc:'Stocks, crypto, savings — track net worth over time.' },
-  { title:'Life tracking', sub:'Gym, eating, habits, calendar.', icon:'activity', desc:'Money is not just numbers. Fiscit tracks the life side too.' },
-  { title:'Connect your bank when ready', sub:'Plaid powers automatic sync.', icon:'link', desc:'You can always connect later in Settings. No rush.' },
-];
+const CONN_ICOS = {plaid:'credit-card',wise:'globe',phantom:'hexagon',wealthsimple:'bar-chart',kraken:'bitcoin'};
 
 function showOnboarding(){
   let step = 0;
+  const STEPS = [
+    {id:'welcome'},
+    {id:'profile'},
+    {id:'bank'},
+    {id:'crypto'},
+    {id:'other'},
+    {id:'done'},
+  ];
+
   const overlay = document.createElement('div');
   overlay.id = 'onboard-overlay';
   overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.85);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);animation:fadeIn .25s ease';
   overlay.innerHTML = `
-    <div id="onboard-card" style="background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:36px 32px 28px;max-width:400px;width:90%;text-align:center;position:relative">
-      <div id="onboard-icon" style="margin:0 auto 16px;width:56px;height:56px;border-radius:14px;background:var(--bg3);display:flex;align-items:center;justify-content:center"></div>
-      <h2 id="onboard-title" style="font-size:20px;font-weight:600;color:var(--text);margin:0 0 4px"></h2>
-      <p id="onboard-sub" style="font-size:13px;color:var(--text2);margin:0 0 16px"></p>
-      <p id="onboard-desc" style="font-size:13px;color:var(--text3);margin:0 0 20px;line-height:1.6"></p>
-      <div id="onboard-cats" style="display:none;text-align:left;margin:0 0 20px;max-height:220px;overflow-y:auto;scrollbar-width:thin"></div>
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:4px">
-        <div id="onboard-dots" style="display:flex;gap:6px"></div>
+    <div id="onboard-card" style="background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:36px 32px 28px;max-width:420px;width:90%;text-align:center;position:relative">
+      <div id="ob-icon" style="margin:0 auto 16px;width:56px;height:56px;border-radius:14px;background:var(--bg3);display:flex;align-items:center;justify-content:center"></div>
+      <h2 id="ob-title" style="font-size:20px;font-weight:600;color:var(--text);margin:0 0 4px"></h2>
+      <p id="ob-sub" style="font-size:13px;color:var(--text2);margin:0 0 16px"></p>
+      <div id="ob-body" style="font-size:13px;color:var(--text3);line-height:1.6;text-align:left"></div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:20px">
+        <div id="ob-dots" style="display:flex;gap:6px"></div>
         <div style="display:flex;gap:8px">
-          <button id="onboard-skip" style="background:none;border:none;color:var(--text4);font-size:13px;cursor:pointer;padding:8px 12px;font-family:var(--font)">Skip</button>
-          <button id="onboard-next" style="background:var(--green);color:#000;border:none;border-radius:8px;padding:8px 20px;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--font);transition:opacity .15s">Next</button>
+          <button id="ob-back" style="background:none;border:1px solid var(--border);color:var(--text3);border-radius:8px;padding:8px 16px;font-size:13px;cursor:pointer;font-family:var(--font);display:none">Back</button>
+          <button id="ob-skip" style="background:none;border:none;color:var(--text4);font-size:13px;cursor:pointer;padding:8px 12px;font-family:var(--font)">Skip</button>
+          <button id="ob-next" style="background:var(--green);color:#000;border:none;border-radius:8px;padding:8px 20px;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--font);transition:opacity .15s">Next</button>
         </div>
       </div>
     </div>`;
   document.body.appendChild(overlay);
 
-  const nextBtn = document.getElementById('onboard-next');
-  const skipBtn = document.getElementById('onboard-skip');
-  const dots = document.getElementById('onboard-dots');
+  const nextBtn = document.getElementById('ob-next');
+  const skipBtn = document.getElementById('ob-skip');
+  const backBtn = document.getElementById('ob-back');
+  const dots = document.getElementById('ob-dots');
+  const titleEl = document.getElementById('ob-title');
+  const subEl = document.getElementById('ob-sub');
+  const iconEl = document.getElementById('ob-icon');
+  const bodyEl = document.getElementById('ob-body');
+
+  const guideBox = (steps) => `<div style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin:12px 0">${steps.map((s,i)=>`<div style="display:flex;gap:10px;align-items:flex-start;${i<steps.length-1?'margin-bottom:10px':''}"><span style="background:var(--green);color:#000;font-size:11px;font-weight:700;width:20px;height:20px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0">${i+1}</span><span style="color:var(--text2);font-size:12.5px;line-height:1.5">${s}</span></div>`).join('')}</div>`;
+
+  const connCard = (name, desc, key, guideSteps) => {
+    const isOn = D.connections && D.connections[key];
+    return `<div style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin:8px 0">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+        <div style="display:flex;align-items:center;gap:8px"><span style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:8px;background:var(--bg2)">${ico(CONN_ICOS[key]||'link',14)}</span><span style="font-size:13px;font-weight:500;color:var(--text)">${name}</span></div>
+        <span class="badge ${isOn?'b-green':'b-gray'}" style="${isOn?'':'opacity:.6'}">${isOn?'Connected':'Not connected'}</span>
+      </div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:8px">${desc}</div>
+      ${isOn?'':guideBox(guideSteps)}
+      ${isOn?'':'<a href="/setup" style="display:inline-block;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:7px 16px;font-size:12.5px;color:var(--text);text-decoration:none;font-weight:500">Go to Setup</a>'}
+    </div>`;
+  };
+
+  const catGrid = Object.keys(CAT_ICOS).map(c=>`<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border2)"><span style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:8px;background:var(--bg3)">${ico(CAT_ICOS[c]||'folder',14)}</span><span style="font-size:13px;color:var(--text)">${c}</span></div>`).join('');
 
   function render(){
-    const s = ONBOARD_STEPS[step];
-    document.getElementById('onboard-icon').innerHTML = ico(s.icon,28);
-    document.getElementById('onboard-title').textContent = s.title;
-    document.getElementById('onboard-sub').textContent = s.sub;
-    document.getElementById('onboard-desc').textContent = s.desc || '';
-    const catsEl = document.getElementById('onboard-cats');
-    if(s.cats){
-      catsEl.style.display='block';
-      catsEl.innerHTML = DEFAULT_CATS.map(c=>`
-        <div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border2)">
-          <span style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:8px;background:var(--bg3)">${ico(CAT_ICOS[c]||'folder',14)}</span>
-          <span style="font-size:13px;color:var(--text)">${c}</span>
-        </div>`).join('');
-    } else {
-      catsEl.style.display='none';
+    const s = STEPS[step];
+    iconEl.innerHTML = '';
+    bodyEl.innerHTML = '';
+    backBtn.style.display = step > 0 ? 'inline-block' : 'none';
+
+    if(s.id==='welcome'){
+      iconEl.innerHTML = ico('home',28);
+      titleEl.textContent = 'Welcome to Fiscit';
+      subEl.textContent = 'Your finances, finally clear.';
+      bodyEl.innerHTML = '<p style="color:var(--text3);font-size:13px;text-align:center">Track spending, budgets, investments, and more, all in one place. Let\'s get you set up in under a minute.</p>';
+      nextBtn.textContent = 'Let\'s go';
+      skipBtn.style.display = '';
     }
-    nextBtn.textContent = step === ONBOARD_STEPS.length - 1 ? 'Get started' : 'Next';
-    dots.innerHTML = ONBOARD_STEPS.map((_,i)=>`<div style="width:${i===step?'16px':'6px'};height:6px;border-radius:3px;background:${i===step?'var(--green)':'var(--bg3)'};transition:width .2s"></div>`).join('');
+    else if(s.id==='profile'){
+      iconEl.innerHTML = ico('user',28);
+      titleEl.textContent = 'Tell us about yourself';
+      subEl.textContent = 'This will be your display name in Fiscit.';
+      const n = D.userName||'';
+      const e = D.userEmail||'';
+      bodyEl.innerHTML = `<div style="margin-bottom:14px"><label style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px">Name</label><input id="ob-name" value="${n}" placeholder="Your name" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-family:var(--font);font-size:13px;outline:none"></div><div><label style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px">Email</label><input id="ob-email" value="${e}" placeholder="you@email.com" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-family:var(--font);font-size:13px;outline:none"></div>`;
+      nextBtn.textContent = 'Next';
+      skipBtn.style.display = '';
+    }
+    else if(s.id==='bank'){
+      iconEl.innerHTML = ico('credit-card',28);
+      titleEl.textContent = 'Connect your bank';
+      subEl.textContent = 'Plaid syncs your accounts automatically.';
+      const isOn = D.connections && D.connections.plaid;
+      bodyEl.innerHTML = isOn
+        ? '<p style="color:var(--green);font-size:13px;text-align:center;padding:12px">Your bank is already connected via Plaid.</p>'
+        : connCard('Plaid','Bank accounts, credit cards, and transactions.', 'plaid', ['Click "Go to Setup" below','Enter your Plaid API credentials','Select your bank and log in','Your transactions will sync automatically']);
+      nextBtn.textContent = 'Next';
+      skipBtn.style.display = '';
+    }
+    else if(s.id==='crypto'){
+      iconEl.innerHTML = ico('bitcoin',28);
+      titleEl.textContent = 'Track your crypto';
+      subEl.textContent = 'Connect wallets and exchanges.';
+      const isOn = D.connections && D.connections.phantom;
+      bodyEl.innerHTML = isOn
+        ? '<p style="color:var(--green);font-size:13px;text-align:center;padding:12px">Phantom Wallet is already connected.</p>'
+        : connCard('Phantom Wallet','Solana wallet tracking.', 'phantom', ['Open Settings and go to Setup','Paste your Phantom wallet address','Balances sync automatically']);
+      bodyEl.innerHTML += `<p style="font-size:12px;color:var(--text4);margin-top:12px;text-align:center">Kraken and other exchanges coming soon.</p>`;
+      nextBtn.textContent = 'Next';
+      skipBtn.style.display = '';
+    }
+    else if(s.id==='other'){
+      iconEl.innerHTML = ico('globe',28);
+      titleEl.textContent = 'Other connections';
+      subEl.textContent = 'International and investment accounts.';
+      bodyEl.innerHTML = connCard('Wise','Multi-currency international transfers.', 'wise', ['Go to Setup page','Enter your Wise API token and profile ID','Balances sync automatically'])
+        + connCard('Wealthsimple','Canadian investment and savings accounts.', 'wealthsimple', ['Coming soon','Will support RRSP, TFSA, and more']);
+      nextBtn.textContent = 'Next';
+      skipBtn.style.display = '';
+    }
+    else if(s.id==='done'){
+      iconEl.innerHTML = ico('check-circle',28);
+      titleEl.textContent = 'You\'re all set!';
+      subEl.textContent = 'Fiscit is ready to go.';
+      bodyEl.innerHTML = `<p style="color:var(--text3);font-size:13px;text-align:center;margin-bottom:14px">Here are the categories Fiscit tracks for you:</p><div style="max-height:180px;overflow-y:auto;scrollbar-width:thin">${catGrid}</div><p style="color:var(--text4);font-size:12px;margin-top:14px;text-align:center">You can always add more connections later in Settings.</p>`;
+      nextBtn.textContent = 'Start Fiscit';
+      skipBtn.style.display = 'none';
+    }
+
+    dots.innerHTML = STEPS.map((_,i)=>`<div style="width:${i===step?'16px':'6px'};height:6px;border-radius:3px;background:${i===step?'var(--green)':'var(--bg3)'};transition:width .2s"></div>`).join('');
+  }
+
+  function saveProfile(){
+    const nameInput = document.getElementById('ob-name');
+    const emailInput = document.getElementById('ob-email');
+    if(nameInput){
+      D.userName = nameInput.value;
+      localStorage.setItem('vault_userName', D.userName);
+    }
+    if(emailInput){
+      D.userEmail = emailInput.value;
+      localStorage.setItem('vault_userEmail', D.userEmail);
+    }
   }
 
   function finish(){
@@ -3648,20 +3736,38 @@ function showOnboarding(){
     loadRealData();
   }
 
-  nextBtn.onclick = ()=>{ if(step < ONBOARD_STEPS.length - 1){ step++; render(); } else { finish(); } };
-  skipBtn.onclick = finish;
+  nextBtn.onclick = ()=>{
+    const cur = STEPS[step];
+    if(cur.id==='profile') saveProfile();
+    if(step < STEPS.length - 1){ step++; render(); } else { finish(); }
+  };
+  backBtn.onclick = ()=>{ if(step > 0){ step--; render(); } };
+  skipBtn.onclick = ()=>{
+    const cur = STEPS[step];
+    if(cur.id==='profile') saveProfile();
+    finish();
+  };
   overlay.addEventListener('keydown',e=>{ if(e.key==='Enter') nextBtn.click(); if(e.key==='Escape') skipBtn.click(); });
   render();
   nextBtn.focus();
 }
 
 function loadRealData(){
+  // Restore profile from localStorage (saved during onboarding)
+  const lsName = localStorage.getItem('vault_userName');
+  const lsEmail = localStorage.getItem('vault_userEmail');
+  if(lsName && !D.userName) D.userName = lsName;
+  if(lsEmail && !D.userEmail) D.userEmail = lsEmail;
+
   fetch('/api/data',{credentials:'include'}).then(r=>{
     if(r.status===401){window.location.href='/login';return null;}
     return r.json();
   }).then(d=>{
     if(!d)return;
     Object.keys(d).forEach(k=>{if(d[k]!==undefined)D[k]=d[k];});
+    // Preserve localStorage profile if server doesn't have it yet
+    if(lsName && !D.userName) D.userName = lsName;
+    if(lsEmail && !D.userEmail) D.userEmail = lsEmail;
     const un=document.getElementById('user-name');
     const ue=document.getElementById('user-email');
     if(un&&D.userName)un.textContent=D.userName;

@@ -228,6 +228,24 @@ def _build_real_data_js(data):
     cat_labels  = [c["cat"] for c in cat_spend]
     cat_amounts = [c["amt"] for c in cat_spend]
 
+    # Connection status derived from config
+    config = load_config() or {}
+    connections = {
+        'plaid': bool(config.get('plaid_client') and config.get('plaid_secret') and config.get('plaid_token')),
+        'wise': bool(config.get('wise_token')),
+        'phantom': bool(config.get('phantom_wallet')),
+        'wealthsimple': False,
+        'kraken': False,
+    }
+
+    # Derive user name from first account institution, or config
+    user_name = config.get('user_name', '')
+    user_email = config.get('user_email', '')
+    if not user_name and accounts:
+        user_name = accounts[0].get('inst', accounts[0].get('name', ''))
+    if not user_name:
+        user_name = ''
+
     return f"""const D = {{
   // ── Real data injected by Vault/Flask ({generated}) ──
   netWorth:        {net_worth},
@@ -246,6 +264,13 @@ def _build_real_data_js(data):
   budget: {json.dumps(budget_js, indent=2)},
   catLabels: {json.dumps(cat_labels)},
   catAmounts: {json.dumps(cat_amounts)},
+
+  // User profile
+  userName:  {json.dumps(user_name)},
+  userEmail: {json.dumps(user_email)},
+
+  // Connection status (derived from config)
+  connections: {json.dumps(connections)},
 
   // Life data (manual / future integrations)
   investments: [],
