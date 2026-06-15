@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Vault</title>
+<title>Fiscit</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -374,8 +374,8 @@ button{font-family:var(--font)}
 <!-- ══════════════════════ SIDEBAR ══════════════════════ -->
 <aside class="sidebar">
   <div class="logo">
-    <div class="logo-mark">V</div>
-    <span class="logo-name">Vault</span>
+    <div class="logo-mark"><svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" width="22" height="22"><rect width="32" height="32" rx="8" fill="var(--bg2)"/><rect x="7" y="6" width="5" height="20" rx="2" fill="var(--text)"/><rect x="7" y="6" width="16" height="5" rx="2" fill="var(--text)"/><rect x="7" y="14" width="12" height="4" rx="2" fill="var(--text)"/><circle cx="26" cy="8.5" r="3.5" fill="var(--blue)"/></svg></div>
+    <span class="logo-name">Fiscit</span>
   </div>
 
   <nav class="nav-group">
@@ -3202,7 +3202,7 @@ async function initNotifications() {
   if (Notification.permission === 'default') {
     const perm = await Notification.requestPermission();
     if (perm === 'granted') {
-      showToast('Notifications activées', 'Vault va te notifier pour tes événements.', '#a3e635');
+      showToast('Notifications activées', 'Fiscit va te notifier pour tes événements.', '#a3e635');
     }
   }
 
