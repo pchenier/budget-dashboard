@@ -302,6 +302,24 @@ button{font-family:var(--font)}
 .cal-day-hdr{font-size:10px;font-weight:700;color:var(--text3);text-align:center;padding:6px 0;letter-spacing:.5px;text-transform:uppercase}
 .cal-ev-chip{display:block;font-size:9.5px;font-weight:600;padding:2px 5px;border-radius:4px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;line-height:1.4}
 .cal-dot-row{display:flex;gap:2px;flex-wrap:wrap;margin-top:auto;padding-top:2px}
+.cal-view-toggle{display:flex;gap:2px;background:var(--bg3);border-radius:6px;padding:2px}
+.cal-view-btn{padding:4px 12px;border-radius:4px;font-size:12px;font-weight:500;color:var(--text3);cursor:pointer;border:none;background:transparent;font-family:var(--font);transition:all .12s}
+.cal-view-btn.active{background:var(--bg4);color:var(--text);box-shadow:0 1px 2px rgba(0,0,0,.2)}
+.cal-week-grid{display:grid;grid-template-columns:56px repeat(7,1fr);position:relative}
+.cal-day-view-grid{display:grid;grid-template-columns:56px 1fr;position:relative}
+.cal-time-col{font-size:10px;color:var(--text4);text-align:right;padding-right:8px;line-height:48px;height:48px;user-select:none}
+.cal-day-col{border-left:1px solid var(--border);position:relative;min-height:48px}
+.cal-day-col.today-col{background:rgba(74,222,128,.03)}
+.cal-day-hdr-cell{display:flex;align-items:center;justify-content:center;gap:4px;padding:8px 0;font-size:12px;font-weight:500;color:var(--text2)}
+.cal-day-hdr-cell.today-col{color:var(--text)}
+.cal-date-num{width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:50%}
+.cal-date-num.is-today{background:var(--green);color:var(--bg);font-weight:700}
+.cal-time-line{border-top:1px solid var(--border);height:48px;position:relative}
+.cal-time-line-30{border-top:1px dotted var(--border2);height:0;position:absolute;top:24px;left:0;right:0}
+.cal-ev-block{position:absolute;left:2px;right:2px;border-radius:4px;padding:3px 6px;font-size:10px;font-weight:600;overflow:hidden;cursor:pointer;z-index:2;line-height:1.3;transition:opacity .12s}
+.cal-ev-block:hover{opacity:.85}
+.cal-now-line{position:absolute;left:0;right:0;height:2px;background:var(--red);z-index:3}
+.cal-now-line::before{content:'';position:absolute;left:-4px;top:-3px;width:8px;height:8px;border-radius:50%;background:var(--red)}
 
 /* ── SETTINGS ── */
 .setting-row{display:flex;align-items:center;justify-content:space-between;padding:13px 0;border-bottom:1px solid var(--border2)}
@@ -2696,6 +2714,23 @@ function deleteCalEv(id){
 let _calYear = new Date().getFullYear();
 let _calMonth = new Date().getMonth();
 let _calSelDay = null;
+let _calView = 'week';
+let _calDayDate = new Date();
+_calDayDate.setHours(0,0,0,0);
+let _calWeekStart = (function(){
+  const now = new Date();
+  const day = now.getDay();
+  const diff = day === 0 ? 6 : day - 1;
+  const mon = new Date(now);
+  mon.setDate(now.getDate() - diff);
+  mon.setHours(0,0,0,0);
+  return mon;
+})();
+
+function calWeekNav(delta){
+  _calWeekStart.setDate(_calWeekStart.getDate() + delta * 7);
+  navigate('calendar');
+}
 
 function calNav(delta){
   _calMonth += delta;
@@ -2821,19 +2856,273 @@ function _calBuildDayPanel(day, year, month){
   return rows + empty + txnBtn;
 }
 
+function _calWeekEvents(weekStart){
+  // Build events for all 7 days of the week, returns array of 7 {date, events[]}
+  const result = [];
+  const today = new Date();
+  today.setHours(0,0,0,0);
+  for(let i=0;i<7;i++){
+    const d = new Date(weekStart);
+    d.setDate(d.getDate()+i);
+    const y=d.getFullYear(), m=d.getMonth(), day=d.getDate();
+    const isToday = d.getTime()===today.getTime();
+    const evs = _calBuildEvents(y,m)[day]||[];
+    result.push({date:d, year:y, month:m, day, isToday, events:evs});
+  }
+  return result;
+}
+
+function _calEvTimePosition(ev){
+  // Return {top:px, height:px} for an event block
+  // Default hour assignments based on type
+  const HOUR_PX = 48; // 48px per hour
+  const types = {
+    gym:     {hour:7,  dur:1},
+    meal:    {hour:12, dur:1},
+    habit:   {hour:8,  dur:1},
+    txn:     {hour:10, dur:0.5},
+    income:  {hour:10, dur:0.5},
+  };
+  let hour=9, dur=1; // default for custom events
+  if(types[ev.type]){
+    hour=types[ev.type].hour;
+    dur=types[ev.type].dur;
+  }
+  return {top: (hour-6)*HOUR_PX, height: dur*HOUR_PX};
+}
+
 function pgCalendar(){
+  const today = new Date();
+  const todayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+  // ── View toggle pills ──
+  const viewPills = `<div class="cal-view-toggle">
+    <button class="cal-view-btn ${_calView==='day'?'active':''}" onclick="_calView='day';navigate('calendar')">Day</button>
+    <button class="cal-view-btn ${_calView==='week'?'active':''}" onclick="_calView='week';navigate('calendar')">Week</button>
+    <button class="cal-view-btn ${_calView==='month'?'active':''}" onclick="_calView='month';navigate('calendar')">Month</button>
+  </div>`;
+
+  // ── Add Event modal (shared across all views) ──
+  const modal = `<div id="cal-ev-modal" style="display:none;opacity:0;position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:999;align-items:flex-end;justify-content:center;transition:opacity .15s">
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r) var(--r) 0 0;padding:20px;width:100%;max-width:480px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+        <span style="font-size:15px;font-weight:700;color:var(--text)">Add Event</span>
+        <button onclick="closeCalEvModal()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:20px;line-height:1">×</button>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
+        ${Object.entries(CAL_EV_TYPES).map(([k,t])=>
+          `<button class="cev-type-pill" data-type="${k}" onclick="cevPickType('${k}')"
+            style="padding:5px 12px;border-radius:16px;font-size:12px;font-family:var(--font);cursor:pointer;transition:all .12s;background:${k==='event'?'var(--text)':'var(--bg4)'};border:1px solid ${k==='event'?'var(--text)':'var(--border)'};color:${k==='event'?'var(--bg)':'var(--text3)'}">
+            ${ico(t.icon,14)} ${t.label}</button>`).join('')}
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+        <div>
+          <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px">Titre</div>
+          <input id="cev-title" type="text" placeholder="ex: Fete de Marie..." style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-sm);padding:7px 10px;color:var(--text);font-family:var(--font);font-size:13px;outline:none">
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px">Date</div>
+          <input id="cev-date" type="date" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-sm);padding:7px 10px;color:var(--text);font-family:var(--font);font-size:12px;outline:none;color-scheme:dark">
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+        <div>
+          <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px">Notes</div>
+          <input id="cev-notes" type="text" placeholder="Optionnel..." style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-sm);padding:7px 10px;color:var(--text);font-family:var(--font);font-size:13px;outline:none">
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px">Recurrence</div>
+          <select id="cev-repeat" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-sm);padding:7px 10px;color:var(--text);font-family:var(--font);font-size:12px;outline:none">
+            <option value="none">Une fois</option>
+            <option value="yearly">Chaque annee</option>
+            <option value="monthly">Chaque mois</option>
+          </select>
+        </div>
+      </div>
+      <button onclick="saveCalEv()" class="btn btn-primary" style="width:100%;padding:11px;font-size:14px">Save</button>
+    </div>
+  </div>`;
+
+  // ════════════════════════════ WEEK VIEW ════════════════════════════
+  if(_calView==='week'){
+    const weekDays = _calWeekEvents(_calWeekStart);
+    const dayNames = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+    const ws = _calWeekStart;
+    const we = new Date(ws); we.setDate(we.getDate()+6);
+    const rangeLabel = ws.toLocaleDateString('en',{month:'long',day:'numeric'}) + ' - ' +
+      (ws.getMonth()!==we.getMonth() ? we.toLocaleDateString('en',{month:'long',day:'numeric'}) : we.getDate().toString()) + ', ' + we.getFullYear();
+    const addDay = todayDate.getDate();
+
+    // Column headers
+    const colHeaders = weekDays.map((di,i)=>{
+      const dName = dayNames[i];
+      const dNum = di.day;
+      const todayCls = di.isToday ? ' today-col' : '';
+      const numCls = di.isToday ? ' is-today' : '';
+      return `<div class="cal-day-hdr-cell${todayCls}" style="grid-column:${i+2}">
+        <span>${dName}</span>
+        <span class="cal-date-num${numCls}">${dNum}</span>
+      </div>`;
+    }).join('');
+
+    // Time rows
+    const HOUR_PX = 48;
+    let timeRows = '';
+    for(let h=6;h<=23;h++){
+      const label = h===0?'12 AM':h<12?h+' AM':h===12?'12 PM':(h-12)+' PM';
+      timeRows += `<div class="cal-time-col" style="grid-column:1">${label}</div>`;
+      weekDays.forEach((di,i)=>{
+        const todayCls = di.isToday ? ' today-col' : '';
+        timeRows += `<div class="cal-day-col${todayCls}" style="grid-column:${i+2}"><div class="cal-time-line"><div class="cal-time-line-30"></div></div></div>`;
+      });
+    }
+
+    // Event blocks per day
+    let eventBlocks = '';
+    weekDays.forEach((di,i)=>{
+      const col = i + 2;
+      di.events.forEach(ev=>{
+        const pos = _calEvTimePosition(ev);
+        const cleanLabel = ev.label.replace(/<[^>]*>/g,'').trim();
+        eventBlocks += `<div class="cal-ev-block" style="grid-column:${col};top:${pos.top+40}px;height:${pos.height-2}px;background:${ev.color}22;color:${ev.color};border-left:3px solid ${ev.color}" title="${cleanLabel}${ev.sub?' - '+ev.sub:''}">${cleanLabel.slice(0,20)}</div>`;
+      });
+    });
+
+    // Now line
+    let nowLine = '';
+    const nowMins = today.getHours()*60 + today.getMinutes();
+    if(nowMins >= 6*60 && nowMins <= 24*60){
+      const nowTop = ((nowMins/60)-6)*HOUR_PX + 40;
+      nowLine = `<div class="cal-now-line" style="top:${nowTop}px;grid-column:1/-1"></div>`;
+    }
+
+    const scrollScript = `<script>
+      (function(){
+        var g=document.getElementById('cal-week-scroll');
+        if(g){
+          var nowMins=${today.getHours()}*60+${today.getMinutes()};
+          var scrollTo=((nowMins/60)-6-2)*${HOUR_PX};
+          if(scrollTo>0) g.scrollTop=scrollTo;
+        }
+      })();
+    <\/script>`;
+
+    return modal + `
+    <div class="card" style="padding:0;overflow:hidden">
+      <div style="padding:14px 16px 0;position:sticky;top:0;z-index:4;background:var(--bg2)">
+        <div class="sec-hdr mb12">
+          <div style="display:flex;align-items:center;gap:10px">
+            <button onclick="calWeekNav(-1)" style="background:var(--bg4);border:1px solid var(--border);border-radius:6px;color:var(--text3);cursor:pointer;font-size:14px;padding:3px 10px;font-family:var(--font)">${ico('chevron-left',14)}</button>
+            <span class="sec-title">${rangeLabel}</span>
+            <button onclick="calWeekNav(1)" style="background:var(--bg4);border:1px solid var(--border);border-radius:6px;color:var(--text3);cursor:pointer;font-size:14px;padding:3px 10px;font-family:var(--font)">${ico('chevron-right',14)}</button>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <button onclick="_calWeekStart=(function(){const n=new Date();const d=n.getDay();const diff=d===0?6:d-1;const m=new Date(n);m.setDate(n.getDate()-diff);m.setHours(0,0,0,0);return m;})();navigate('calendar')" class="btn btn-ghost btn-sm">Today</button>
+            <button onclick="openCalEvModal(${addDay})" class="btn btn-primary btn-sm">${ico('plus',12)} Add</button>
+            ${viewPills}
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:56px repeat(7,1fr)">${colHeaders}</div>
+      </div>
+      <div id="cal-week-scroll" style="overflow-y:auto;max-height:calc(100vh - 200px)">
+        <div style="display:grid;grid-template-columns:56px repeat(7,1fr);position:relative">
+          ${timeRows}
+          ${eventBlocks}
+          ${nowLine}
+        </div>
+      </div>
+    </div>
+    ${scrollScript}`;
+  }
+
+  // ════════════════════════════ DAY VIEW ════════════════════════════
+  if(_calView==='day'){
+    const dayDate = new Date(_calDayDate);
+    const y=dayDate.getFullYear(), m=dayDate.getMonth(), d=dayDate.getDate();
+    const dayName = dayDate.toLocaleDateString('en',{weekday:'long'});
+    const dateLabel = dayDate.toLocaleDateString('en',{month:'long',day:'numeric',year:'numeric'});
+    const dayEvs = _calBuildEvents(y,m)[d]||[];
+    const isToday = dayDate.getTime()===todayDate.getTime();
+
+    const HOUR_PX = 48;
+    let timeRows = '';
+    for(let h=6;h<=23;h++){
+      const label = h===0?'12 AM':h<12?h+' AM':h===12?'12 PM':(h-12)+' PM';
+      timeRows += `<div class="cal-time-col" style="grid-column:1">${label}</div>`;
+      timeRows += `<div class="cal-day-col${isToday?' today-col':''}" style="grid-column:2"><div class="cal-time-line"><div class="cal-time-line-30"></div></div></div>`;
+    }
+
+    let eventBlocks = '';
+    dayEvs.forEach(ev=>{
+      const pos = _calEvTimePosition(ev);
+      const cleanLabel = ev.label.replace(/<[^>]*>/g,'').trim();
+      eventBlocks += `<div class="cal-ev-block" style="grid-column:2;top:${pos.top+40}px;height:${pos.height-2}px;background:${ev.color}22;color:${ev.color};border-left:3px solid ${ev.color}" title="${cleanLabel}${ev.sub?' - '+ev.sub:''}">${cleanLabel.slice(0,30)}</div>`;
+    });
+
+    let nowLine = '';
+    const nowMins = today.getHours()*60 + today.getMinutes();
+    if(nowMins >= 6*60 && nowMins <= 24*60){
+      const nowTop = ((nowMins/60)-6)*HOUR_PX + 40;
+      nowLine = `<div class="cal-now-line" style="top:${nowTop}px;grid-column:1/-1"></div>`;
+    }
+
+    const scrollScript = `<script>
+      (function(){
+        var g=document.getElementById('cal-day-scroll');
+        if(g){
+          var nowMins=${today.getHours()}*60+${today.getMinutes()};
+          var scrollTo=((nowMins/60)-6-2)*${HOUR_PX};
+          if(scrollTo>0) g.scrollTop=scrollTo;
+        }
+      })();
+    <\/script>`;
+
+    // Column header for day view
+    const colHeader = `<div class="cal-day-hdr-cell${isToday?' today-col':''}" style="grid-column:2">
+      <span>${dayName.slice(0,3)}</span>
+      <span class="cal-date-num${isToday?' is-today':''}">${d}</span>
+    </div>`;
+
+    return modal + `
+    <div class="card" style="padding:0;overflow:hidden">
+      <div style="padding:14px 16px 0;position:sticky;top:0;z-index:4;background:var(--bg2)">
+        <div class="sec-hdr mb12">
+          <div style="display:flex;align-items:center;gap:10px">
+            <button onclick="_calDayDate.setDate(_calDayDate.getDate()-1);navigate('calendar')" style="background:var(--bg4);border:1px solid var(--border);border-radius:6px;color:var(--text3);cursor:pointer;font-size:14px;padding:3px 10px;font-family:var(--font)">${ico('chevron-left',14)}</button>
+            <span class="sec-title">${dateLabel}</span>
+            <button onclick="_calDayDate.setDate(_calDayDate.getDate()+1);navigate('calendar')" style="background:var(--bg4);border:1px solid var(--border);border-radius:6px;color:var(--text3);cursor:pointer;font-size:14px;padding:3px 10px;font-family:var(--font)">${ico('chevron-right',14)}</button>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <button onclick="_calDayDate=new Date();_calDayDate.setHours(0,0,0,0);navigate('calendar')" class="btn btn-ghost btn-sm">Today</button>
+            <button onclick="openCalEvModal(${d})" class="btn btn-primary btn-sm">${ico('plus',12)} Add</button>
+            ${viewPills}
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:56px 1fr">${colHeader}</div>
+      </div>
+      <div id="cal-day-scroll" style="overflow-y:auto;max-height:calc(100vh - 200px)">
+        <div style="display:grid;grid-template-columns:56px 1fr;position:relative">
+          ${timeRows}
+          ${eventBlocks}
+          ${nowLine}
+        </div>
+      </div>
+    </div>
+    ${scrollScript}`;
+  }
+
+  // ════════════════════════════ MONTH VIEW ════════════════════════════
   const year = _calYear, month = _calMonth;
   const monthName = new Date(year,month,1).toLocaleString('en',{month:'long'});
   const daysInMonth = new Date(year,month+1,0).getDate();
   const offset = (new Date(year,month,1).getDay()+6)%7;
-  const today = new Date();
   const isCurrentMonth = today.getFullYear()===year && today.getMonth()===month;
   const todayD = isCurrentMonth ? today.getDate() : -1;
 
   const events = _calBuildEvents(year, month);
 
-  const days=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
-  const headers=days.map(d=>`<div class="cal-day-hdr">${d}</div>`).join('');
+  const dayLabels=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  const headers=dayLabels.map(d=>`<div class="cal-day-hdr">${d}</div>`).join('');
   let cells='';
   for(let i=0;i<offset;i++) cells+=`<div class="cal-cell empty"></div>`;
   for(let d=1;d<=daysInMonth;d++){
@@ -2841,16 +3130,13 @@ function pgCalendar(){
     const isSelected = d===_calSelDay;
     const dayEvs = events[d]||[];
 
-    // Split: custom events (chips) vs background data (dots)
     const customEvs = dayEvs.filter(e=>e.type.startsWith('custom_'));
     const bgEvs     = dayEvs.filter(e=>!e.type.startsWith('custom_'));
 
-    // Custom event chips — show up to 2, prominent
     const chips = customEvs.slice(0,2).map(e=>
       `<span class="cal-ev-chip" style="background:${e.color}22;color:${e.color};border:1px solid ${e.color}55">${e.label.slice(0,13)}</span>`
     ).join('');
 
-    // Background dots (gym, meals, habits, txns) — deduped by type, max 4
     const typesSeen=new Set();
     const dots = bgEvs.filter(e=>{ if(typesSeen.has(e.type)) return false; typesSeen.add(e.type); return true; })
       .slice(0,4).map(e=>`<div style="width:4px;height:4px;border-radius:50%;background:${e.color};flex-shrink:0"></div>`).join('');
@@ -2868,64 +3154,24 @@ function pgCalendar(){
   const upcoming=[];
   for(let i=0;i<=30;i++){
     const dd=new Date(today); dd.setDate(dd.getDate()+i);
-    const m=dd.getMonth(), y=dd.getFullYear(), dy=dd.getDate();
-    const evs=(_calBuildEvents(y,m)[dy]||[]).filter(e=>e.type.startsWith('custom_'));
+    const mo=dd.getMonth(), yr=dd.getFullYear(), dy=dd.getDate();
+    const evs=(_calBuildEvents(yr,mo)[dy]||[]).filter(e=>e.type.startsWith('custom_'));
     evs.forEach(e=>upcoming.push({...e, date:dd.toLocaleDateString('en',{month:'short',day:'numeric'}), iso:dd.toISOString().slice(0,10)}));
   }
 
-  return`
-  <!-- Add Event modal -->
-  <div id="cal-ev-modal" style="display:none;opacity:0;position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:999;align-items:flex-end;justify-content:center;transition:opacity .15s">
-    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r) var(--r) 0 0;padding:20px;width:100%;max-width:480px">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-        <span style="font-size:15px;font-weight:700;color:var(--text)">Add Event</span>
-        <button onclick="closeCalEvModal()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:20px;line-height:1">×</button>
-      </div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
-        ${Object.entries(CAL_EV_TYPES).map(([k,t])=>
-          `<button class="cev-type-pill" data-type="${k}" onclick="cevPickType('${k}')"
-            style="padding:5px 12px;border-radius:16px;font-size:12px;font-family:var(--font);cursor:pointer;transition:all .12s;background:${k==='event'?'var(--text)':'var(--bg4)'};border:1px solid ${k==='event'?'var(--text)':'var(--border)'};color:${k==='event'?'var(--bg)':'var(--text3)'}">
-            ${ico(t.icon,14)} ${t.label}</button>`).join('')}
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
-        <div>
-          <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px">Titre</div>
-          <input id="cev-title" type="text" placeholder="ex: Fête de Marie..." style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-sm);padding:7px 10px;color:var(--text);font-family:var(--font);font-size:13px;outline:none">
-        </div>
-        <div>
-          <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px">Date</div>
-          <input id="cev-date" type="date" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-sm);padding:7px 10px;color:var(--text);font-family:var(--font);font-size:12px;outline:none;color-scheme:dark">
-        </div>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
-        <div>
-          <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px">Notes</div>
-          <input id="cev-notes" type="text" placeholder="Optionnel..." style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-sm);padding:7px 10px;color:var(--text);font-family:var(--font);font-size:13px;outline:none">
-        </div>
-        <div>
-          <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px">Récurrence</div>
-          <select id="cev-repeat" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-sm);padding:7px 10px;color:var(--text);font-family:var(--font);font-size:12px;outline:none">
-            <option value="none">Une fois</option>
-            <option value="yearly">Chaque année</option>
-            <option value="monthly">Chaque mois</option>
-          </select>
-        </div>
-      </div>
-      <button onclick="saveCalEv()" class="btn btn-primary" style="width:100%;padding:11px;font-size:14px">Save</button>
-    </div>
-  </div>
-
+  return modal + `
   <div style="display:grid;grid-template-columns:1fr 260px;gap:14px;align-items:start">
     <div class="card">
       <div class="sec-hdr mb12">
         <div style="display:flex;align-items:center;gap:10px">
-          <button onclick="calNav(-1)" style="background:var(--bg4);border:1px solid var(--border);border-radius:6px;color:var(--text3);cursor:pointer;font-size:14px;padding:3px 10px;font-family:var(--font)">‹</button>
+          <button onclick="calNav(-1)" style="background:var(--bg4);border:1px solid var(--border);border-radius:6px;color:var(--text3);cursor:pointer;font-size:14px;padding:3px 10px;font-family:var(--font)">${ico('chevron-left',14)}</button>
           <span class="sec-title">${monthName} ${year}</span>
-          <button onclick="calNav(1)" style="background:var(--bg4);border:1px solid var(--border);border-radius:6px;color:var(--text3);cursor:pointer;font-size:14px;padding:3px 10px;font-family:var(--font)">›</button>
+          <button onclick="calNav(1)" style="background:var(--bg4);border:1px solid var(--border);border-radius:6px;color:var(--text3);cursor:pointer;font-size:14px;padding:3px 10px;font-family:var(--font)">${ico('chevron-right',14)}</button>
         </div>
-        <div style="display:flex;gap:6px">
+        <div style="display:flex;align-items:center;gap:8px">
           <button onclick="_calYear=new Date().getFullYear();_calMonth=new Date().getMonth();navigate('calendar')" class="btn btn-ghost btn-sm">Today</button>
-          <button onclick="openCalEvModal(${todayD>0?todayD:1})" class="btn btn-primary btn-sm"><svg data-feather="plus" style="width:12px;height:12px"></svg> Add</button>
+          <button onclick="openCalEvModal(${todayD>0?todayD:1})" class="btn btn-primary btn-sm">${ico('plus',12)} Add</button>
+          ${viewPills}
         </div>
       </div>
       <div class="cal-grid mb6">${headers}</div>
@@ -2934,7 +3180,7 @@ function pgCalendar(){
         <div style="display:flex;align-items:center;gap:5px"><div style="width:7px;height:7px;border-radius:50%;background:var(--accent)"></div><span style="font-size:10px;color:var(--text3)">Gym</span></div>
         <div style="display:flex;align-items:center;gap:5px"><div style="width:7px;height:7px;border-radius:50%;background:var(--yellow)"></div><span style="font-size:10px;color:var(--text3)">Meals</span></div>
         <div style="display:flex;align-items:center;gap:5px"><div style="width:7px;height:7px;border-radius:50%;background:#4ade80"></div><span style="font-size:10px;color:var(--text3)">Habits</span></div>
-        <div style="display:flex;align-items:center;gap:5px"><div style="width:7px;height:7px;border-radius:50%;background:var(--red)"></div><span style="font-size:10px;color:var(--text3)">Dépenses</span></div>
+        <div style="display:flex;align-items:center;gap:5px"><div style="width:7px;height:7px;border-radius:50%;background:var(--red)"></div><span style="font-size:10px;color:var(--text3)">Depenses</span></div>
         ${Object.entries(CAL_EV_TYPES).map(([,t])=>`
         <div style="display:flex;align-items:center;gap:5px"><div style="width:7px;height:7px;border-radius:50%;background:${t.color}"></div><span style="font-size:10px;color:var(--text3)">${ico(t.icon,12)} ${t.label}</span></div>`).join('')}
       </div>
@@ -2943,7 +3189,7 @@ function pgCalendar(){
       <div class="card">
         <div class="sec-hdr mb8">
           <span class="sec-title" id="cal-day-title">${_calSelDay ? _calSelDay+' '+monthName : 'Day Detail'}</span>
-          <button id="cal-day-add" onclick="openCalEvModal(${_calSelDay||1})" class="btn btn-ghost btn-sm" style="font-size:10px;${_calSelDay?'':'display:none'}">+ Add</button>
+          <button id="cal-day-add" onclick="openCalEvModal(${_calSelDay||1})" class="btn btn-ghost btn-sm" style="font-size:10px;${_calSelDay?'':'display:none'}">${ico('plus',12)} Add</button>
         </div>
         <div id="cal-day-panel">${_calBuildDayPanel(_calSelDay, year, month)}</div>
       </div>
@@ -2955,7 +3201,7 @@ function pgCalendar(){
             <div style="flex:1;font-size:12px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${e.label}</div>
             <div style="font-size:10px;color:var(--text3);flex-shrink:0">${e.date}</div>
           </div>`).join('')
-        :'<div style="padding:12px 0;text-align:center;color:var(--text3);font-size:12px">Rien à venir</div>'}
+        :'<div style="padding:12px 0;text-align:center;color:var(--text3);font-size:12px">Rien a venir</div>'}
       </div>
     </div>
   </div>`;
