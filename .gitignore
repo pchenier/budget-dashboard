@@ -5,5 +5,8 @@ __pycache__/
 *.pyo
 .DS_Store
 questrade_cache.json
+data_cache.json
+saved_config.json
 imports/
 *.csv
+.vercel
