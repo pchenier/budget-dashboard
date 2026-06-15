@@ -282,18 +282,24 @@ button{font-family:var(--font)}
 .meal-ico svg{width:16px;height:16px}
 
 /* ── CALENDAR ── */
-.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
 .cal-cell{
-  min-height:64px;border-radius:var(--r-xs);background:var(--bg3);
+  min-height:68px;border-radius:var(--r-sm);background:var(--bg3);
   display:flex;flex-direction:column;align-items:flex-start;justify-content:flex-start;
-  padding:5px 6px;font-size:12px;font-weight:500;color:var(--text2);cursor:pointer;transition:background .12s;
+  padding:6px 7px;font-size:12px;font-weight:500;color:var(--text2);cursor:pointer;
+  transition:all .15s ease;
   position:relative;overflow:hidden
 }
-.cal-cell:hover{background:var(--bg4)}
-.cal-cell.today{background:var(--bg4);color:var(--text);outline:1px solid var(--border)}
+.cal-cell:hover{background:var(--bg4);transform:translateY(-1px)}
+.cal-cell.today{
+  background:var(--bg4);color:var(--text);
+  box-shadow:0 0 0 1px var(--green),0 0 12px 1px rgba(74,222,128,.25);
+  z-index:1
+}
+.cal-cell.today:hover{box-shadow:0 0 0 1px var(--green),0 0 18px 2px rgba(74,222,128,.35)}
 .cal-cell.has-event::after{content:'';position:absolute;bottom:4px;width:4px;height:4px;border-radius:50%;background:var(--green)}
 .cal-cell.empty{background:transparent;cursor:default}
-.cal-day-hdr{font-size:10px;font-weight:600;color:var(--text4);text-align:center;padding:4px 0;text-transform:uppercase}
+.cal-day-hdr{font-size:10px;font-weight:700;color:var(--text3);text-align:center;padding:6px 0;letter-spacing:.5px;text-transform:uppercase}
 .cal-ev-chip{display:block;font-size:9.5px;font-weight:600;padding:2px 5px;border-radius:4px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;line-height:1.4}
 .cal-dot-row{display:flex;gap:2px;flex-wrap:wrap;margin-top:auto;padding-top:2px}
 
@@ -374,7 +380,7 @@ button{font-family:var(--font)}
 <!-- ══════════════════════ SIDEBAR ══════════════════════ -->
 <aside class="sidebar">
   <div class="logo">
-    <div class="logo-mark"><svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" width="22" height="22"><rect width="32" height="32" rx="8" fill="var(--bg2)"/><rect x="7" y="6" width="5" height="20" rx="2" fill="var(--text)"/><rect x="7" y="6" width="16" height="5" rx="2" fill="var(--text)"/><rect x="7" y="14" width="12" height="4" rx="2" fill="var(--text)"/><circle cx="26" cy="8.5" r="3.5" fill="var(--blue)"/></svg></div>
+    <div class="logo-mark"><svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" width="22" height="22"><rect width="32" height="32" rx="8" fill="var(--bg2)"/><rect x="7" y="6" width="5" height="20" rx="2" fill="var(--text)"/><rect x="7" y="6" width="16" height="5" rx="2" fill="var(--text)"/><rect x="7" y="14" width="12" height="4" rx="2" fill="var(--text)"/><circle cx="26" cy="8.5" r="3.5" fill="var(--green)"/></svg></div>
     <span class="logo-name">Fiscit</span>
   </div>
 
