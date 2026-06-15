@@ -163,8 +163,9 @@ button{font-family:var(--font)}
 .txn:last-child{border-bottom:none}
 .txn-ico{
   width:32px;height:32px;border-radius:9px;background:var(--bg3);
-  display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0
+  display:flex;align-items:center;justify-content:center;flex-shrink:0
 }
+.txn-ico svg{width:16px;height:16px}
 .txn-info{flex:1;min-width:0}
 .txn-name{font-size:13px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .txn-sub{font-size:11px;color:var(--text3);margin-top:1px}
@@ -179,7 +180,7 @@ button{font-family:var(--font)}
 .budget-item:last-child{border-bottom:none}
 .budget-row{display:flex;align-items:center;justify-content:space-between}
 .budget-cat{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:500;color:var(--text)}
-.budget-cat-ico{font-size:15px}
+.budget-cat-ico{display:inline-flex;align-items:center;vertical-align:middle}
 .budget-nums{font-size:12px;color:var(--text3);font-variant-numeric:tabular-nums}
 .pbar{height:3px;background:var(--bg5);border-radius:2px;overflow:hidden}
 .pfill{height:100%;border-radius:2px;transition:width .3s ease}
@@ -226,7 +227,9 @@ button{font-family:var(--font)}
 }
 .insight-ico{
   width:30px;height:30px;border-radius:8px;display:flex;align-items:center;
-  justify-content:center;font-size:14px;flex-shrink:0;margin-top:1px
+  justify-content:center;flex-shrink:0;margin-top:1px
+}
+.insight-ico svg{width:16px;height:16px}
 }
 .insight h4{font-size:13px;font-weight:500;color:var(--text);margin-bottom:3px;letter-spacing:-.1px}
 .insight p{font-size:12px;color:var(--text3);line-height:1.6}
@@ -275,7 +278,8 @@ button{font-family:var(--font)}
 /* ── MEAL ── */
 .meal-row{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border2)}
 .meal-row:last-child{border-bottom:none}
-.meal-ico{width:30px;height:30px;border-radius:8px;background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+.meal-ico{width:30px;height:30px;border-radius:8px;background:var(--bg3);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.meal-ico svg{width:16px;height:16px}
 
 /* ── CALENDAR ── */
 .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
@@ -466,6 +470,9 @@ button{font-family:var(--font)}
 </div>
 
 <script>
+// Feather icon helper — generates inline SVG processed by feather.replace()
+function ico(name,sz){sz=sz||14;return '<svg data-feather="'+name+'" width="'+sz+'" height="'+sz+'"></svg>';}
+
 // ═══════════════════════════ MOCK DATA ═══════════════════════════
 const D = {
   netWorth: 0,
@@ -571,7 +578,7 @@ function pgDashboard(){
     const excl = EXCLUDED_CATS.has(t.cat);
     return`
     <div class="txn" style="${excl?'opacity:.4':''}">
-      <div class="txn-ico">${t.ico||'📂'}</div>
+      <div class="txn-ico">${t.ico||ico('folder',14)}</div>
       <div class="txn-info">
         <div class="txn-name">${t.name}</div>
         <div class="txn-sub">${t.cat} · ${t.acc}</div>
@@ -1028,11 +1035,11 @@ function applyQuickRule(nameFragment, cat){
   D.txns = applyRules(D.txns);
   filterTxns();
 }
-const CAT_ICOS = {'Épicerie':'🛒','Bouffe/Resto':'🍽️','Gaz':'⛽','Transport':'🚇','Shopping':'🛍️','Gym':'💪','Santé':'💊','Télécom':'📱','Divertissement':'🎬','Abonnements':'📺','Logement':'🏠','Hydro/Services':'⚡','Cash/Virements':'💸','Investissements':'📈','Revenu':'💼','P2P/Virement perso':'🔁','Autre':'📂'};
+const CAT_ICOS = {'Épicerie':'shopping-cart','Bouffe/Resto':'coffee','Gaz':'droplet','Transport':'map','Shopping':'shopping-bag','Gym':'zap','Santé':'heart','Télécom':'smartphone','Divertissement':'film','Abonnements':'monitor','Logement':'home','Hydro/Services':'zap','Cash/Virements':'trending-down','Investissements':'trending-up','Revenu':'briefcase','P2P/Virement perso':'repeat','Autre':'folder'};
 
 // Categories excluded from spending/budget calculations
 const EXCLUDED_CATS = new Set(['P2P/Virement perso']);
-function catIco(cat){ return CAT_ICOS[cat]||'📂'; }
+function catIco(cat){ return ico(CAT_ICOS[cat]||'folder',14); }
 
 let _filteredTxns = [];
 
@@ -1042,7 +1049,7 @@ function renderTxnList(txns){
     const excluded = EXCLUDED_CATS.has(t.cat);
     return`
     <div class="txn" style="padding:10px 0;cursor:pointer;${excluded?'opacity:.45':''}" onclick="openTxnEdit(${i})" title="${excluded?'Excluded from calculations — click to edit':'Click to edit'}">
-      <div class="txn-ico">${t.ico||'📂'}</div>
+      <div class="txn-ico">${t.ico||ico('folder',14)}</div>
       <div class="txn-info">
         <div class="txn-name" style="${excluded?'text-decoration:line-through;color:var(--text3)':''}">${t.name}</div>
         <div class="txn-sub">${t.merchant||t.name}</div>
@@ -1183,7 +1190,7 @@ function pgTransactions(){
     </select>
     <button class="btn btn-ghost btn-sm" onclick="openRulesModal()"><svg data-feather="sliders" style="width:13px;height:13px"></svg> Rules (${getRules().length})</button>
     ${_txnDateFilter?`<div style="display:flex;align-items:center;gap:6px;padding:4px 10px;background:var(--accent);border-radius:var(--r-sm)">
-      <span style="font-size:11px;font-weight:600;color:var(--bg)">📅 ${new Date(_txnDateFilter+'T00:00').toLocaleDateString('en',{month:'short',day:'numeric',year:'numeric'})}</span>
+      <span style="font-size:11px;font-weight:600;color:var(--bg);display:inline-flex;align-items:center;gap:3px"><svg data-feather="calendar" style="width:11px;height:11px"></svg> ${new Date(_txnDateFilter+'T00:00').toLocaleDateString('en',{month:'short',day:'numeric',year:'numeric'})}</span>
       <button onclick="_txnDateFilter='';filterTxns()" style="background:none;border:none;color:var(--bg);cursor:pointer;font-size:14px;line-height:1;padding:0 2px">×</button>
     </div>`:''}
     <div style="margin-left:auto;font-size:12px;color:var(--text3)" id="txn-count">${D.txns.length} transactions</div>
@@ -1341,7 +1348,7 @@ function pgBudget(){
   </div>
 
   ${over.length?`<div class="insight mb20" style="border-color:var(--red-br);background:var(--red-bg)">
-    <div class="insight-ico" style="background:var(--red-bg)">⚠️</div>
+    <div class="insight-ico" style="background:var(--red-bg)"><svg data-feather="alert-triangle" style="width:14px;height:14px"></svg></div>
     <div><h4 style="color:var(--red)">Over budget in ${over.length} ${over.length===1?'category':'categories'}</h4>
     <p>${over.map(b=>b.cat).join(', ')} exceeded this month.</p></div>
   </div>`:''}
@@ -1376,7 +1383,7 @@ function pgBudget(){
               <div style="font-size:11px;color:var(--text3);width:32px;text-align:right">${Math.round(pct)}%</div>
             </div>`:''}
             ${showProj?`<div style="margin-top:7px;padding:7px 10px;background:rgba(251,191,36,0.07);border:1px solid rgba(251,191,36,0.2);border-radius:6px;display:flex;align-items:flex-start;gap:8px">
-              <span style="font-size:13px">📊</span>
+              <span style="font-size:13px;display:inline-flex;align-items:center"><svg data-feather="bar-chart-2" style="width:13px;height:13px"></svg></span>
               <div style="font-size:11px;color:#fbbf24;line-height:1.5">À ce rythme tu vas dépenser <strong>${fmt(projPct,0)}</strong> ce mois — <strong>${fmt(projPct-b.lim,0)} de plus</strong> que ton budget de ${fmt(b.lim,0)}.</div>
             </div>`:''}
           </div>`;
@@ -1541,11 +1548,11 @@ function pgSavings(){
   </div>
 
   ${cur.rate<10&&cur.inc>0?`<div class="insight mb20" style="border-color:var(--red-br);background:var(--red-bg)">
-    <div class="insight-ico" style="background:var(--red-bg)">🔴</div>
+    <div class="insight-ico" style="background:var(--red-bg)"><svg data-feather="alert-circle" style="width:14px;height:14px"></svg></div>
     <div><h4 style="color:var(--red)">Savings rate sous 10% ce mois</h4>
     <p>Tu dépenses ${fmt(cur.exp,0)} sur ${fmt(cur.inc,0)} de revenu. Vise au moins 20% pour construire de la richesse — soit ${fmt(cur.inc*0.2,0)} épargnés ce mois.</p></div>
   </div>`:cur.rate>=20?`<div class="insight mb20" style="border-color:var(--green-br);background:var(--green-bg)">
-    <div class="insight-ico" style="background:var(--green-bg)">🟢</div>
+    <div class="insight-ico" style="background:var(--green-bg)"><svg data-feather="check-circle" style="width:14px;height:14px"></svg></div>
     <div><h4 style="color:var(--green)">Excellent — ${cur.rate.toFixed(1)}% d'épargne ce mois</h4>
     <p>Tu épargnes ${fmt(cur.cf,0)} sur ${fmt(cur.inc,0)} de revenu. C'est au-dessus du seuil de 20% recommandé pour la liberté financière.</p></div>
   </div>`:''}
@@ -1692,7 +1699,7 @@ function pgSubscriptions(){
   </div>
 
   ${services.filter(s=>s.isNew).length>0?`<div class="insight mb20" style="border-color:var(--yellow-br);background:var(--yellow-bg)">
-    <div class="insight-ico" style="background:var(--yellow-bg)">🆕</div>
+    <div class="insight-ico" style="background:var(--yellow-bg)"><svg data-feather="plus-circle" style="width:14px;height:14px"></svg></div>
     <div><h4 style="color:#fbbf24">${services.filter(s=>s.isNew).length} nouvel abonnement${services.filter(s=>s.isNew).length>1?'s':''} ce mois</h4>
     <p>${services.filter(s=>s.isNew).map(s=>s.name+' ('+fmt(s.total,2)+')').join(', ')} — absent du mois précédent.</p></div>
   </div>`:''}
@@ -1730,19 +1737,19 @@ function pgSubscriptions(){
 // ═══════════════════════════ INSIGHTS ═══════════════════════════
 function pgInsights(){
   const insights=[
-    {ico:'📈',bg:'var(--green-bg)',title:'Net worth increased $1,890 this month',body:'Your net worth is up 2.2% from May. This is driven by investment growth of $1,200 and a positive cash flow of $2,562.',type:'positive'},
-    {ico:'🍽️',bg:'var(--red-bg)',title:'Dining out is 6% over your budget',body:'You spent $265 on dining this month vs your $250 limit. You have 27 days left in June — consider cooking at home 2 more times this week.',type:'warning'},
-    {ico:'📦',bg:'var(--yellow-bg)',title:'Shopping increased 34% vs last month',body:'Your shopping spending jumped from $235 to $315. Amazon and Simons account for most of the increase.',type:'warning'},
-    {ico:'💰',bg:'var(--blue-bg)',title:'You are on track to save $2,562 this month',body:'Based on your income of $6,800 and current spending of $4,238, you will save approximately $2,562 — 37.7% of income.',type:'positive'},
-    {ico:'🔄',bg:'var(--bg3)',title:'Subscription cost: $89/month across 2 services',body:'Netflix ($22.99) and Spotify ($15.99) are your main subscriptions. Your subscription budget of $100 is at 89% usage.',type:'neutral'},
-    {ico:'⚡',bg:'var(--bg3)',title:'Hydro-Québec was $112 — slightly above average',body:'Your electricity bill was $8 above your 3-month average. This may be due to heating. Your budget is $130 so you are still within range.',type:'neutral'},
-    {ico:'💪',bg:'var(--green-bg)',title:'Gym consistency is strong this month',body:'You have worked out 18 times in the last 30 days. Your current streak is 8 days. Keep it up.',type:'positive'},
-    {ico:'📊',bg:'var(--blue-bg)',title:'Connect your investment accounts',body:'Link Wealthsimple or Questrade to see your portfolio performance here.',type:'neutral'},
+    {ico:'trending-up',bg:'var(--green-bg)',title:'Net worth increased $1,890 this month',body:'Your net worth is up 2.2% from May. This is driven by investment growth of $1,200 and a positive cash flow of $2,562.',type:'positive'},
+    {ico:'coffee',bg:'var(--red-bg)',title:'Dining out is 6% over your budget',body:'You spent $265 on dining this month vs your $250 limit. You have 27 days left in June — consider cooking at home 2 more times this week.',type:'warning'},
+    {ico:'package',bg:'var(--yellow-bg)',title:'Shopping increased 34% vs last month',body:'Your shopping spending jumped from $235 to $315. Amazon and Simons account for most of the increase.',type:'warning'},
+    {ico:'dollar-sign',bg:'var(--blue-bg)',title:'You are on track to save $2,562 this month',body:'Based on your income of $6,800 and current spending of $4,238, you will save approximately $2,562 — 37.7% of income.',type:'positive'},
+    {ico:'refresh-cw',bg:'var(--bg3)',title:'Subscription cost: $89/month across 2 services',body:'Netflix ($22.99) and Spotify ($15.99) are your main subscriptions. Your subscription budget of $100 is at 89% usage.',type:'neutral'},
+    {ico:'zap',bg:'var(--bg3)',title:'Hydro-Québec was $112 — slightly above average',body:'Your electricity bill was $8 above your 3-month average. This may be due to heating. Your budget is $130 so you are still within range.',type:'neutral'},
+    {ico:'zap',bg:'var(--green-bg)',title:'Gym consistency is strong this month',body:'You have worked out 18 times in the last 30 days. Your current streak is 8 days. Keep it up.',type:'positive'},
+    {ico:'bar-chart-2',bg:'var(--blue-bg)',title:'Connect your investment accounts',body:'Link Wealthsimple or Questrade to see your portfolio performance here.',type:'neutral'},
   ];
 
   const cards=insights.map(i=>`
     <div class="insight" style="${i.type==='positive'?'border-color:var(--green-br)':i.type==='warning'?'border-color:var(--red-br)':''}">
-      <div class="insight-ico" style="background:${i.bg};font-size:16px">${i.ico}</div>
+      <div class="insight-ico" style="background:${i.bg}">${ico(i.ico,16)}</div>
       <div>
         <h4>${i.title}</h4>
         <p>${i.body}</p>
@@ -1966,13 +1973,13 @@ function shiftMiniCal(containerId, hiddenId, delta){
 
 // ── Workout & Meal Templates ──────────────────────────────────────────────────
 const WK_TPLS = {
-  'Back & Biceps':   { emoji:'💪', exs:['Pull-ups','Barbell row','Cable row','Face pull','Bicep curl','Hammer curl'], dur:'60 min' },
-  'Chest & Triceps': { emoji:'🏋️', exs:['Bench press','Incline DB','Cable fly','Dips','Pushdown','Skull crushers'], dur:'60 min' },
-  'Legs':            { emoji:'🦵', exs:['Squat','Romanian DL','Leg press','Leg curl','Hip thrust','Calf raise'], dur:'65 min' },
-  'Épaules':         { emoji:'⚡', exs:['OHP','Lateral raise','Front raise','Face pull','Shrugs'], dur:'50 min' },
-  'Full Body':       { emoji:'🔥', exs:['Deadlift','Bench press','Pull-ups','OHP','Squat'], dur:'75 min' },
-  'Cardio':          { emoji:'🏃', exs:['Treadmill','Bike','Jump rope','Stair climber'], dur:'30 min' },
-  'Abs':             { emoji:'🎯', exs:['Plank','Leg raise','Crunches','Russian twist','Cable crunch'], dur:'20 min' },
+  'Back & Biceps':   { icon:'activity', exs:['Pull-ups','Barbell row','Cable row','Face pull','Bicep curl','Hammer curl'], dur:'60 min' },
+  'Chest & Triceps': { icon:'target', exs:['Bench press','Incline DB','Cable fly','Dips','Pushdown','Skull crushers'], dur:'60 min' },
+  'Legs':            { icon:'navigation', exs:['Squat','Romanian DL','Leg press','Leg curl','Hip thrust','Calf raise'], dur:'65 min' },
+  'Épaules':         { icon:'shield', exs:['OHP','Lateral raise','Front raise','Face pull','Shrugs'], dur:'50 min' },
+  'Full Body':       { icon:'layers', exs:['Deadlift','Bench press','Pull-ups','OHP','Squat'], dur:'75 min' },
+  'Cardio':          { icon:'activity', exs:['Treadmill','Bike','Jump rope','Stair climber'], dur:'30 min' },
+  'Abs':             { icon:'target', exs:['Plank','Leg raise','Crunches','Russian twist','Cable crunch'], dur:'20 min' },
 };
 const MEAL_TPLS = {
   'Breakfast': [
@@ -2008,7 +2015,7 @@ const MEAL_TPLS = {
     { label:'Chicken & riz', foods:'Chicken breast, riz', cal:550, protein:50 },
   ],
 };
-const MEAL_ICOS = {'Breakfast':'🍳','Lunch':'🍱','Dinner':'🐟','Snack':'🍎','Pre-workout':'💪','Post-workout':'🥛'};
+const MEAL_ICOS = {'Breakfast':'sun','Lunch':'coffee','Dinner':'moon','Snack':'star','Pre-workout':'zap','Post-workout':'activity'};
 
 // Workout modal state
 let _wmType=null, _wmDur=null, _wmExs=new Set();
@@ -2018,7 +2025,8 @@ function _wmRenderTypes(){
   g.innerHTML=Object.entries(WK_TPLS).map(([name,tpl])=>
     `<button class="wk-type-card" data-type="${name}" onclick="wmPickType('${name}')"
       style="display:flex;flex-direction:column;align-items:center;gap:4px;padding:12px 8px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg3);color:var(--text3);font-family:var(--font);font-size:11px;cursor:pointer;transition:all .12s">
-      <span style="font-size:22px">${tpl.emoji}</span><span>${name}</span></button>`).join('');
+      <span style="display:flex;align-items:center;justify-content:center;width:22px;height:22px">${ico(tpl.icon,18)}</span><span>${name}</span></button>`).join('');
+  feather.replace({width:14,height:14});
 }
 function wmPickType(type){
   _wmType=type; _wmExs=new Set(WK_TPLS[type].exs);
@@ -2092,7 +2100,7 @@ function _mmRenderTpls(){
       <div style="font-size:10px;color:var(--text3)">${t.cal} kcal &middot; ${t.protein}g prot</div></button>`).join('')+
     `<button class="mm-tpl-card" data-idx="-1" onclick="mmPickTpl(-1)"
       style="text-align:left;padding:10px 12px;border-radius:10px;border:1.5px dashed var(--border);background:var(--bg2);color:var(--text3);font-family:var(--font);cursor:pointer;transition:all .12s;width:100%">
-      <div style="font-size:12px;font-weight:500">✏️ Custom</div>
+      <div style="font-size:12px;font-weight:500"><svg data-feather="edit-2" style="width:12px;height:12px;vertical-align:middle"></svg> Custom</div>
       <div style="font-size:10px">Entrer manuellement</div></button>`;
 }
 function mmPickTpl(idx){
@@ -2134,6 +2142,7 @@ function openWorkoutModal(){
       b.style.background='var(--bg4)'; b.style.color='var(--text3)'; b.style.borderColor='var(--border)';
     });
     const ci=document.getElementById('wm-dur-custom'); if(ci) ci.value='';
+    feather.replace({width:14,height:14});
   },10);
 }
 function closeWorkoutModal(){
@@ -2184,7 +2193,7 @@ function pgGym(){
 
   const logRows = logs.slice(0,10).map(l=>`
     <div class="txn" style="padding:10px 0">
-      <div class="txn-ico">${WK_TPLS[l.workout]?.emoji||'🏋️'}</div>
+      <div class="txn-ico">${WK_TPLS[l.workout]?.icon?ico(WK_TPLS[l.workout].icon,14):ico('activity',14)}</div>
       <div class="txn-info">
         <div class="txn-name">${l.workout}</div>
         <div class="txn-sub">${l.date}${l.duration?' · '+l.duration:''}${l.exercises?.length?' · '+l.exercises.join(', '):''}</div>
@@ -2291,6 +2300,7 @@ function openMealModal(){
     });
     _mmRenderTpls();
     ['mm-foods','mm-cal-inp','mm-protein','mm-notes'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
+    feather.replace({width:14,height:14});
   },10);
 }
 function closeMealModal(){
@@ -2305,7 +2315,7 @@ function saveMeal(){
   const notes=document.getElementById('mm-notes').value.trim();
   const meal=_mmType||'Breakfast';
   const meals=getMeals();
-  meals.unshift({ date, meal, foods, cal, protein, notes, ico:MEAL_ICOS[meal]||'🍽️', id:Date.now()+'' });
+  meals.unshift({ date, meal, foods, cal, protein, notes, ico:MEAL_ICOS[meal]||'coffee', id:Date.now()+'' });
   saveMeals(meals);
   closeMealModal();
   setTimeout(()=>navigate('eating'),160);
@@ -2388,7 +2398,7 @@ function pgEating(){
         ${Object.keys(MEAL_TPLS).map(type=>
           `<button class="mm-type-pill" data-type="${type}" onclick="mmPickType('${type}')"
             style="padding:5px 12px;border-radius:16px;font-size:11px;font-family:var(--font);cursor:pointer;transition:all .12s;background:${type==='Breakfast'?'var(--text)':'var(--bg4)'};border:1px solid ${type==='Breakfast'?'var(--text)':'var(--border)'};color:${type==='Breakfast'?'var(--bg)':'var(--text3)'}">
-            ${MEAL_ICOS[type]} ${type}</button>`).join('')}
+            ${ico(MEAL_ICOS[type]||"utensils",14)} ${type}</button>`).join('')}
       </div>
 
       <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Template</div>
@@ -2543,7 +2553,7 @@ function pgHabits(){
       <div class="habit-hdr">
         <span class="habit-name">${h.name}</span>
         <div style="display:flex;align-items:center;gap:8px">
-          <span class="habit-streak">🔥 ${streak}d</span>
+          <span class="habit-streak">${ico('zap',12)} ${streak}d</span>
           <button onclick="deleteHabit('${h.id}')" style="background:none;border:none;color:var(--text4);cursor:pointer;font-size:14px;line-height:1" title="Delete">×</button>
         </div>
       </div>
@@ -2551,7 +2561,7 @@ function pgHabits(){
       <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
         <span class="habit-stat">${rate}% this month</span>
         <button onclick="toggleHabitDay('${h.id}')" class="btn btn-sm ${doneToday?'btn-primary':'btn-ghost'}" style="font-size:11px;padding:4px 10px">
-          ${doneToday?'✓ Done today':'Mark done'}
+          ${doneToday?'<svg data-feather="check" style="width:12px;height:12px;vertical-align:middle"></svg> Done':'Mark done'}
         </button>
       </div>
     </div>`;
@@ -2613,11 +2623,11 @@ function getCalEvents(){ try{ return JSON.parse(localStorage.getItem(CAL_EVENTS_
 function saveCalEvents(e){ localStorage.setItem(CAL_EVENTS_KEY, JSON.stringify(e)); }
 
 const CAL_EV_TYPES = {
-  birthday:   { label:'Birthday',    emoji:'🎂', color:'#f472b6' },
-  event:      { label:'Event',       emoji:'📅', color:'#b8f566' },
-  rdv:        { label:'Rendez-vous', emoji:'🤝', color:'#a78bfa' },
-  reminder:   { label:'Reminder',    emoji:'⏰', color:'#fbbf24' },
-  travel:     { label:'Travel',      emoji:'✈️',  color:'#60a5fa' },
+  birthday:   { label:'Birthday',    icon:'gift', color:'#f472b6' },
+  event:      { label:'Event',       icon:'calendar', color:'#b8f566' },
+  rdv:        { label:'Rendez-vous', icon:'users', color:'#a78bfa' },
+  reminder:   { label:'Reminder',    icon:'clock', color:'#fbbf24' },
+  travel:     { label:'Travel',      icon:'navigation', color:'#60a5fa' },
 };
 
 let _calEvModal = null; // 'new' | {id}
@@ -2642,6 +2652,7 @@ function openCalEvModal(day){
     });
     _calEvModalType='event';
     document.getElementById('cev-title').focus();
+    feather.replace({width:14,height:14});
   },10);
 }
 function closeCalEvModal(){
@@ -2722,14 +2733,14 @@ function _calBuildEvents(year, month){
     else d=new Date(raw+' '+year);
     if(isNaN(d)||d.getMonth()!==month||d.getFullYear()!==year) return;
     const day=d.getDate();
-    if(t.amt<0) add(day,'txn','💸 '+t.name.slice(0,18),'var(--red)', (Math.abs(t.amt)).toFixed(0)+'$');
-    else        add(day,'income','💰 '+t.name.slice(0,18),'var(--green)', '+'+t.amt.toFixed(0)+'$');
+    if(t.amt<0) add(day,'txn',ico('trending-down',12)+' '+t.name.slice(0,18),'var(--red)', (Math.abs(t.amt)).toFixed(0)+'$');
+    else        add(day,'income',ico('dollar-sign',12)+' '+t.name.slice(0,18),'var(--green)', '+'+t.amt.toFixed(0)+'$');
   });
   // Gym
   getGymLogs().forEach(l=>{
     const d=new Date(l.date+'T00:00');
     if(d.getMonth()!==month||d.getFullYear()!==year) return;
-    add(d.getDate(),'gym','💪 '+l.workout,'var(--accent)', l.duration||'');
+    add(d.getDate(),'gym',ico('zap',12)+' '+l.workout,'var(--accent)', l.duration||'');
   });
   // Meals (summarize per day: X meals, Y kcal)
   const mealsByDay={};
@@ -2742,14 +2753,14 @@ function _calBuildEvents(year, month){
     mealsByDay[day].items.push(m);
   });
   Object.entries(mealsByDay).forEach(([day,ms])=>{
-    add(+day,'meal','🍽️ '+ms.count+' meal'+(ms.count>1?'s':''),'var(--yellow)', ms.cal+'kcal · '+ms.protein+'g prot');
+    add(+day,'meal',ico('coffee',12)+' '+ms.count+' meal'+(ms.count>1?'s':''),'var(--yellow)', ms.cal+'kcal · '+ms.protein+'g prot');
   });
   // Habits — check each habit's log array for this month's dates
   getHabits().forEach(h=>{
     (h.log||[]).forEach(iso=>{
       const d=new Date(iso+'T00:00');
       if(d.getMonth()!==month||d.getFullYear()!==year) return;
-      add(d.getDate(),'habit','✅ '+h.name,'var(--green2,#4ade80)','');
+      add(d.getDate(),'habit',ico('check-circle',12)+' '+h.name,'var(--green2,#4ade80)','');
     });
   });
   // Custom events (birthdays, rdv, events, reminders, travel)
@@ -2762,7 +2773,7 @@ function _calBuildEvents(year, month){
       ? (d.getMonth()===month)
       : (d.getMonth()===month && d.getFullYear()===year);
     if(!matches) return;
-    add(d.getDate(), 'custom_'+e.type, tpl.emoji+' '+e.title, tpl.color, e.notes||'');
+    add(d.getDate(), 'custom_'+e.type, ico(tpl.icon||'calendar',12)+' '+e.title, tpl.color, e.notes||'');
   });
   return events;
 }
@@ -2795,7 +2806,7 @@ function _calBuildDayPanel(day, year, month){
   const txnBtn = txnCount>0 ? `
     <button onclick="goToTxnDate('${isoDate}')"
       style="width:100%;margin-top:10px;padding:8px 12px;background:var(--bg4);border:1px solid var(--border);border-radius:var(--r-sm);color:var(--text2);font-family:var(--font);font-size:12px;cursor:pointer;text-align:left;display:flex;align-items:center;justify-content:space-between">
-      <span>💸 Transactions le ${day} ${new Date(year,month,day).toLocaleString('en',{month:'short'})}</span>
+      <span style="display:inline-flex;align-items:center;gap:4px"><svg data-feather="trending-down" style="width:14px;height:14px"></svg> Transactions le ${day} ${new Date(year,month,day).toLocaleString('en',{month:'short'})}</span>
       <span style="color:var(--text3)">${txnCount} →</span>
     </button>` : '';
 
@@ -2866,7 +2877,7 @@ function pgCalendar(){
         ${Object.entries(CAL_EV_TYPES).map(([k,t])=>
           `<button class="cev-type-pill" data-type="${k}" onclick="cevPickType('${k}')"
             style="padding:5px 12px;border-radius:16px;font-size:12px;font-family:var(--font);cursor:pointer;transition:all .12s;background:${k==='event'?'var(--text)':'var(--bg4)'};border:1px solid ${k==='event'?'var(--text)':'var(--border)'};color:${k==='event'?'var(--bg)':'var(--text3)'}">
-            ${t.emoji} ${t.label}</button>`).join('')}
+            ${ico(t.icon,14)} ${t.label}</button>`).join('')}
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
         <div>
@@ -2917,7 +2928,7 @@ function pgCalendar(){
         <div style="display:flex;align-items:center;gap:5px"><div style="width:7px;height:7px;border-radius:50%;background:#4ade80"></div><span style="font-size:10px;color:var(--text3)">Habits</span></div>
         <div style="display:flex;align-items:center;gap:5px"><div style="width:7px;height:7px;border-radius:50%;background:var(--red)"></div><span style="font-size:10px;color:var(--text3)">Dépenses</span></div>
         ${Object.entries(CAL_EV_TYPES).map(([,t])=>`
-        <div style="display:flex;align-items:center;gap:5px"><div style="width:7px;height:7px;border-radius:50%;background:${t.color}"></div><span style="font-size:10px;color:var(--text3)">${t.emoji} ${t.label}</span></div>`).join('')}
+        <div style="display:flex;align-items:center;gap:5px"><div style="width:7px;height:7px;border-radius:50%;background:${t.color}"></div><span style="font-size:10px;color:var(--text3)">${ico(t.icon,12)} ${t.label}</span></div>`).join('')}
       </div>
     </div>
     <div style="display:flex;flex-direction:column;gap:12px">
@@ -3278,16 +3289,17 @@ function toggleNotifDropdown(){
       list.innerHTML='<div style="padding:16px;text-align:center;color:var(--text3);font-size:12px">No upcoming events this week</div>';
     } else {
       list.innerHTML=upcoming.map(e=>{
-        const t=CAL_EV_TYPES[e.type]||{label:'Event',emoji:'📋',color:'#71717a'};
+        const t=CAL_EV_TYPES[e.type]||{label:'Event',icon:'clipboard',color:'#71717a'};
         const d=new Date(e.date+'T00:00');
         const isToday=e.date===todayIso;
         return '<div style="display:flex;gap:10px;padding:10px 16px;border-bottom:1px solid var(--border2);align-items:flex-start">'+
-          '<span style="font-size:14px;flex-shrink:0">'+t.emoji+'</span>'+
+          '<span style="display:flex;align-items:center;justify-content:center;width:18px;height:18px;flex-shrink:0">'+ico(t.icon||'calendar',14)+'</span>'+
           '<div style="flex:1;min-width:0">'+
             '<div style="font-size:12px;font-weight:500;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+e.title+'</div>'+
             '<div style="font-size:11px;color:var(--text3)">'+(isToday?'Today':d.toLocaleDateString('en-CA',{month:'short',day:'numeric'}))+' · '+t.label+'</div>'+
           '</div></div>';
       }).join('');
+      feather.replace({width:14,height:14});
     }
   }
   dd.style.display='';
