@@ -355,6 +355,7 @@ button{font-family:var(--font)}
 /* ── FADE ── */
 .fade-in{animation:fi .18s ease}
 @keyframes fi{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
 
 /* ── CHART WRAPPERS ── */
 .chart-wrap{position:relative;width:100%}
@@ -3250,8 +3251,9 @@ function pgSettings(){
   ].join(''))}
   ${section('Data',[
     row('Export data','Download all your financial data','<button class="btn btn-ghost btn-sm"><svg data-feather="download"></svg> Export CSV</button>'),
-    row('Sync now','Force refresh all accounts','<button class="btn btn-ghost btn-sm"><svg data-feather="refresh-cw"></svg> Sync</button>'),
+    row('Sync now','Force refresh all accounts','<button class="btn btn-ghost btn-sm" onclick="doRefresh()"><svg data-feather="refresh-cw"></svg> Sync</button>'),
     row('Delete account','Permanently delete all data','<button class="btn btn-sm" style="background:var(--red-bg);color:var(--red);border:1px solid var(--red-br)">Delete</button>'),
+    row('Replay onboarding','Walk through the intro tour again','<button class="btn btn-ghost btn-sm" onclick="localStorage.removeItem(ONBOARDED_KEY);location.reload()"><svg data-feather="play-circle"></svg> Replay</button>'),
     row('Sign out','Log out of your account','<button class="btn btn-ghost btn-sm" onclick="doLogout()"><svg data-feather="log-out" style="width:14px;height:14px;vertical-align:middle;margin-right:4px"></svg> Sign out</button>'),
   ].join(''))}`;
 }
@@ -3575,33 +3577,133 @@ function closeNotifDropdown(e){
   if(dd&&!dd.contains(e.target)&&!e.target.closest('[title="Notifications"]')) dd.style.display='none';
 }
 
-// ═══════════════════════════ INIT ═══════════════════════════
-document.addEventListener('DOMContentLoaded',()=>{
-  feather.replace({width:14,height:14});
-  navigate('dashboard');
-  initNotifications();
-  updateBudgetBadge();
-  updateHeaderClock();
-  setInterval(updateHeaderClock,30000);
-  document.addEventListener('click',closeNotifDropdown);
-  // Load real user data from API
+// ═══════════════════════════ ONBOARDING ═══════════════════════════
+const ONBOARDED_KEY = 'vault_onboarded';
+const ONBOARD_STEPS = [
+  { title:'Welcome to Fiscit', sub:'Your finances, finally clear.', icon:'home', desc:'Track spending, investments, habits and more, all in one place.' },
+  { title:'Categories that match your life', sub:'Transactions auto-sort into 16 categories.', icon:'pie-chart', desc:'', cats:true },
+  { title:'Budget your way', sub:'Set monthly limits per category.', icon:'target', desc:'Get alerts when you are over. Drag to reorder what matters most.' },
+  { title:'Investments and Crypto', sub:'All your accounts in one view.', icon:'trending-up', desc:'Stocks, crypto, savings — track net worth over time.' },
+  { title:'Life tracking', sub:'Gym, eating, habits, calendar.', icon:'activity', desc:'Money is not just numbers. Fiscit tracks the life side too.' },
+  { title:'Connect your bank when ready', sub:'Plaid powers automatic sync.', icon:'link', desc:'You can always connect later in Settings. No rush.' },
+];
+
+function showOnboarding(){
+  let step = 0;
+  const overlay = document.createElement('div');
+  overlay.id = 'onboard-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.85);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);animation:fadeIn .25s ease';
+  overlay.innerHTML = `
+    <div id="onboard-card" style="background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:36px 32px 28px;max-width:400px;width:90%;text-align:center;position:relative">
+      <div id="onboard-icon" style="margin:0 auto 16px;width:56px;height:56px;border-radius:14px;background:var(--bg3);display:flex;align-items:center;justify-content:center"></div>
+      <h2 id="onboard-title" style="font-size:20px;font-weight:600;color:var(--text);margin:0 0 4px"></h2>
+      <p id="onboard-sub" style="font-size:13px;color:var(--text2);margin:0 0 16px"></p>
+      <p id="onboard-desc" style="font-size:13px;color:var(--text3);margin:0 0 20px;line-height:1.6"></p>
+      <div id="onboard-cats" style="display:none;text-align:left;margin:0 0 20px;max-height:220px;overflow-y:auto;scrollbar-width:thin"></div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:4px">
+        <div id="onboard-dots" style="display:flex;gap:6px"></div>
+        <div style="display:flex;gap:8px">
+          <button id="onboard-skip" style="background:none;border:none;color:var(--text4);font-size:13px;cursor:pointer;padding:8px 12px;font-family:var(--font)">Skip</button>
+          <button id="onboard-next" style="background:var(--green);color:#000;border:none;border-radius:8px;padding:8px 20px;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--font);transition:opacity .15s">Next</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  const nextBtn = document.getElementById('onboard-next');
+  const skipBtn = document.getElementById('onboard-skip');
+  const dots = document.getElementById('onboard-dots');
+
+  function render(){
+    const s = ONBOARD_STEPS[step];
+    document.getElementById('onboard-icon').innerHTML = ico(s.icon,28);
+    document.getElementById('onboard-title').textContent = s.title;
+    document.getElementById('onboard-sub').textContent = s.sub;
+    document.getElementById('onboard-desc').textContent = s.desc || '';
+    const catsEl = document.getElementById('onboard-cats');
+    if(s.cats){
+      catsEl.style.display='block';
+      catsEl.innerHTML = DEFAULT_CATS.map(c=>`
+        <div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border2)">
+          <span style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:8px;background:var(--bg3)">${ico(CAT_ICOS[c]||'folder',14)}</span>
+          <span style="font-size:13px;color:var(--text)">${c}</span>
+        </div>`).join('');
+    } else {
+      catsEl.style.display='none';
+    }
+    nextBtn.textContent = step === ONBOARD_STEPS.length - 1 ? 'Get started' : 'Next';
+    dots.innerHTML = ONBOARD_STEPS.map((_,i)=>`<div style="width:${i===step?'16px':'6px'};height:6px;border-radius:3px;background:${i===step?'var(--green)':'var(--bg3)'};transition:width .2s"></div>`).join('');
+  }
+
+  function finish(){
+    localStorage.setItem(ONBOARDED_KEY,'1');
+    const o = document.getElementById('onboard-overlay');
+    if(o){ o.style.opacity='0'; o.style.transition='opacity .2s'; setTimeout(()=>o.remove(),200); }
+    navigate('dashboard');
+    initNotifications();
+    updateBudgetBadge();
+    updateHeaderClock();
+    setInterval(updateHeaderClock,30000);
+    document.addEventListener('click',closeNotifDropdown);
+    loadRealData();
+  }
+
+  nextBtn.onclick = ()=>{ if(step < ONBOARD_STEPS.length - 1){ step++; render(); } else { finish(); } };
+  skipBtn.onclick = finish;
+  overlay.addEventListener('keydown',e=>{ if(e.key==='Enter') nextBtn.click(); if(e.key==='Escape') skipBtn.click(); });
+  render();
+  nextBtn.focus();
+}
+
+function loadRealData(){
   fetch('/api/data',{credentials:'include'}).then(r=>{
     if(r.status===401){window.location.href='/login';return null;}
     return r.json();
   }).then(d=>{
     if(!d)return;
-    // Merge API data into D
     Object.keys(d).forEach(k=>{if(d[k]!==undefined)D[k]=d[k];});
-    // Update sidebar user info
     const un=document.getElementById('user-name');
     const ue=document.getElementById('user-email');
     if(un&&D.userName)un.textContent=D.userName;
     if(ue&&D.userEmail)ue.textContent=D.userEmail;
-    // Re-render dashboard with real data
     navigate('dashboard');
     updateBudgetBadge();
     feather.replace({width:14,height:14});
   }).catch(()=>{});
+}
+
+// ═══════════════════════════ INIT ═══════════════════════════
+document.addEventListener('DOMContentLoaded',()=>{
+  feather.replace({width:14,height:14});
+  // Show onboarding for first-time users, dashboard for returning users
+  if(!localStorage.getItem(ONBOARDED_KEY)){
+    showOnboarding();
+  } else {
+    navigate('dashboard');
+    initNotifications();
+    updateBudgetBadge();
+    updateHeaderClock();
+    setInterval(updateHeaderClock,30000);
+    document.addEventListener('click',closeNotifDropdown);
+    // Load real user data from API
+    fetch('/api/data',{credentials:'include'}).then(r=>{
+      if(r.status===401){window.location.href='/login';return null;}
+      return r.json();
+    }).then(d=>{
+      if(!d)return;
+      // Merge API data into D
+      Object.keys(d).forEach(k=>{if(d[k]!==undefined)D[k]=d[k];});
+      // Update sidebar user info
+      const un=document.getElementById('user-name');
+      const ue=document.getElementById('user-email');
+      if(un&&D.userName)un.textContent=D.userName;
+      if(ue&&D.userEmail)ue.textContent=D.userEmail;
+      // Re-render dashboard with real data
+      navigate('dashboard');
+      updateBudgetBadge();
+      feather.replace({width:14,height:14});
+    }).catch(()=>{});
+  }
 });
 </script>
 </body>
