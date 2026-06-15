@@ -874,7 +874,7 @@ function renderCatsList(){
   const cats = getCats();
   el.innerHTML = cats.map(c=>`
     <div style="display:inline-flex;align-items:center;gap:5px;background:var(--bg4);border:1px solid var(--border);border-radius:20px;padding:3px 10px 3px 8px;margin:3px">
-      <span style="font-size:12px;color:var(--text2)">${catIco(c)} ${c}</span>
+      <span style="font-size:12px;color:var(--text2)">${ico(catIco(c),12)} ${c}</span>
       ${DEFAULT_CATS.includes(c)?'':'<button onclick="deleteCat(\''+c+'\')" style="background:none;border:none;color:var(--text4);cursor:pointer;font-size:13px;line-height:1;padding:0 0 0 4px" title="Delete">×</button>'}
     </div>`).join('');
 }
@@ -937,7 +937,7 @@ function renderRulesList(){
         <span style="color:var(--text3)">If <strong style="color:var(--text)">${r.field}</strong> ${r.operator.replace('_',' ')} </span>
         <span style="color:var(--blue)">"${r.value}"</span>
         <span style="color:var(--text3)"> → </span>
-        <span class="badge b-gray" style="font-size:10px">${catIco(r.cat)} ${r.cat}</span>
+        <span class="badge b-gray" style="font-size:10px">${ico(catIco(r.cat),12)} ${r.cat}</span>
       </div>
       <button onclick="deleteRule('${r.id}')" style="background:none;border:none;color:var(--text4);cursor:pointer;font-size:16px;line-height:1;padding:2px 6px" title="Delete rule">×</button>
     </div>`).join('');
@@ -1039,7 +1039,7 @@ const CAT_ICOS = {'Épicerie':'shopping-cart','Bouffe/Resto':'coffee','Gaz':'dro
 
 // Categories excluded from spending/budget calculations
 const EXCLUDED_CATS = new Set(['P2P/Virement perso']);
-function catIco(cat){ return ico(CAT_ICOS[cat]||'folder',14); }
+function catIco(cat){ return CAT_ICOS[cat]||'folder'; }
 
 let _filteredTxns = [];
 
@@ -2367,7 +2367,7 @@ function pgEating(){
 
   const rows = todayM.map(m=>`
     <div class="meal-row">
-      <div class="meal-ico">${m.ico}</div>
+      <div class="meal-ico">${ico(m.ico,16)}</div>
       <div style="flex:1">
         <div style="font-size:13px;font-weight:500;color:var(--text)">${m.meal}</div>
         <div style="font-size:11px;color:var(--text3)">${m.foods||'—'}</div>
