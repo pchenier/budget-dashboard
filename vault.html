@@ -1057,7 +1057,7 @@ function renderTxnList(txns){
         <div class="txn-sub">${t.merchant||t.name}</div>
       </div>
       <div style="text-align:center;width:100px;flex-shrink:0">
-        <span class="badge ${excluded?'b-gray':'b-gray'}" style="font-size:10px;${excluded?'opacity:.6':''}">${t.cat}</span>
+        <span class="badge ${excluded?'b-gray':'b-gray'}" style="font-size:10px;${excluded?'opacity:.6':''}">${ico(catIco(t.cat),10)} ${t.cat}</span>
         ${excluded?'<span style="font-size:9px;color:var(--text4);display:block;margin-top:2px">excluded</span>':''}
       </div>
       <div style="width:80px;font-size:12px;color:var(--text3);flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.acc}</div>
