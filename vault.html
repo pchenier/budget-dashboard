@@ -3265,7 +3265,7 @@ function pgSettings(){
 // ═══════════════════════════ LOGOUT ═══════════════════════════
 function doLogout(){
   fetch('/api/auth/logout',{method:'POST',credentials:'include'}).then(()=>{
-    window.location.href='/login';
+    window.location.href='https://fiscit.com/login';
   }).catch(()=>{
     window.location.href='/api/auth/logout';
   });
@@ -3861,7 +3861,7 @@ function loadRealData(){
   if(lsEmail && !D.userEmail) D.userEmail = lsEmail;
 
   fetch('/api/data',{credentials:'include'}).then(r=>{
-    if(r.status===401){window.location.href='/login';return null;}
+    if(r.status===401){window.location.href='https://fiscit.com/login';return null;}
     return r.json();
   }).then(d=>{
     if(!d)return;
@@ -3898,7 +3898,7 @@ document.addEventListener('DOMContentLoaded',()=>{
     document.addEventListener('click',closeNotifDropdown);
     // Load real user data from API
     fetch('/api/data',{credentials:'include'}).then(r=>{
-      if(r.status===401){window.location.href='/login';return null;}
+      if(r.status===401){window.location.href='https://fiscit.com/login';return null;}
       return r.json();
     }).then(d=>{
       if(!d)return;

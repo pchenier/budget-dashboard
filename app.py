@@ -493,11 +493,11 @@ def index():
 
 @app.route('/login')
 def login_redirect():
-    return redirect(url_for('index'))
+    return redirect('https://fiscit.com/login')
 
 @app.route('/register')
 def register_redirect():
-    return redirect(url_for('index'))
+    return redirect('https://fiscit.com/register')
 
 
 @app.route('/setup', methods=['GET', 'POST'])
