@@ -522,7 +522,8 @@ const D = {
   bills: [],
   userEmail: '',
   userName: '',
-  connections: {plaid:false,wise:false,phantom:false,wealthsimple:false,kraken:false},
+  connections: {plaid:false,wise:false,crypto:false},
+  wallets: [],
 };
 
 // ═══════════════════════════ HELPERS ═══════════════════════════
@@ -826,24 +827,24 @@ function pgAccounts(){
     <div class="metric">
       <div class="metric-label">Investments</div>
       <div class="metric-val">${fmt(D.investments.reduce((s,i)=>s+(i.val||0),0),0)||'—'}</div>
-      <div class="metric-delta flat">Wealthsimple / Questrade</div>
+      <div class="metric-delta flat">Portfolio value</div>
     </div>
     <div class="metric">
       <div class="metric-label">Connected</div>
-      <div class="metric-val">6</div>
-      <div class="metric-delta flat">All syncing</div>
+      <div class="metric-val">${D.accounts?D.accounts.length:0}</div>
+      <div class="metric-delta flat">Accounts synced</div>
     </div>
   </div>
   <div class="sec-hdr mb16">
     <span class="sec-title">All Accounts</span>
-    <button class="btn btn-primary btn-sm" onclick="openPlaidLink()"><svg data-feather="plus"></svg> Connect Account</button>
+    <button class="btn btn-primary btn-sm" onclick="showAddAccount()"><svg data-feather="plus"></svg> Add Account</button>
   </div>
   <div class="g3 mb16">${cards}</div>
   <div class="g3">
-    <div class="connect-card" onclick="openPlaidLink()" style="cursor:pointer">
+    <div class="connect-card" onclick="showAddAccount()" style="cursor:pointer">
       <svg data-feather="plus-circle" style="width:22px;height:22px;opacity:.2"></svg>
-      <span>Connect a new account</span>
-      <span style="font-size:11px;color:var(--text4)">Plaid · 12,000+ institutions</span>
+      <span>Add a new account</span>
+      <span style="font-size:11px;color:var(--text4)">Bank, crypto, or investment</span>
     </div>
   </div>`;
 }
@@ -1772,7 +1773,7 @@ function pgInsights(){
     {ico:'refresh-cw',bg:'var(--bg3)',title:'Subscription cost: $89/month across 2 services',body:'Netflix ($22.99) and Spotify ($15.99) are your main subscriptions. Your subscription budget of $100 is at 89% usage.',type:'neutral'},
     {ico:'zap',bg:'var(--bg3)',title:'Hydro-Québec was $112 — slightly above average',body:'Your electricity bill was $8 above your 3-month average. This may be due to heating. Your budget is $130 so you are still within range.',type:'neutral'},
     {ico:'zap',bg:'var(--green-bg)',title:'Gym consistency is strong this month',body:'You have worked out 18 times in the last 30 days. Your current streak is 8 days. Keep it up.',type:'positive'},
-    {ico:'bar-chart-2',bg:'var(--blue-bg)',title:'Connect your investment accounts',body:'Link Wealthsimple or Questrade to see your portfolio performance here.',type:'neutral'},
+    {ico:'bar-chart-2',bg:'var(--blue-bg)',title:'Connect your investment accounts',body:'Link Wealthsimple, Questrade, or other platforms to see your portfolio performance.',type:'neutral'},
   ];
 
   const cards=insights.map(i=>`
@@ -1815,7 +1816,7 @@ function pgInvestments(){
     <div class="card" style="text-align:center;padding:48px 24px">
       <svg data-feather="bar-chart-2" style="width:32px;height:32px;opacity:.15;margin-bottom:16px"></svg>
       <div style="font-size:14px;font-weight:500;color:var(--text2);margin-bottom:8px">No investment data</div>
-      <div style="font-size:12px;color:var(--text4)">Connect Wealthsimple or Questrade to see your portfolio</div>
+      <div style="font-size:12px;color:var(--text4)">Connect an investment platform to see your portfolio</div>
     </div>`;
   }
 
@@ -1875,8 +1876,8 @@ function pgCrypto(){
   <div class="card" style="text-align:center;padding:48px 24px">
     <svg data-feather="hexagon" style="width:40px;height:40px;margin:0 auto 12px;color:var(--text3)"></svg>
     <h3 style="color:var(--text);margin-bottom:6px">No crypto data yet</h3>
-    <p style="color:var(--text3);font-size:13px;max-width:320px;margin:0 auto">Connect a crypto exchange (Coinbase, Binance, Kraken) or add wallet addresses in <a href="/setup" style="color:var(--accent)">Settings</a> to see your holdings here.</p>
-    <div style="margin-top:16px"><span class="badge b-yellow">Demo mode</span> <span style="font-size:12px;color:var(--text3)">Stats will appear once a wallet is connected</span></div>
+    <p style="color:var(--text3);font-size:13px;max-width:320px;margin:0 auto">Add wallet addresses for Solana, Ethereum, or Bitcoin to see your crypto holdings here.</p>
+    <div style="margin-top:16px"><button class="btn btn-primary btn-sm" onclick="showAddAccount('crypto')"><svg data-feather="plus"></svg> Add Wallet</button></div>
   </div>`;
   }
   const total=D.crypto.reduce((s,c)=>s+c.val,0);
@@ -1927,7 +1928,8 @@ function pgCrypto(){
     <div class="empty" style="padding:24px">
       <svg data-feather="hexagon" style="width:28px;height:28px"></svg>
       <h3>No manual holdings</h3>
-      <p>Add wallets or exchange accounts manually</p>
+      <p>Add wallet addresses to track your crypto</p>
+      <button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="showAddAccount('crypto')"><svg data-feather="plus"></svg> Add Wallet</button>
     </div>
   </div>`;
 }
@@ -3239,9 +3241,7 @@ function pgSettings(){
   ${section('Connections',[
     connRow('Plaid','Bank & credit card data','plaid','/setup'),
     connRow('Wise','International transfers','wise','/setup'),
-    connRow('Wealthsimple','Investment accounts','wealthsimple','/setup'),
-    connRow('Kraken','Crypto exchange','kraken','/setup'),
-    connRow('Phantom Wallet','Solana wallet','phantom','/setup'),
+    connRow('Crypto Wallets','Solana, Ethereum, Bitcoin wallets','crypto','javascript:void(0)'),
   ].join(''))}
   ${section('Notifications',[
     row('Budget alerts','Notify when over budget',tog(true)),
@@ -3469,6 +3469,106 @@ async function initNotifications() {
   setInterval(checkCalendarNotifications, 60_000);
 }
 
+// ═══════════════════════════ ADD ACCOUNT ═══════════════════════════
+function showAddAccount(preselect){
+  const overlay = document.createElement('div');
+  overlay.id = 'add-acc-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.85);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);animation:fadeIn .25s ease';
+  overlay.innerHTML = `
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:32px;max-width:400px;width:90%;text-align:center">
+      <h2 style="font-size:18px;font-weight:600;color:var(--text);margin:0 0 6px">Add Account</h2>
+      <p style="font-size:13px;color:var(--text3);margin:0 0 20px">What type of account do you want to add?</p>
+      <div style="display:flex;flex-direction:column;gap:10px" id="add-acc-options">
+        <button onclick="addAccBank()" style="display:flex;align-items:center;gap:12px;background:var(--bg3);border:1px solid var(--border);border-radius:12px;padding:14px 16px;cursor:pointer;text-align:left;width:100%;font-family:var(--font)">
+          <span style="width:36px;height:36px;border-radius:10px;background:var(--green-bg);display:flex;align-items:center;justify-content:center;flex-shrink:0">${ico('credit-card',18)}</span>
+          <div><div style="font-size:14px;font-weight:500;color:var(--text)">Bank Account</div><div style="font-size:11px;color:var(--text3)">Connect via Plaid, 12,000+ banks</div></div>
+        </button>
+        <button onclick="addAccCrypto()" style="display:flex;align-items:center;gap:12px;background:var(--bg3);border:1px solid var(--border);border-radius:12px;padding:14px 16px;cursor:pointer;text-align:left;width:100%;font-family:var(--font)">
+          <span style="width:36px;height:36px;border-radius:10px;background:rgba(245,158,11,.15);display:flex;align-items:center;justify-content:center;flex-shrink:0">${ico('bitcoin',18)}</span>
+          <div><div style="font-size:14px;font-weight:500;color:var(--text)">Crypto Wallet</div><div style="font-size:11px;color:var(--text3)">Solana, Ethereum, Bitcoin addresses</div></div>
+        </button>
+        <button onclick="location.href='/setup'" style="display:flex;align-items:center;gap:12px;background:var(--bg3);border:1px solid var(--border);border-radius:12px;padding:14px 16px;cursor:pointer;text-align:left;width:100%;font-family:var(--font)">
+          <span style="width:36px;height:36px;border-radius:10px;background:rgba(59,130,246,.15);display:flex;align-items:center;justify-content:center;flex-shrink:0">${ico('bar-chart-2',18)}</span>
+          <div><div style="font-size:14px;font-weight:500;color:var(--text)">Investment / Other</div><div style="font-size:11px;color:var(--text3)">Wise, Wealthsimple, and more</div></div>
+        </button>
+      </div>
+      <button onclick="document.getElementById('add-acc-overlay').remove()" style="background:none;border:none;color:var(--text4);font-size:13px;cursor:pointer;padding:12px;font-family:var(--font);margin-top:16px">Cancel</button>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.remove();});
+  feather.replace({width:14,height:14});
+  // Auto-select crypto if preselect
+  if(preselect==='crypto') addAccCrypto();
+}
+
+function addAccBank(){
+  const o = document.getElementById('add-acc-overlay');
+  if(o) o.remove();
+  openPlaidLink();
+}
+
+function addAccCrypto(){
+  const o = document.getElementById('add-acc-overlay');
+  if(o) o.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'crypto-wallet-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.85);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);animation:fadeIn .25s ease';
+  overlay.innerHTML = `
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:32px;max-width:420px;width:90%;text-align:center">
+      <h2 style="font-size:18px;font-weight:600;color:var(--text);margin:0 0 6px">Add Crypto Wallet</h2>
+      <p style="font-size:13px;color:var(--text3);margin:0 0 20px">Enter your wallet address. Balances will sync automatically.</p>
+      <div style="text-align:left;margin-bottom:14px">
+        <label style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px">Blockchain</label>
+        <select id="cw-chain" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-family:var(--font);font-size:13px;outline:none">
+          <option value="solana">Solana</option>
+          <option value="ethereum">Ethereum</option>
+          <option value="bitcoin">Bitcoin</option>
+        </select>
+      </div>
+      <div style="text-align:left;margin-bottom:14px">
+        <label style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px">Wallet Address</label>
+        <input id="cw-addr" placeholder="Enter your wallet address" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-family:var(--font);font-size:13px;outline:none">
+      </div>
+      <div style="text-align:left;margin-bottom:14px">
+        <label style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px">Label <span style="color:var(--text4)">(optional)</span></label>
+        <input id="cw-label" placeholder="e.g. My Phantom Wallet" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-family:var(--font);font-size:13px;outline:none">
+      </div>
+      <div id="cw-msg" style="font-size:12px;margin-bottom:10px;min-height:16px"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button onclick="document.getElementById('crypto-wallet-overlay').remove()" style="background:none;border:1px solid var(--border);color:var(--text3);border-radius:8px;padding:8px 16px;font-size:13px;cursor:pointer;font-family:var(--font)">Cancel</button>
+        <button id="cw-submit" onclick="submitWallet()" style="background:var(--green);color:#000;border:none;border-radius:8px;padding:8px 20px;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--font)">Add Wallet</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.remove();});
+  document.getElementById('cw-addr').focus();
+}
+
+async function submitWallet(){
+  const chain = document.getElementById('cw-chain').value;
+  const address = document.getElementById('cw-addr').value.trim();
+  const label = document.getElementById('cw-label').value.trim();
+  const msg = document.getElementById('cw-msg');
+  const btn = document.getElementById('cw-submit');
+  if(!address){ msg.style.color='var(--red)'; msg.textContent='Please enter a wallet address.'; return; }
+  btn.disabled = true; btn.textContent = 'Adding...';
+  try {
+    const res = await fetch('/api/wallets', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({chain, address, label: label||chain.charAt(0).toUpperCase()+chain.slice(1)+' Wallet'})});
+    const data = await res.json();
+    if(data.ok){
+      msg.style.color='var(--green)'; msg.textContent='Wallet added! Refreshing...';
+      setTimeout(()=>location.reload(), 1500);
+    } else {
+      msg.style.color='var(--red)'; msg.textContent=data.error||'Failed to add wallet.';
+      btn.disabled=false; btn.textContent='Add Wallet';
+    }
+  } catch(e){
+    msg.style.color='var(--red)'; msg.textContent='Network error.';
+    btn.disabled=false; btn.textContent='Add Wallet';
+  }
+}
+
 // ═══════════════════════════ PLAID LINK ═══════════════════════════
 async function openPlaidLink() {
   try {
@@ -3583,7 +3683,7 @@ function closeNotifDropdown(e){
 
 // ═══════════════════════════ ONBOARDING ═══════════════════════════
 const ONBOARDED_KEY = 'vault_onboarded';
-const CONN_ICOS = {plaid:'credit-card',wise:'globe',phantom:'hexagon',wealthsimple:'bar-chart',kraken:'bitcoin'};
+const CONN_ICOS = {plaid:'credit-card',wise:'globe',crypto:'bitcoin'};
 
 function showOnboarding(){
   let step = 0;
@@ -3680,12 +3780,14 @@ function showOnboarding(){
     else if(s.id==='crypto'){
       iconEl.innerHTML = ico('bitcoin',28);
       titleEl.textContent = 'Track your crypto';
-      subEl.textContent = 'Connect wallets and exchanges.';
-      const isOn = D.connections && D.connections.phantom;
+      subEl.textContent = 'Add wallet addresses to track balances.';
+      const wallets = D.wallets || [];
+      const isOn = wallets.length > 0;
       bodyEl.innerHTML = isOn
-        ? '<p style="color:var(--green);font-size:13px;text-align:center;padding:12px">Phantom Wallet is already connected.</p>'
-        : connCard('Phantom Wallet','Solana wallet tracking.', 'phantom', ['Open Settings and go to Setup','Paste your Phantom wallet address','Balances sync automatically']);
-      bodyEl.innerHTML += `<p style="font-size:12px;color:var(--text4);margin-top:12px;text-align:center">Kraken and other exchanges coming soon.</p>`;
+        ? `<p style="color:var(--green);font-size:13px;text-align:center;padding:12px">${wallets.length} wallet${wallets.length>1?'s':''} connected.</p>`
+          + wallets.map(w=>`<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border2)"><span class="badge b-gray" style="font-size:10px">${w.chain}</span><span style="font-size:12px;color:var(--text2)">${w.address.slice(0,8)}...${w.address.slice(-6)}</span>${w.label?`<span style="font-size:11px;color:var(--text4)">(${w.label})</span>`:''}</div>`).join('')
+        : connCard('Crypto Wallets','Solana, Ethereum, Bitcoin wallet addresses.', 'crypto', ['Open Settings and go to Setup','Add your wallet address for any chain','Balances sync automatically on refresh']);
+      bodyEl.innerHTML += `<p style="font-size:12px;color:var(--text4);margin-top:12px;text-align:center">Supports Solana, Ethereum, and Bitcoin wallets.</p>`;
       nextBtn.textContent = 'Next';
       skipBtn.style.display = '';
     }
@@ -3693,8 +3795,7 @@ function showOnboarding(){
       iconEl.innerHTML = ico('globe',28);
       titleEl.textContent = 'Other connections';
       subEl.textContent = 'International and investment accounts.';
-      bodyEl.innerHTML = connCard('Wise','Multi-currency international transfers.', 'wise', ['Go to Setup page','Enter your Wise API token and profile ID','Balances sync automatically'])
-        + connCard('Wealthsimple','Canadian investment and savings accounts.', 'wealthsimple', ['Coming soon','Will support RRSP, TFSA, and more']);
+      bodyEl.innerHTML = connCard('Wise','Multi-currency international transfers.', 'wise', ['Go to Setup page','Enter your Wise API token and profile ID','Balances sync automatically']);
       nextBtn.textContent = 'Next';
       skipBtn.style.display = '';
     }

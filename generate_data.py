@@ -4,7 +4,7 @@ generate_data.py — Pull Plaid + Wise + Phantom → return clean JSON data dict
 Used by app.py to feed real data into Vault UI.
 """
 
-import os, sys, json
+import os, sys, json, requests
 from datetime import datetime, date
 from collections import defaultdict
 from pathlib import Path
@@ -56,13 +56,20 @@ def pull_all(config):
                         else "https://sandbox.plaid.com")
     gen.WISE_TOKEN   = config.get("wise_token", "")
     gen.WISE_PROFILE = int(config.get("wise_profile", 0) or 0)
-    gen.PHANTOM_ADDR = config.get("phantom_wallet", "")
+    gen.PHANTOM_ADDR = ""  # Legacy: no longer used; wallets handled below
     gen.USD_TO_CAD   = float(config.get("usd_to_cad", 1.38) or 1.38)
     gen.START_DATE   = config.get("start_date", "2025-01-01") or "2025-01-01"
     gen.END_DATE     = date.today().isoformat()
 
     USD_TO_CAD = gen.USD_TO_CAD
     status_cb = config.get("_status_cb") or (lambda msg: None)
+
+    # ── Crypto wallets (multi-chain) ─────────────────────────────────────────
+    wallets = config.get("wallets", [])
+    # Backwards compat: if phantom_wallet exists and wallets empty, treat as solana
+    if not wallets and config.get("phantom_wallet", "").strip():
+        wallets = [{"chain": "solana", "address": config["phantom_wallet"].strip(), "label": "Phantom"}]
+        config["wallets"] = wallets
 
     # ── Load previous Plaid accounts BEFORE any API calls (fallback if Plaid fails) ──
     _prev_plaid_accounts = {}
@@ -100,9 +107,70 @@ def pull_all(config):
     status_cb("Wise: transactions...")
     wise_txns = gen.get_wise_transactions(wise_balance_ids)
 
-    # ── Phantom / Solana ───────────────────────────────────────────────────────
-    status_cb("Solana: balance...")
-    sol_bal, sol_usd = gen.get_phantom_balance()
+    # ── Crypto wallets (multi-chain) ──────────────────────────────────────────
+    crypto_balances = []  # list of (chain, address, label, native_bal, native_sym, usd_val)
+    for w in wallets:
+        chain   = w.get("chain", "solana").lower()
+        address = w.get("address", "").strip()
+        label   = w.get("label", chain.title())
+        if not address:
+            continue
+        try:
+            if chain == "solana":
+                status_cb(f"Crypto: {label} (SOL)...")
+                r = requests.post("https://api.mainnet-beta.solana.com", json={
+                    "jsonrpc": "2.0", "id": 1,
+                    "method": "getBalance",
+                    "params": [address],
+                }, timeout=10)
+                r.raise_for_status()
+                lamports = r.json().get("result", {}).get("value", 0)
+                native_bal = lamports / 1e9
+                # Get SOL price
+                p = requests.get(
+                    "https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd",
+                    timeout=10,
+                )
+                price = p.json().get("solana", {}).get("usd", 0) if p.ok else 0
+                usd_val = native_bal * price
+                crypto_balances.append(("solana", address, label, native_bal, "SOL", usd_val))
+
+            elif chain == "ethereum":
+                status_cb(f"Crypto: {label} (ETH)...")
+                r = requests.get(
+                    f"https://api.etherscan.io/api?module=account&action=balance&address={address}&tag=latest",
+                    timeout=10,
+                )
+                r.raise_for_status()
+                wei = int(r.json().get("result", "0") or "0")
+                native_bal = wei / 1e18
+                p = requests.get(
+                    "https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd",
+                    timeout=10,
+                )
+                price = p.json().get("ethereum", {}).get("usd", 0) if p.ok else 0
+                usd_val = native_bal * price
+                crypto_balances.append(("ethereum", address, label, native_bal, "ETH", usd_val))
+
+            elif chain == "bitcoin":
+                status_cb(f"Crypto: {label} (BTC)...")
+                r = requests.get(
+                    f"https://blockchain.info/balance?active={address}",
+                    timeout=10,
+                )
+                r.raise_for_status()
+                satoshi = r.json().get(address, {}).get("final_balance", 0)
+                native_bal = satoshi / 1e8
+                p = requests.get(
+                    "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd",
+                    timeout=10,
+                )
+                price = p.json().get("bitcoin", {}).get("usd", 0) if p.ok else 0
+                usd_val = native_bal * price
+                crypto_balances.append(("bitcoin", address, label, native_bal, "BTC", usd_val))
+
+        except Exception as e:
+            print(f"  Crypto {label} ({chain}): error → {e}")
 
     # ── Plaid transactions ────────────────────────────────────────────────────
     status_cb("Plaid: transactions...")
@@ -151,17 +219,18 @@ def pull_all(config):
             "sync":    "just now",
         })
 
-    # Add Phantom / Solana
-    if sol_bal and sol_bal > 0:
-        accounts.append({
-            "id":      "phantom_sol",
-            "name":    "Phantom Wallet",
-            "inst":    "Solana",
-            "balance": round(sol_usd * USD_TO_CAD, 2),
-            "type":    "Crypto",
-            "subtype": f"{sol_bal:.4f} SOL",
-            "sync":    "just now",
-        })
+    # Add crypto wallet accounts
+    for i, (chain, address, label, native_bal, native_sym, usd_val) in enumerate(crypto_balances):
+        if native_bal and native_bal > 0:
+            accounts.append({
+                "id":      f"crypto_{chain}_{i}",
+                "name":    label,
+                "inst":    chain.title(),
+                "balance": round(usd_val * USD_TO_CAD, 2),
+                "type":    "Crypto",
+                "subtype": f"{native_bal:.6f} {native_sym}",
+                "sync":    "just now",
+            })
 
     # ─────────────────────────────────────────────────────────────────────────
     # Net worth

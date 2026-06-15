@@ -40,6 +40,16 @@ def load_config():
         if CONFIG_FILE.exists():
             cfg = json.loads(CONFIG_FILE.read_text())
             if cfg.get("plaid_client") and cfg.get("plaid_secret") and cfg.get("plaid_token"):
+                # ── Backwards compat: migrate phantom_wallet → wallets ──
+                if cfg.get("phantom_wallet") and not cfg.get("wallets"):
+                    addr = cfg["phantom_wallet"].strip()
+                    if addr:
+                        cfg["wallets"] = [{"chain": "solana", "address": addr, "label": "Phantom"}]
+                    else:
+                        cfg["wallets"] = []
+                    save_config(cfg)
+                elif "wallets" not in cfg:
+                    cfg["wallets"] = []
                 return cfg
     except Exception:
         pass
@@ -233,10 +243,13 @@ def _build_real_data_js(data):
     connections = {
         'plaid': bool(config.get('plaid_client') and config.get('plaid_secret') and config.get('plaid_token')),
         'wise': bool(config.get('wise_token')),
-        'phantom': bool(config.get('phantom_wallet')),
+        'crypto': bool(config.get('wallets')),
         'wealthsimple': False,
         'kraken': False,
     }
+
+    # Wallets list for frontend
+    wallets_list = config.get('wallets', [])
 
     # Derive user name from first account institution, or config
     user_name = config.get('user_name', '')
@@ -271,6 +284,9 @@ def _build_real_data_js(data):
 
   // Connection status (derived from config)
   connections: {json.dumps(connections)},
+
+  // Wallets list (for frontend wallet management)
+  wallets: {json.dumps(wallets_list)},
 
   // Life data (manual / future integrations)
   investments: [],
@@ -312,6 +328,12 @@ input::placeholder{color:#3f3f46}
 .btn:disabled{opacity:.4;cursor:not-allowed}
 .error{background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.2);border-radius:8px;padding:10px 14px;font-size:13px;color:#f87171;margin-bottom:20px}
 a{color:#60a5fa}
+.wallet-item{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.04);font-size:13px}
+.wallet-chain{background:#1a1a2e;color:#f59e0b;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em}
+.wallet-addr{color:#a1a1aa;font-family:monospace;font-size:12px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wallet-label{color:#d4d4d8;font-size:12px}
+.wallet-remove{background:none;border:none;color:#ef4444;cursor:pointer;font-size:14px;padding:2px 6px;border-radius:4px}
+.wallet-remove:hover{background:rgba(239,68,68,.1)}
 </style>
 </head>
 <body>
@@ -354,6 +376,30 @@ a{color:#60a5fa}
     </div>
 
     <div class="section">
+      <div class="sec-label">Crypto Wallets <span class="optional">Optional</span></div>
+      <div id="wallet-list">
+        {% for w in vals.wallets or [] %}
+        <div class="wallet-item" data-idx="{{ loop.index0 }}">
+          <span class="wallet-chain">{{ w.chain }}</span>
+          <span class="wallet-addr" title="{{ w.address }}">{{ w.address[:8] }}...{{ w.address[-4:] }}</span>
+          <span class="wallet-label">{{ w.label }}</span>
+          <button type="button" class="wallet-remove" onclick="removeWallet({{ loop.index0 }})">✕</button>
+        </div>
+        {% endfor %}
+      </div>
+      <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+        <select id="wallet-chain" style="width:30%">
+          <option value="solana">Solana</option>
+          <option value="ethereum">Ethereum</option>
+          <option value="bitcoin">Bitcoin</option>
+        </select>
+        <input id="wallet-address" placeholder="Wallet address" style="width:45%">
+        <input id="wallet-label" placeholder="Label" style="width:25%">
+      </div>
+      <button type="button" class="btn" style="margin-top:8px;padding:8px;font-size:12px" onclick="addWallet()">+ Add Wallet</button>
+    </div>
+
+    <div class="section">
       <div class="sec-label">Options</div>
       <label>USD → CAD rate</label>
       <input name="usd_to_cad" placeholder="1.38" value="{{ vals.usd_to_cad or '1.38' }}">
@@ -366,6 +412,25 @@ a{color:#60a5fa}
       const btn=document.getElementById('submit-btn');
       btn.disabled=true;btn.textContent='Connecting...';
     });
+    function addWallet(){
+      const chain=document.getElementById('wallet-chain').value;
+      const address=document.getElementById('wallet-address').value.trim();
+      const label=document.getElementById('wallet-label').value.trim();
+      if(!address){alert('Please enter a wallet address');return;}
+      fetch('/api/wallets',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chain,address,label})})
+        .then(r=>r.json()).then(d=>{
+          if(d.ok){location.reload();}
+          else{alert(d.error||'Failed to add wallet');}
+        }).catch(e=>alert('Error: '+e));
+    }
+    function removeWallet(idx){
+      if(!confirm('Remove this wallet?'))return;
+      fetch('/api/wallets/'+idx,{method:'DELETE'})
+        .then(r=>r.json()).then(d=>{
+          if(d.ok){location.reload();}
+          else{alert(d.error||'Failed to remove wallet');}
+        }).catch(e=>alert('Error: '+e));
+    }
   </script>
 </div>
 </body>
@@ -435,6 +500,7 @@ def setup():
     vals  = saved
 
     if request.method == 'POST':
+        saved = load_config() or {}
         config = {
             'plaid_client':   request.form.get('plaid_client', '').strip(),
             'plaid_secret':   request.form.get('plaid_secret', '').strip(),
@@ -443,8 +509,8 @@ def setup():
             'start_date':     request.form.get('start_date', '2025-01-01').strip(),
             'wise_token':     request.form.get('wise_token', '').strip(),
             'wise_profile':   request.form.get('wise_profile', '').strip(),
-            'phantom_wallet': request.form.get('phantom_wallet', '').strip(),
             'usd_to_cad':     request.form.get('usd_to_cad', '1.38').strip(),
+            'wallets':        saved.get('wallets', []),
         }
         vals = config
 
@@ -495,6 +561,56 @@ def api_refresh():
     t = threading.Thread(target=fetch_data, args=(config,), daemon=True)
     t.start()
     return jsonify({'ok': True, 'msg': 'Refresh started'})
+
+
+@app.route('/api/wallets', methods=['GET'])
+def api_list_wallets():
+    """List all configured wallets."""
+    config = load_config()
+    if not config:
+        return jsonify({'ok': False, 'error': 'No config'}), 400
+    return jsonify({'ok': True, 'wallets': config.get('wallets', [])})
+
+
+@app.route('/api/wallets', methods=['POST'])
+def api_add_wallet():
+    """Add a wallet to config and trigger data refresh."""
+    config = load_config()
+    if not config:
+        return jsonify({'ok': False, 'error': 'No config'}), 400
+    body = request.get_json() or {}
+    chain   = (body.get('chain') or '').strip().lower()
+    address = (body.get('address') or '').strip()
+    label   = (body.get('label') or '').strip()
+    if chain not in ('solana', 'ethereum', 'bitcoin'):
+        return jsonify({'ok': False, 'error': 'Invalid chain. Use solana, ethereum, or bitcoin.'}), 400
+    if not address:
+        return jsonify({'ok': False, 'error': 'Address is required.'}), 400
+    if 'wallets' not in config:
+        config['wallets'] = []
+    wallet = {'chain': chain, 'address': address, 'label': label or chain.title()}
+    config['wallets'].append(wallet)
+    save_config(config)
+    t = threading.Thread(target=fetch_data, args=(config,), daemon=True)
+    t.start()
+    return jsonify({'ok': True, 'wallet': wallet})
+
+
+@app.route('/api/wallets/<int:wallet_id>', methods=['DELETE'])
+def api_delete_wallet(wallet_id):
+    """Remove a wallet by index from config and trigger data refresh."""
+    config = load_config()
+    if not config:
+        return jsonify({'ok': False, 'error': 'No config'}), 400
+    wallets = config.get('wallets', [])
+    if wallet_id < 0 or wallet_id >= len(wallets):
+        return jsonify({'ok': False, 'error': 'Wallet index out of range.'}), 404
+    removed = wallets.pop(wallet_id)
+    config['wallets'] = wallets
+    save_config(config)
+    t = threading.Thread(target=fetch_data, args=(config,), daemon=True)
+    t.start()
+    return jsonify({'ok': True, 'removed': removed})
 
 
 @app.route('/api/plaid/link_token', methods=['POST'])
