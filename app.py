@@ -633,6 +633,7 @@ function poll(){
   fetch('/api/status').then(r=>r.json()).then(d=>{
     if(d.status==='ready'){window.location='/';}
     else if(d.status==='error'){window.location='/setup?error='+encodeURIComponent(d.error);}
+    else if(d.status==='idle'){window.location='/setup';}
     else{document.querySelector('.submsg').textContent=d.msg||'';setTimeout(poll,1200);}
   }).catch(()=>setTimeout(poll,2000));
 }
@@ -663,7 +664,7 @@ def index():
     if status == "loading" and data is None:
         return render_template_string(LOADING_HTML)
 
-    if data is None:
+    if status == "idle" or data is None:
         # No config saved yet
         cfg = load_config()
         if cfg is None:
@@ -672,6 +673,11 @@ def index():
         if not _has_any_account(cfg):
             return redirect(url_for('setup'))
         # Config exists but data not loaded yet
+        if status == "idle":
+            # Kick off a fetch since startup didn't run or didn't find accounts
+            t = threading.Thread(target=fetch_data, args=(cfg,), daemon=True)
+            t.start()
+            return render_template_string(LOADING_HTML)
         return render_template_string(LOADING_HTML)
 
     return build_vault_html(data)
