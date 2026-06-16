@@ -95,7 +95,11 @@ def build_user_config(user):
     wc = WiseConnection.query.filter_by(user_id=user.model.id).first()
     if wc:
         cfg['wise_token'] = wc.api_token
-        cfg['wise_profile'] = wc.profile_id or ''
+        profile = wc.profile_id or ''
+        # Filter out placeholder values
+        if profile in ('your_wise_profile_id', 'your_wise_api_token', ''):
+            profile = ''
+        cfg['wise_profile'] = profile
     # Crypto wallets
     wallets = CryptoWallet.query.filter_by(user_id=user.model.id).all()
     cfg['wallets'] = [{'chain': w.chain, 'address': w.address, 'label': w.label} for w in wallets]
