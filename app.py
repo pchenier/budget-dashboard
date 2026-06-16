@@ -785,18 +785,14 @@ def api_refresh():
 @app.route('/api/wallets', methods=['GET'])
 def api_list_wallets():
     """List all configured wallets."""
-    config = load_config()
-    if not config:
-        return jsonify({'ok': False, 'error': 'No config'}), 400
+    config = load_config() or {}
     return jsonify({'ok': True, 'wallets': config.get('wallets', [])})
 
 
 @app.route('/api/wallets', methods=['POST'])
 def api_add_wallet():
     """Add a wallet to config and trigger data refresh."""
-    config = load_config()
-    if not config:
-        return jsonify({'ok': False, 'error': 'No config'}), 400
+    config = load_config() or {}
     body = request.get_json() or {}
     chain   = (body.get('chain') or '').strip().lower()
     address = (body.get('address') or '').strip()
@@ -810,25 +806,24 @@ def api_add_wallet():
     wallet = {'chain': chain, 'address': address, 'label': label or chain.title()}
     config['wallets'].append(wallet)
     save_config(config)
-    t = threading.Thread(target=fetch_data, args=(config,), daemon=True)
-    t.start()
+    if config.get('plaid_token'):
+        t = threading.Thread(target=fetch_data, args=(config,), daemon=True)
+        t.start()
     return jsonify({'ok': True, 'wallet': wallet})
-
 
 @app.route('/api/wallets/<int:wallet_id>', methods=['DELETE'])
 def api_delete_wallet(wallet_id):
     """Remove a wallet by index from config and trigger data refresh."""
-    config = load_config()
-    if not config:
-        return jsonify({'ok': False, 'error': 'No config'}), 400
+    config = load_config() or {}
     wallets = config.get('wallets', [])
     if wallet_id < 0 or wallet_id >= len(wallets):
         return jsonify({'ok': False, 'error': 'Wallet index out of range.'}), 404
     removed = wallets.pop(wallet_id)
     config['wallets'] = wallets
     save_config(config)
-    t = threading.Thread(target=fetch_data, args=(config,), daemon=True)
-    t.start()
+    if config.get('plaid_token'):
+        t = threading.Thread(target=fetch_data, args=(config,), daemon=True)
+        t.start()
     return jsonify({'ok': True, 'removed': removed})
 
 
@@ -836,9 +831,9 @@ def api_delete_wallet(wallet_id):
 def plaid_link_token():
     """Create a Plaid Link token to initialize Plaid Link."""
     import requests as req
-    config = load_config()
-    if not config:
-        return jsonify({'ok': False, 'error': 'No config'}), 400
+    config = load_config() or {}
+    if not config.get('plaid_client') or not config.get('plaid_secret'):
+        return jsonify({'ok': False, 'error': 'Plaid credentials not configured. Go to Admin settings.'}), 400
     _env = config.get('plaid_env', 'production')
     base = ('https://production.plaid.com' if _env == 'production'
             else 'https://development.plaid.com' if _env == 'development'
@@ -864,9 +859,9 @@ def plaid_link_token():
 def plaid_exchange():
     """Exchange public token for access token and save it."""
     import requests as req
-    config = load_config()
-    if not config:
-        return jsonify({'ok': False, 'error': 'No config'}), 400
+    config = load_config() or {}
+    if not config.get('plaid_client') or not config.get('plaid_secret'):
+        return jsonify({'ok': False, 'error': 'Plaid credentials not configured'}), 400
     body = request.get_json() or {}
     public_token = body.get('public_token')
     if not public_token:
