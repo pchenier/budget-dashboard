@@ -15,7 +15,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# ── Config depuis .env ────────────────────────────────────────────────────────
+# ── Config from env (defaults; overridden by generate_data.py per-user) ──
 PLAID_CLIENT  = os.getenv("PLAID_CLIENT_ID", "")
 PLAID_SECRET  = os.getenv("PLAID_SECRET", "")
 PLAID_TOKEN   = os.getenv("PLAID_ACCESS_TOKEN", "")
@@ -23,7 +23,8 @@ PLAID_ENV     = os.getenv("PLAID_ENV", "production")
 PLAID_BASE    = "https://production.plaid.com" if PLAID_ENV == "production" else "https://sandbox.plaid.com"
 
 WISE_TOKEN    = os.getenv("WISE_TOKEN", "")
-WISE_PROFILE  = int(os.getenv("WISE_PROFILE_ID", "0"))
+_raw_profile  = os.getenv("WISE_PROFILE_ID", "0")
+WISE_PROFILE  = int(_raw_profile) if _raw_profile.isdigit() else 0
 
 PHANTOM_ADDR  = os.getenv("PHANTOM_WALLET", "")
 
