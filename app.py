@@ -880,15 +880,15 @@ def api_debug_config():
 @app.route('/api/debug/db')
 @login_required
 def api_debug_db():
-    """Debug: show DB connections for current user."""
+    """Debug: show all DB connections for current user."""
     uid = current_user.model.id
-    pc = PlaidConnection.query.filter_by(user_id=uid).first()
-    wc = WiseConnection.query.filter_by(user_id=uid).first()
+    all_plaid = PlaidConnection.query.filter_by(user_id=uid).all()
+    all_wise = WiseConnection.query.filter_by(user_id=uid).all()
     wallets = CryptoWallet.query.filter_by(user_id=uid).all()
     return jsonify({
         'user_id': uid,
-        'plaid': {'id': pc.id, 'access_token': (pc.access_token[:10] + '...') if pc and pc.access_token else None, 'item_id': pc.item_id if pc else None} if pc else None,
-        'wise': {'id': wc.id, 'api_token': (wc.api_token[:10] + '...') if wc and wc.api_token else None, 'profile_id': wc.profile_id if wc else None} if wc else None,
+        'plaid': [{'id': p.id, 'access_token': (p.access_token[:10] + '...') if p.access_token else None, 'item_id': p.item_id} for p in all_plaid],
+        'wise': [{'id': w.id, 'api_token': (w.api_token[:10] + '...') if w.api_token else None, 'profile_id': w.profile_id} for w in all_wise],
         'wallets': [{'id': w.id, 'chain': w.chain, 'address': w.address[:10] + '...', 'label': w.label} for w in wallets],
     })
 
