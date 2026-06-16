@@ -40,7 +40,10 @@ def handle_exception(e):
 
 @login_manager.user_loader
 def load_user(user_id):
-    return db.session.get(UserModel, int(user_id))
+    user = db.session.get(UserModel, int(user_id))
+    if user:
+        return FlaskUser(user)
+    return None
 
 class FlaskUser(UserMixin):
     def __init__(self, user_model):
@@ -51,6 +54,7 @@ class FlaskUser(UserMixin):
     def email(self): return self.model.email
     @property
     def name(self): return self.model.name
+    def get_id(self): return str(self.model.id)
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 BASE_DIR     = Path(__file__).parent
