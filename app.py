@@ -147,10 +147,12 @@ def fetch_data(user_id, config):
             state["msg"]       = f"Last synced: {datetime.now().strftime('%H:%M')}"
 
     except Exception as e:
+        import traceback
         with _user_state_lock:
             state["status"] = "error"
             state["error"]  = str(e)
         print(f"[error] fetch_data user {user_id}: {e}")
+        traceback.print_exc()
 
 # ── On startup: create DB tables ─────────────────────────────────────────────
 with app.app_context():
@@ -863,6 +865,18 @@ def setup():
     return render_template_string(SETUP_HTML, error=error, vals=vals)
 
 # ── API routes ──────────────────────────────────────────────────────────────
+@app.route('/api/debug/config')
+@login_required
+def api_debug_config():
+    """Debug: show config for current user (tokens masked)."""
+    cfg = build_user_config(current_user)
+    # Mask sensitive values
+    safe = dict(cfg)
+    for k in ('plaid_client', 'plaid_secret', 'plaid_token', 'wise_token'):
+        if safe.get(k):
+            safe[k] = safe[k][:6] + '...'
+    return jsonify(safe)
+
 @app.route('/api/status')
 @login_required
 def api_status():
