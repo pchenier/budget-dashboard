@@ -876,6 +876,19 @@ def api_debug_config():
             safe[k] = safe[k][:6] + '...'
     return jsonify(safe)
 
+@app.route('/api/debug/env')
+def api_debug_env():
+    """Debug: show relevant env vars (masked)."""
+    return jsonify({
+        'WISE_PROFILE_ID': os.getenv('WISE_PROFILE_ID', '<NOT SET>'),
+        'WISE_TOKEN_SET': bool(os.getenv('WISE_TOKEN')),
+        'PLAID_CLIENT_ID_SET': bool(os.getenv('PLAID_CLIENT_ID')),
+        'PLAID_SECRET_SET': bool(os.getenv('PLAID_SECRET')),
+        'PLAID_ENV': os.getenv('PLAID_ENV', '<NOT SET>'),
+        'DATABASE_URL_SET': bool(os.getenv('DATABASE_URL')),
+        'SECRET_KEY_SET': bool(os.getenv('SECRET_KEY')),
+    })
+
 @app.route('/api/debug/db')
 @login_required
 def api_debug_db():
