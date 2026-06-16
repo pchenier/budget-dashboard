@@ -9,4 +9,5 @@ data_cache.json
 saved_config.json
 imports/
 *.csv
-.vercel
+.vercel*.bak
+app.py.bak*

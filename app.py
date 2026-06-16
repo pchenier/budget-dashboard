@@ -11,12 +11,35 @@ After setup, config is saved to saved_config.json — never asks again on restar
 """
 
 import os, json, threading, uuid
-from flask import Flask, request, session, redirect, url_for, render_template_string, jsonify, send_from_directory
+from flask import Flask, request, session, redirect, url_for, render_template_string, jsonify, send_from_directory, flash
+from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from datetime import datetime, timedelta
 from pathlib import Path
+from models import db, User as UserModel, PlaidConnection, WiseConnection, CryptoWallet
 
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "vault-local-secret-do-not-deploy")
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'sqlite:///fiscit.db')
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {'pool_pre_ping': True}
+
+db.init_app(app)
+login_manager = LoginManager(app)
+login_manager.login_view = 'login'
+
+@login_manager.user_loader
+def load_user(user_id):
+    return db.session.get(UserModel, int(user_id))
+
+class FlaskUser(UserMixin):
+    def __init__(self, user_model):
+        self.model = user_model
+    @property
+    def id(self): return str(self.model.id)
+    @property
+    def email(self): return self.model.email
+    @property
+    def name(self): return self.model.name
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 BASE_DIR     = Path(__file__).parent
@@ -24,85 +47,50 @@ CONFIG_FILE  = BASE_DIR / "saved_config.json"
 VAULT_HTML   = BASE_DIR / "vault.html"
 CACHE_FILE   = BASE_DIR / "data_cache.json"
 
-# ── In-memory state ───────────────────────────────────────────────────────────
-_state_lock = threading.Lock()
-_state = {
-    "status":  "idle",   # idle | loading | ready | error
-    "msg":     "",
-    "error":   "",
-    "data":    None,     # the real data dict from generate_data.pull_all()
-    "loaded_at": None,
-}
+# ── Per-user state ────────────────────────────────────────────────────────────
+_user_states = {}  # {user_id: {status, msg, error, data, loaded_at}}
+_user_state_lock = threading.Lock()
 
-# ── Persistent config ─────────────────────────────────────────────────────────
-def load_config():
-    """Load config from disk, with Plaid credentials from env vars."""
-    cfg = {}
-    # Plaid credentials come from env vars (set on Railway/Vercel)
-    if os.getenv('PLAID_CLIENT_ID'):
-        cfg['plaid_client'] = os.getenv('PLAID_CLIENT_ID')
-    if os.getenv('PLAID_SECRET'):
-        cfg['plaid_secret'] = os.getenv('PLAID_SECRET')
-    if os.getenv('PLAID_ACCESS_TOKEN'):
-        cfg['plaid_token'] = os.getenv('PLAID_ACCESS_TOKEN')
-    if os.getenv('PLAID_ENV'):
-        cfg['plaid_env'] = os.getenv('PLAID_ENV')
-    # Load disk config and merge (wallets, wise, options, etc.)
-    try:
-        if CONFIG_FILE.exists():
-            disk = json.loads(CONFIG_FILE.read_text())
-            # Backwards compat: migrate phantom_wallet → wallets
-            if disk.get("phantom_wallet") and not disk.get("wallets"):
-                addr = disk["phantom_wallet"].strip()
-                if addr:
-                    disk["wallets"] = [{"chain": "solana", "address": addr, "label": "Phantom"}]
-                else:
-                    disk["wallets"] = []
-                save_config(disk)
-            elif "wallets" not in disk:
-                disk["wallets"] = []
-            # Disk values override env for non-Plaid fields; env Plaid always wins
-            for k, v in disk.items():
-                if k not in ('plaid_client', 'plaid_secret', 'plaid_token', 'plaid_env'):
-                    cfg[k] = v
-                elif not cfg.get(k):
-                    cfg[k] = v
-    except Exception:
-        pass
-    if cfg:
-        return cfg
-    return None
+def _get_state(user_id):
+    """Get or create state dict for a user."""
+    if user_id not in _user_states:
+        _user_states[user_id] = {
+            "status": "idle",
+            "msg": "",
+            "error": "",
+            "data": None,
+            "loaded_at": None,
+        }
+    return _user_states[user_id]
 
-def save_config(config):
-    try:
-        CONFIG_FILE.write_text(json.dumps(config, indent=2))
-    except Exception as e:
-        print(f"[warn] Could not save config: {e}")
+# ── Build config dict for a user from DB ────────────────────────────────────
+def build_user_config(user):
+    """Build the config dict for generate_data.pull_all() from DB records."""
+    cfg = {
+        'plaid_client': os.getenv('PLAID_CLIENT_ID', ''),
+        'plaid_secret': os.getenv('PLAID_SECRET', ''),
+        'plaid_env': os.getenv('PLAID_ENV', 'production'),
+        'plaid_token': '',
+        'wise_token': '',
+        'wise_profile': '',
+        'usd_to_cad': '1.38',
+        'start_date': '2025-01-01',
+        'wallets': [],
+    }
+    # Plaid connection (first active one)
+    pc = PlaidConnection.query.filter_by(user_id=user.model.id).first()
+    if pc:
+        cfg['plaid_token'] = pc.access_token
+    # Wise connection
+    wc = WiseConnection.query.filter_by(user_id=user.model.id).first()
+    if wc:
+        cfg['wise_token'] = wc.api_token
+        cfg['wise_profile'] = wc.profile_id or ''
+    # Crypto wallets
+    wallets = CryptoWallet.query.filter_by(user_id=user.model.id).all()
+    cfg['wallets'] = [{'chain': w.chain, 'address': w.address, 'label': w.label} for w in wallets]
+    return cfg
 
-# ── Data cache (disk) ─────────────────────────────────────────────────────────
-def load_data_cache():
-    """Load last pulled data from disk (survives server restarts)."""
-    try:
-        if CACHE_FILE.exists():
-            raw = json.loads(CACHE_FILE.read_text())
-            # Check age — use cached data up to 6 hours
-            loaded = raw.get("_cached_at")
-            if loaded:
-                age = datetime.now() - datetime.fromisoformat(loaded)
-                if age < timedelta(hours=6):
-                    return raw
-    except Exception:
-        pass
-    return None
-
-def save_data_cache(data):
-    try:
-        data["_cached_at"] = datetime.now().isoformat()
-        CACHE_FILE.write_text(json.dumps(data, indent=2, default=str))
-    except Exception as e:
-        print(f"[warn] Could not save data cache: {e}")
-
-# ── Background data fetch ─────────────────────────────────────────────────────
 def _has_any_account(config):
     """Check if config has at least one account source."""
     return bool(
@@ -111,66 +99,50 @@ def _has_any_account(config):
         (config.get("wallets") and len(config["wallets"]) > 0)
     )
 
-def fetch_data(config):
-    """Pull all real data in background thread."""
+# ── Background data fetch (per user) ────────────────────────────────────────
+def fetch_data(user_id, config):
+    """Pull all real data in background thread for a specific user."""
+    state = _get_state(user_id)
     def status_cb(msg):
-        with _state_lock:
-            _state["msg"] = msg
-        print(f"  [{msg}]")
+        with _user_state_lock:
+            state["msg"] = msg
+        print(f"  [user {user_id}: {msg}]")
 
-    # No accounts at all — show empty dashboard instead of crashing
     if not _has_any_account(config):
-        with _state_lock:
-            _state["data"]   = {"_generated": "empty", "accounts": [], "net_worth": 0}
-            _state["status"] = "ready"
-            _state["msg"]    = "No accounts connected"
+        with _user_state_lock:
+            state["data"]   = {"_generated": "empty", "accounts": [], "net_worth": 0}
+            state["status"] = "ready"
+            state["msg"]    = "No accounts connected"
         return
 
-    config["_status_cb"] = status_cb
+    config["\u005fstatus_cb"] = status_cb
 
     try:
-        with _state_lock:
-            _state["status"] = "loading"
-            _state["msg"]    = "Starting..."
-            _state["error"]  = ""
+        with _user_state_lock:
+            state["status"] = "loading"
+            state["msg"]    = "Starting..."
+            state["error"]  = ""
 
         import generate_data
         data = generate_data.pull_all(config)
 
-        save_data_cache(data)
-
-        with _state_lock:
-            _state["data"]      = data
-            _state["status"]    = "ready"
-            _state["loaded_at"] = datetime.now().isoformat()
-            _state["msg"]       = f"Last synced: {datetime.now().strftime('%H:%M')}"
+        with _user_state_lock:
+            state["data"]      = data
+            state["status"]    = "ready"
+            state["loaded_at"] = datetime.now().isoformat()
+            state["msg"]       = f"Last synced: {datetime.now().strftime('%H:%M')}"
 
     except Exception as e:
-        with _state_lock:
-            _state["status"] = "error"
-            _state["error"]  = str(e)
-        print(f"[error] fetch_data: {e}")
+        with _user_state_lock:
+            state["status"] = "error"
+            state["error"]  = str(e)
+        print(f"[error] fetch_data user {user_id}: {e}")
 
-# ── On startup: load config + cached data, kick off refresh ───────────────────
+# ── On startup: create DB tables ─────────────────────────────────────────────
 def startup():
-    config = load_config()
-    if not config:
-        print("\n⚠️  No saved config — open http://localhost:5050/setup\n")
-        return
-
-    # Load disk cache immediately so first page load is instant
-    cached = load_data_cache()
-    if cached:
-        with _state_lock:
-            _state["data"]   = cached
-            _state["status"] = "ready"
-            _state["msg"]    = f"Cached data from {cached.get('_generated','?')}"
-        print(f"  Loaded cached data ({cached.get('_generated','?')})")
-
-    # Then refresh in background
-    print("  Refreshing data from APIs...")
-    t = threading.Thread(target=fetch_data, args=(config,), daemon=True)
-    t.start()
+    with app.app_context():
+        db.create_all()
+        print("  DB tables ready")
 
 # ── Vault HTML with data injection ───────────────────────────────────────────
 def build_vault_html(data):
@@ -654,187 +626,322 @@ window.addEventListener('DOMContentLoaded',poll);
 </body>
 </html>"""
 
-# ── Routes ────────────────────────────────────────────────────────────────────
+# ── Auth routes ──────────────────────────────────────────────────────────────
+LOGIN_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fiscit — Log In</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Inter',sans-serif;background:#080808;color:#f4f4f5;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+.card{background:#111;border:1px solid #222;border-radius:16px;padding:2.5rem;width:100%;max-width:400px}
+.header{display:flex;align-items:center;gap:10px;margin-bottom:2rem}
+.brand{font-size:1.25rem;font-weight:700;color:#4ade80;letter-spacing:-0.02em}
+.title{font-size:1.1rem;font-weight:600;margin-bottom:1.5rem;letter-spacing:-0.2px}
+label{display:block;font-size:0.75rem;font-weight:500;color:#a1a1aa;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.04em}
+input{width:100%;background:#1a1a1a;border:1px solid #2a2a2a;border-radius:8px;padding:0.65rem 0.85rem;color:#f4f4f5;font-family:'Inter',sans-serif;font-size:0.85rem;outline:none;transition:border-color 0.15s;margin-bottom:1rem}
+input:focus{border-color:#4ade80}
+.btn{width:100%;padding:0.85rem;background:#4ade80;border:none;border-radius:8px;color:#080808;font-family:'Inter',sans-serif;font-size:0.9rem;font-weight:700;cursor:pointer;transition:opacity 0.15s}
+.btn:hover{opacity:0.9}
+.error{background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.25);border-radius:8px;padding:0.65rem 0.85rem;font-size:0.85rem;color:#f87171;margin-bottom:1.25rem}
+a{color:#4ade80;text-decoration:none;font-size:0.85rem}
+.link{text-align:center;margin-top:1.25rem}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="header">
+    <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" width="32" height="32">
+      <rect width="32" height="32" rx="8" fill="#0A0F1A"/>
+      <rect x="7" y="6" width="5" height="20" rx="2" fill="#F0F4F8"/>
+      <rect x="7" y="6" width="16" height="5" rx="2" fill="#F0F4F8"/>
+      <rect x="7" y="14" width="12" height="4" rx="2" fill="#F0F4F8"/>
+      <circle cx="26" cy="8.5" r="3.5" fill="#b8f566"/>
+    </svg>
+    <span class="brand">Fiscit</span>
+  </div>
+  <div class="title">Log in</div>
+  {% if error %}<div class="error">{{ error }}</div>{% endif %}
+  <form method="POST">
+    <label>Email</label>
+    <input type="email" name="email" placeholder="you@example.com" required>
+    <label>Password</label>
+    <input type="password" name="password" placeholder="Your password" required>
+    <button type="submit" class="btn">Log in</button>
+  </form>
+  <div class="link">Don't have an account? <a href="/register">Sign up</a></div>
+</div>
+</body>
+</html>"""
+
+REGISTER_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fiscit — Sign Up</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Inter',sans-serif;background:#080808;color:#f4f4f5;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+.card{background:#111;border:1px solid #222;border-radius:16px;padding:2.5rem;width:100%;max-width:400px}
+.header{display:flex;align-items:center;gap:10px;margin-bottom:2rem}
+.brand{font-size:1.25rem;font-weight:700;color:#4ade80;letter-spacing:-0.02em}
+.title{font-size:1.1rem;font-weight:600;margin-bottom:1.5rem;letter-spacing:-0.2px}
+label{display:block;font-size:0.75rem;font-weight:500;color:#a1a1aa;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.04em}
+input{width:100%;background:#1a1a1a;border:1px solid #2a2a2a;border-radius:8px;padding:0.65rem 0.85rem;color:#f4f4f5;font-family:'Inter',sans-serif;font-size:0.85rem;outline:none;transition:border-color 0.15s;margin-bottom:1rem}
+input:focus{border-color:#4ade80}
+.btn{width:100%;padding:0.85rem;background:#4ade80;border:none;border-radius:8px;color:#080808;font-family:'Inter',sans-serif;font-size:0.9rem;font-weight:700;cursor:pointer;transition:opacity 0.15s}
+.btn:hover{opacity:0.9}
+.error{background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.25);border-radius:8px;padding:0.65rem 0.85rem;font-size:0.85rem;color:#f87171;margin-bottom:1.25rem}
+a{color:#4ade80;text-decoration:none;font-size:0.85rem}
+.link{text-align:center;margin-top:1.25rem}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="header">
+    <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" width="32" height="32">
+      <rect width="32" height="32" rx="8" fill="#0A0F1A"/>
+      <rect x="7" y="6" width="5" height="20" rx="2" fill="#F0F4F8"/>
+      <rect x="7" y="6" width="16" height="5" rx="2" fill="#F0F4F8"/>
+      <rect x="7" y="14" width="12" height="4" rx="2" fill="#F0F4F8"/>
+      <circle cx="26" cy="8.5" r="3.5" fill="#b8f566"/>
+    </svg>
+    <span class="brand">Fiscit</span>
+  </div>
+  <div class="title">Create your account</div>
+  {% if error %}<div class="error">{{ error }}</div>{% endif %}
+  <form method="POST">
+    <label>Name</label>
+    <input type="text" name="name" placeholder="Your name">
+    <label>Email</label>
+    <input type="email" name="email" placeholder="you@example.com" required>
+    <label>Password</label>
+    <input type="password" name="password" placeholder="Choose a password" required>
+    <button type="submit" class="btn">Sign up</button>
+  </form>
+  <div class="link">Already have an account? <a href="/login">Log in</a></div>
+</div>
+</body>
+</html>"""
+
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        email = request.form.get('email', '').strip().lower()
+        password = request.form.get('password', '')
+        name = request.form.get('name', '').strip()
+        if not email or not password:
+            return render_template_string(REGISTER_HTML, error='Email and password are required.')
+        if len(password) < 6:
+            return render_template_string(REGISTER_HTML, error='Password must be at least 6 characters.')
+        if UserModel.query.filter_by(email=email).first():
+            return render_template_string(REGISTER_HTML, error='An account with that email already exists.')
+        user = UserModel(email=email, name=name)
+        user.set_password(password)
+        db.session.add(user)
+        db.session.commit()
+        flask_user = FlaskUser(user)
+        login_user(flask_user)
+        return redirect(url_for('setup'))
+    return render_template_string(REGISTER_HTML, error='')
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        email = request.form.get('email', '').strip().lower()
+        password = request.form.get('password', '')
+        user = UserModel.query.filter_by(email=email).first()
+        if not user or not user.check_password(password):
+            return render_template_string(LOGIN_HTML, error='Invalid email or password.')
+        login_user(FlaskUser(user))
+        return redirect(url_for('index'))
+    return render_template_string(LOGIN_HTML, error='')
+
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    return redirect(url_for('login'))
+
+# ── Main routes ─────────────────────────────────────────────────────────────
 @app.route('/')
+@login_required
 def index():
-    with _state_lock:
-        status = _state["status"]
-        data   = _state["data"]
+    uid = current_user.model.id
+    state = _get_state(uid)
+    with _user_state_lock:
+        status = state["status"]
+        data = state["data"]
 
     if status == "loading" and data is None:
         return render_template_string(LOADING_HTML)
 
     if status == "idle" or data is None:
-        # No config saved yet
-        cfg = load_config()
-        if cfg is None:
-            return redirect(url_for('setup'))
-        # Config exists but no accounts — go back to setup
+        cfg = build_user_config(current_user)
         if not _has_any_account(cfg):
             return redirect(url_for('setup'))
-        # Config exists but data not loaded yet
         if status == "idle":
-            # Kick off a fetch since startup didn't run or didn't find accounts
-            t = threading.Thread(target=fetch_data, args=(cfg,), daemon=True)
+            t = threading.Thread(target=fetch_data, args=(uid, cfg), daemon=True)
             t.start()
             return render_template_string(LOADING_HTML)
         return render_template_string(LOADING_HTML)
 
     return build_vault_html(data)
 
-
-@app.route('/login')
-def login_redirect():
-    return redirect('https://fiscit.com/login')
-
-@app.route('/register')
-def register_redirect():
-    return redirect('https://fiscit.com/register')
-
-
 @app.route('/setup', methods=['GET', 'POST'])
+@login_required
 def setup():
     error = request.args.get('error', '')
-
-    # Pre-fill from saved config if exists
-    saved = load_config() or {}
-    vals  = saved
+    uid = current_user.model.id
+    user_model = current_user.model
 
     if request.method == 'POST':
-        saved = load_config() or {}
-        # Strip placeholder values from form fields
-        _PLACEHOLDERS = {'your_wise_profile_id', 'your_wise_api_token', 'your_plaid_client_id', 'your_plaid_secret'}
-        wise_profile_raw = request.form.get('wise_profile', '').strip()
-        wise_token_raw = request.form.get('wise_token', '').strip()
-        config = {
-            'plaid_client':   saved.get('plaid_client', ''),
-            'plaid_secret':   saved.get('plaid_secret', ''),
-            'plaid_token':    saved.get('plaid_token', ''),
-            'plaid_env':      saved.get('plaid_env', 'production'),
-            'start_date':     saved.get('start_date', '2025-01-01'),
-            'wise_token':     wise_token_raw if (wise_token_raw and wise_token_raw not in _PLACEHOLDERS) else (saved.get('wise_token', '') or ''),
-            'wise_profile':   wise_profile_raw if (wise_profile_raw and wise_profile_raw not in _PLACEHOLDERS and wise_profile_raw.isdigit()) else (saved.get('wise_profile', '') or ''),
-            'usd_to_cad':     saved.get('usd_to_cad', '1.38'),
-            'wallets':        saved.get('wallets', []),
-        }
-        vals = config
+        # Wise token/profile from form
+        wise_token = request.form.get('wise_token', '').strip()
+        wise_profile = request.form.get('wise_profile', '').strip()
+        _PLACEHOLDERS = {'your_wise_profile_id', 'your_wise_api_token'}
+        if wise_token and wise_token not in _PLACEHOLDERS:
+            # Save or update Wise connection
+            wc = WiseConnection.query.filter_by(user_id=uid).first()
+            if wc:
+                wc.api_token = wise_token
+                if wise_profile and wise_profile.isdigit() and wise_profile not in _PLACEHOLDERS:
+                    wc.profile_id = wise_profile
+            else:
+                wc = WiseConnection(user_id=uid, api_token=wise_token, profile_id=wise_profile if (wise_profile and wise_profile.isdigit()) else '')
+                db.session.add(wc)
+        db.session.commit()
+        cfg = build_user_config(current_user)
+        if _has_any_account(cfg):
+            t = threading.Thread(target=fetch_data, args=(uid, cfg), daemon=True)
+            t.start()
+            return render_template_string(LOADING_HTML)
+        return redirect(url_for('setup'))
 
-        # Save to disk permanently
-        save_config(config)
-
-        # Start fetch in background
-        t = threading.Thread(target=fetch_data, args=(config,), daemon=True)
-        t.start()
-
-        return render_template_string(LOADING_HTML)
-
+    # Build vals for template
+    pc = PlaidConnection.query.filter_by(user_id=uid).first()
+    wc = WiseConnection.query.filter_by(user_id=uid).first()
+    wallets = CryptoWallet.query.filter_by(user_id=uid).all()
+    vals = {
+        'plaid_token': pc.access_token if pc else '',
+        'wise_token': wc.api_token if wc else '',
+        'wise_profile': wc.profile_id if wc else '',
+        'wallets': [{'chain': w.chain, 'address': w.address, 'label': w.label} for w in wallets],
+    }
     return render_template_string(SETUP_HTML, error=error, vals=vals)
 
-
+# ── API routes ──────────────────────────────────────────────────────────────
 @app.route('/api/status')
+@login_required
 def api_status():
+    uid = current_user.model.id
+    state = _get_state(uid)
     has_plaid = bool(os.getenv('PLAID_CLIENT_ID') and os.getenv('PLAID_SECRET'))
-    with _state_lock:
+    with _user_state_lock:
         return jsonify({
-            'status':    _state['status'],
-            'msg':      _state['msg'],
-            'error':    _state['error'],
-            'loaded_at': _state['loaded_at'],
+            'status': state['status'],
+            'msg': state['msg'],
+            'error': state['error'],
+            'loaded_at': state['loaded_at'],
             'plaid_configured': has_plaid,
         })
 
-
 @app.route('/api/data')
+@login_required
 def api_data():
-    """Return current data as JSON (for debugging / future use)."""
-    with _state_lock:
-        data = _state['data']
+    uid = current_user.model.id
+    state = _get_state(uid)
+    with _user_state_lock:
+        data = state['data']
     if not data:
         return jsonify({'error': 'No data loaded'}), 404
     return jsonify(data)
 
-
 @app.route('/api/refresh', methods=['POST'])
+@login_required
 def api_refresh():
-    """Force re-fetch from APIs."""
-    # Reset error state first
-    with _state_lock:
-        if _state['status'] == 'error':
-            _state['status'] = 'idle'
-            _state['error'] = ''
-            _state['data'] = None
-    config = load_config()
-    if not config:
-        return jsonify({'ok': False, 'msg': 'No config saved'}), 400
-    t = threading.Thread(target=fetch_data, args=(config,), daemon=True)
+    uid = current_user.model.id
+    state = _get_state(uid)
+    with _user_state_lock:
+        if state['status'] == 'error':
+            state['status'] = 'idle'
+            state['error'] = ''
+            state['data'] = None
+    cfg = build_user_config(current_user)
+    if not _has_any_account(cfg):
+        return jsonify({'ok': False, 'msg': 'No accounts connected'}), 400
+    t = threading.Thread(target=fetch_data, args=(uid, cfg), daemon=True)
     t.start()
     return jsonify({'ok': True, 'msg': 'Refresh started'})
 
-
 @app.route('/api/wallets', methods=['GET'])
+@login_required
 def api_list_wallets():
-    """List all configured wallets."""
-    config = load_config() or {}
-    return jsonify({'ok': True, 'wallets': config.get('wallets', [])})
-
+    uid = current_user.model.id
+    wallets = CryptoWallet.query.filter_by(user_id=uid).all()
+    return jsonify({'ok': True, 'wallets': [{'chain': w.chain, 'address': w.address, 'label': w.label} for w in wallets]})
 
 @app.route('/api/wallets', methods=['POST'])
+@login_required
 def api_add_wallet():
-    """Add a wallet to config and trigger data refresh."""
-    config = load_config() or {}
+    uid = current_user.model.id
     body = request.get_json() or {}
-    chain   = (body.get('chain') or '').strip().lower()
+    chain = (body.get('chain') or '').strip().lower()
     address = (body.get('address') or '').strip()
-    label   = (body.get('label') or '').strip()
+    label = (body.get('label') or '').strip()
     if chain not in ('bitcoin','ethereum','solana','polygon','arbitrum','optimism','avalanche','base','bnb','usdt','usdc'):
         return jsonify({'ok': False, 'error': 'Invalid chain.'}), 400
     if not address:
         return jsonify({'ok': False, 'error': 'Address is required.'}), 400
-    if 'wallets' not in config:
-        config['wallets'] = []
-    wallet = {'chain': chain, 'address': address, 'label': label or chain.title()}
-    config['wallets'].append(wallet)
-    save_config(config)
-    if config.get('plaid_token'):
-        t = threading.Thread(target=fetch_data, args=(config,), daemon=True)
+    w = CryptoWallet(user_id=uid, chain=chain, address=address, label=label or chain.title())
+    db.session.add(w)
+    db.session.commit()
+    # Trigger refresh
+    cfg = build_user_config(current_user)
+    if _has_any_account(cfg):
+        t = threading.Thread(target=fetch_data, args=(uid, cfg), daemon=True)
         t.start()
-    return jsonify({'ok': True, 'wallet': wallet})
+    return jsonify({'ok': True, 'wallet': {'chain': chain, 'address': address, 'label': label or chain.title()}})
 
 @app.route('/api/wallets/<int:wallet_id>', methods=['DELETE'])
+@login_required
 def api_delete_wallet(wallet_id):
-    """Remove a wallet by index from config and trigger data refresh."""
-    config = load_config() or {}
-    wallets = config.get('wallets', [])
-    if wallet_id < 0 or wallet_id >= len(wallets):
-        return jsonify({'ok': False, 'error': 'Wallet index out of range.'}), 404
-    removed = wallets.pop(wallet_id)
-    config['wallets'] = wallets
-    save_config(config)
-    if config.get('plaid_token'):
-        t = threading.Thread(target=fetch_data, args=(config,), daemon=True)
+    uid = current_user.model.id
+    w = CryptoWallet.query.filter_by(id=wallet_id, user_id=uid).first()
+    if not w:
+        return jsonify({'ok': False, 'error': 'Wallet not found.'}), 404
+    db.session.delete(w)
+    db.session.commit()
+    cfg = build_user_config(current_user)
+    if _has_any_account(cfg):
+        t = threading.Thread(target=fetch_data, args=(uid, cfg), daemon=True)
         t.start()
-    return jsonify({'ok': True, 'removed': removed})
-
+    return jsonify({'ok': True})
 
 @app.route('/api/plaid/link_token', methods=['POST'])
+@login_required
 def plaid_link_token():
-    """Create a Plaid Link token to initialize Plaid Link."""
     import requests as req
-    config = load_config() or {}
-    if not config.get('plaid_client') or not config.get('plaid_secret'):
-        return jsonify({'ok': False, 'error': 'Plaid credentials not configured. Go to Admin settings.'}), 400
-    _env = config.get('plaid_env', 'production')
+    uid = current_user.model.id
+    plaid_client = os.getenv('PLAID_CLIENT_ID')
+    plaid_secret = os.getenv('PLAID_SECRET')
+    if not plaid_client or not plaid_secret:
+        return jsonify({'ok': False, 'error': 'Plaid credentials not configured.'}), 400
+    _env = os.getenv('PLAID_ENV', 'production')
     base = ('https://production.plaid.com' if _env == 'production'
             else 'https://development.plaid.com' if _env == 'development'
             else 'https://sandbox.plaid.com')
     try:
         r = req.post(f'{base}/link/token/create', json={
-            'client_id': config['plaid_client'],
-            'secret':    config['plaid_secret'],
+            'client_id': plaid_client,
+            'secret':    plaid_secret,
             'client_name': 'Fiscit',
             'country_codes': ['CA', 'US'],
             'language': 'en',
-            'user': {'client_user_id': 'vault-user'},
+            'user': {'client_user_id': str(uid)},
             'products': ['transactions'],
         }, timeout=15)
         r.raise_for_status()
@@ -843,48 +950,56 @@ def plaid_link_token():
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)}), 500
 
-
 @app.route('/api/plaid/exchange', methods=['POST'])
+@login_required
 def plaid_exchange():
-    """Exchange public token for access token and save it."""
     import requests as req
-    config = load_config() or {}
-    if not config.get('plaid_client') or not config.get('plaid_secret'):
+    uid = current_user.model.id
+    plaid_client = os.getenv('PLAID_CLIENT_ID')
+    plaid_secret = os.getenv('PLAID_SECRET')
+    if not plaid_client or not plaid_secret:
         return jsonify({'ok': False, 'error': 'Plaid credentials not configured'}), 400
     body = request.get_json() or {}
     public_token = body.get('public_token')
     if not public_token:
         return jsonify({'ok': False, 'error': 'Missing public_token'}), 400
-    _env = config.get('plaid_env', 'production')
+    _env = os.getenv('PLAID_ENV', 'production')
     base = ('https://production.plaid.com' if _env == 'production'
             else 'https://development.plaid.com' if _env == 'development'
             else 'https://sandbox.plaid.com')
     try:
         r = req.post(f'{base}/item/public_token/exchange', json={
-            'client_id':    config['plaid_client'],
-            'secret':       config['plaid_secret'],
+            'client_id':    plaid_client,
+            'secret':       plaid_secret,
             'public_token': public_token,
         }, timeout=15)
         r.raise_for_status()
         data = r.json()
         access_token = data['access_token']
-        # Save the new token
-        config['plaid_token'] = access_token
-        save_config(config)
+        # Save to DB for this user
+        pc = PlaidConnection.query.filter_by(user_id=uid).first()
+        if pc:
+            pc.access_token = access_token
+        else:
+            pc = PlaidConnection(user_id=uid, access_token=access_token)
+            db.session.add(pc)
+        db.session.commit()
         # Trigger refresh
-        t = threading.Thread(target=fetch_data, args=(config,), daemon=True)
+        cfg = build_user_config(current_user)
+        t = threading.Thread(target=fetch_data, args=(uid, cfg), daemon=True)
         t.start()
         return jsonify({'ok': True, 'msg': 'Account connected! Refreshing data...'})
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)}), 500
 
-
 @app.route('/api/wise/test', methods=['POST'])
+@login_required
 def api_wise_test():
-    """Test Wise API token by fetching profiles."""
     import requests as req
+    uid = current_user.model.id
     body = request.get_json() or {}
     token = body.get('wise_token', '').strip()
+    profile = body.get('wise_profile', '').strip()
     if not token:
         return jsonify({'ok': False, 'error': 'API Token is required.'}), 400
     try:
@@ -892,11 +1007,20 @@ def api_wise_test():
                     headers={'Authorization': f'Bearer {token}'}, timeout=10)
         if r.status_code == 200:
             profiles = r.json()
-            biz = [p for p in profiles if p.get('type') == 'business']
-            per = [p for p in profiles if p.get('type') == 'personal']
-            info = []
-            for p in profiles:
-                info.append({'id': p['id'], 'type': p['type']})
+            info = [{'id': p['id'], 'type': p['type']} for p in profiles]
+            # Save/update Wise connection
+            wc = WiseConnection.query.filter_by(user_id=uid).first()
+            if wc:
+                wc.api_token = token
+                if profile:
+                    wc.profile_id = profile
+                elif len(profiles) == 1:
+                    wc.profile_id = str(profiles[0]['id'])
+            else:
+                prof_id = profile or (str(profiles[0]['id']) if len(profiles) == 1 else '')
+                wc = WiseConnection(user_id=uid, api_token=token, profile_id=prof_id)
+                db.session.add(wc)
+            db.session.commit()
             return jsonify({'ok': True, 'profiles': info})
         elif r.status_code == 401:
             return jsonify({'ok': False, 'error': 'Invalid API token.'}), 401
@@ -904,19 +1028,6 @@ def api_wise_test():
             return jsonify({'ok': False, 'error': f'Wise API returned {r.status_code}.'}), 400
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)}), 500
-
-
-@app.route('/logout')
-def logout():
-    CONFIG_FILE.unlink(missing_ok=True)
-    CACHE_FILE.unlink(missing_ok=True)
-    with _state_lock:
-        _state['data']   = None
-        _state['status'] = 'idle'
-        _state['error']  = ''
-        _state['msg']    = ''
-    return redirect(url_for('setup'))
-
 
 if __name__ == '__main__':
     port  = int(os.getenv('PORT', 5050))
