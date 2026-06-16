@@ -788,6 +788,12 @@ def logout():
     return redirect(url_for('login'))
 
 # ── Main routes ─────────────────────────────────────────────────────────────
+@app.errorhandler(Exception)
+def handle_exception(e):
+    import traceback
+    traceback.print_exc()
+    return f"Internal error: {e}", 500
+
 @app.route('/health')
 def health():
     """Health check endpoint for Railway."""
