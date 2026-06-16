@@ -467,7 +467,7 @@ a{color:#4ade80;text-decoration:none}
       </div>
       <div class="account-info">
         <div class="account-name">Crypto Wallets</div>
-        <div class="account-desc">Solana, Ethereum, Bitcoin</div>
+        <div class="account-desc">BTC, ETH, SOL, and 15 more</div>
       </div>
       <div class="account-action">Add</div>
     </div>
@@ -484,9 +484,24 @@ a{color:#4ade80;text-decoration:none}
       </div>
       <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
         <select id="wallet-chain" style="width:30%">
-          <option value="solana">Solana</option>
-          <option value="ethereum">Ethereum</option>
           <option value="bitcoin">Bitcoin</option>
+          <option value="ethereum">Ethereum</option>
+          <option value="solana">Solana</option>
+          <option value="polygon">Polygon</option>
+          <option value="arbitrum">Arbitrum</option>
+          <option value="optimism">Optimism</option>
+          <option value="avalanche">Avalanche</option>
+          <option value="base">Base</option>
+          <option value="bnb">BNB Chain</option>
+          <option value="fantom">Fantom</option>
+          <option value="cosmos">Cosmos</option>
+          <option value="cardano">Cardano</option>
+          <option value="dogecoin">Dogecoin</option>
+          <option value="litecoin">Litecoin</option>
+          <option value="sui">Sui</option>
+          <option value="near">NEAR</option>
+          <option value="aptos">Aptos</option>
+          <option value="tron">Tron</option>
         </select>
         <input id="wallet-address" placeholder="Wallet address" style="width:45%">
         <input id="wallet-label" placeholder="Label" style="width:25%">
@@ -745,8 +760,8 @@ def api_add_wallet():
     chain   = (body.get('chain') or '').strip().lower()
     address = (body.get('address') or '').strip()
     label   = (body.get('label') or '').strip()
-    if chain not in ('solana', 'ethereum', 'bitcoin'):
-        return jsonify({'ok': False, 'error': 'Invalid chain. Use solana, ethereum, or bitcoin.'}), 400
+    if chain not in ('bitcoin','ethereum','solana','polygon','arbitrum','optimism','avalanche','base','bnb','fantom','cosmos','cardano','dogecoin','litecoin','sui','near','aptos','tron'):
+        return jsonify({'ok': False, 'error': 'Invalid chain.'}), 400
     if not address:
         return jsonify({'ok': False, 'error': 'Address is required.'}), 400
     if 'wallets' not in config:
