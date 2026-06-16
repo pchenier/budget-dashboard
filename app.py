@@ -103,12 +103,28 @@ def save_data_cache(data):
         print(f"[warn] Could not save data cache: {e}")
 
 # ── Background data fetch ─────────────────────────────────────────────────────
+def _has_any_account(config):
+    """Check if config has at least one account source."""
+    return bool(
+        config.get("plaid_token") or
+        config.get("wise_token") or
+        (config.get("wallets") and len(config["wallets"]) > 0)
+    )
+
 def fetch_data(config):
     """Pull all real data in background thread."""
     def status_cb(msg):
         with _state_lock:
             _state["msg"] = msg
         print(f"  [{msg}]")
+
+    # No accounts at all — show empty dashboard instead of crashing
+    if not _has_any_account(config):
+        with _state_lock:
+            _state["data"]   = {"_generated": "empty", "accounts": [], "net_worth": 0}
+            _state["status"] = "ready"
+            _state["msg"]    = "No accounts connected"
+        return
 
     config["_status_cb"] = status_cb
 
@@ -649,7 +665,11 @@ def index():
 
     if data is None:
         # No config saved yet
-        if load_config() is None:
+        cfg = load_config()
+        if cfg is None:
+            return redirect(url_for('setup'))
+        # Config exists but no accounts — go back to setup
+        if not _has_any_account(cfg):
             return redirect(url_for('setup'))
         # Config exists but data not loaded yet
         return render_template_string(LOADING_HTML)
