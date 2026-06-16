@@ -305,7 +305,7 @@ SETUP_HTML = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Vault — Setup</title>
+<title>Fiscit — Setup</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -339,8 +339,8 @@ a{color:#60a5fa}
 <body>
 <div class="card">
   <div class="logo">
-    <div class="logo-mark">V</div>
-    <span class="logo-name">Vault</span>
+    <div class="logo-mark">F</div>
+    <span class="logo-name">Fiscit</span>
   </div>
   <h2>Connect your accounts</h2>
   <p class="sub">Your credentials are saved locally on your machine only — never sent to any server.</p>
@@ -441,7 +441,7 @@ LOADING_HTML = """<!DOCTYPE html>
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Vault — Loading</title>
+<title>Fiscit — Loading</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -637,7 +637,7 @@ def plaid_link_token():
         r = req.post(f'{base}/link/token/create', json={
             'client_id': config['plaid_client'],
             'secret':    config['plaid_secret'],
-            'client_name': 'Vault',
+            'client_name': 'Fiscit',
             'country_codes': ['CA', 'US'],
             'language': 'en',
             'user': {'client_user_id': 'vault-user'},
@@ -698,6 +698,6 @@ def logout():
 if __name__ == '__main__':
     port  = int(os.getenv('PORT', 5050))
     debug = os.getenv('FLASK_DEBUG', '0') == '1'
-    print(f"\n💰 Vault → http://localhost:{port}\n")
+    print(f"\n💰 Fiscit → http://localhost:{port}\n")
     startup()
     app.run(host='0.0.0.0', port=port, debug=debug, use_reloader=False)
