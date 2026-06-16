@@ -150,17 +150,16 @@ def fetch_data(user_id, config):
         print(f"[error] fetch_data user {user_id}: {e}")
 
 # ── On startup: create DB tables ─────────────────────────────────────────────
-def startup():
-    with app.app_context():
-        try:
-            db.create_all()
-            print("  DB tables ready")
-            # Verify connection
-            result = db.session.execute(db.text('SELECT 1'))
-            print(f"  DB connection OK: {result.scalar()}")
-        except Exception as e:
-            print(f"  DB ERROR: {e}")
-            raise
+with app.app_context():
+    try:
+        db.create_all()
+        print("  DB tables ready")
+        # Verify connection
+        result = db.session.execute(db.text('SELECT 1'))
+        print(f"  DB connection OK: {result.scalar()}")
+    except Exception as e:
+        print(f"  DB ERROR: {e}")
+        raise
 
 # ── Vault HTML with data injection ───────────────────────────────────────────
 def build_vault_html(data):
@@ -1060,5 +1059,4 @@ if __name__ == '__main__':
     port  = int(os.getenv('PORT', 5050))
     debug = os.getenv('FLASK_DEBUG', '0') == '1'
     print(f"\n💰 Fiscit → http://localhost:{port}\n")
-    startup()
     app.run(host='0.0.0.0', port=port, debug=debug, use_reloader=False)
