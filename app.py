@@ -542,7 +542,17 @@ a{color:#4ade80;text-decoration:none}
       if(!address){alert('Please enter a wallet address');return;}
       fetch('/api/wallets',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chain,address,label})})
         .then(r=>r.json()).then(d=>{
-          if(d.ok){location.reload();}
+          if(d.ok){
+            const list=document.getElementById('wallet-list');
+            const idx=list.children.length;
+            const div=document.createElement('div');
+            div.className='wallet-item';
+            div.dataset.idx=idx;
+            div.innerHTML=`<span class="wallet-chain">${chain}</span><span class="wallet-addr" title="${address}">${address.slice(0,8)}...${address.slice(-4)}</span><span class="wallet-label">${label||chain.charAt(0).toUpperCase()+chain.slice(1)}</span><button type="button" class="wallet-remove" onclick="removeWallet(${idx})">✕</button>`;
+            list.appendChild(div);
+            document.getElementById('wallet-address').value='';
+            document.getElementById('wallet-label').value='';
+          }
           else{alert(d.error||'Failed to add wallet');}
         }).catch(e=>alert('Error: '+e));
     }
