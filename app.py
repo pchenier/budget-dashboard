@@ -266,22 +266,21 @@ def _build_real_data_js(data):
     cat_labels  = [c["cat"] for c in cat_spend]
     cat_amounts = [c["amt"] for c in cat_spend]
 
-    # Connection status derived from config
-    config = load_config() or {}
+    # Connection status derived from data presence
     connections = {
-        'plaid': bool(config.get('plaid_client') and config.get('plaid_secret') and config.get('plaid_token')),
-        'wise': bool(config.get('wise_token')),
-        'crypto': bool(config.get('wallets')),
+        'plaid': any(a.get('type', '') in ('Chequing / Savings', 'Credit Card', 'Investment', 'Loan') for a in raw_accounts),
+        'wise': any(a.get('id', '').startswith('wise_') for a in raw_accounts),
+        'crypto': bool(crypto_balances),
         'wealthsimple': False,
         'kraken': False,
     }
 
-    # Wallets list for frontend
-    wallets_list = config.get('wallets', [])
+    # Wallets list for frontend (from data input, not old config)
+    wallets_list = data.get('wallets', [])
 
-    # Derive user name from first account institution, or config
-    user_name = config.get('user_name', '')
-    user_email = config.get('user_email', '')
+    # Derive user name from first account institution
+    user_name = ''
+    user_email = ''
     if not user_name and accounts:
         user_name = accounts[0].get('inst', accounts[0].get('name', ''))
     if not user_name:
