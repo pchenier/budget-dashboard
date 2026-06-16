@@ -55,7 +55,7 @@ def pull_all(config):
                         else "https://development.plaid.com" if _env == "development"
                         else "https://sandbox.plaid.com")
     gen.WISE_TOKEN   = config.get("wise_token", "")
-    gen.WISE_PROFILE = int(config.get("wise_profile", 0) or 0)
+    gen.WISE_PROFILE = int(config.get("wise_profile", 0) or 0) if str(config.get("wise_profile", "")).isdigit() else 0
     gen.PHANTOM_ADDR = ""  # Legacy: no longer used; wallets handled below
     gen.USD_TO_CAD   = float(config.get("usd_to_cad", 1.38) or 1.38)
     gen.START_DATE   = config.get("start_date", "2025-01-01") or "2025-01-01"
