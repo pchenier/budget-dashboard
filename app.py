@@ -482,7 +482,9 @@ a{color:#4ade80;text-decoration:none}
     function openPlaidLink(){
       fetch('/api/plaid/link_token',{method:'POST'})
         .then(r=>r.json()).then(d=>{
-          if(!d.link_token){alert(d.error||'Could not start Plaid. Check admin settings.');return;}
+          if(!d.link_token){
+            document.getElementById('bank-trust').innerHTML='<div class="trust-header">Almost there!</div><div style="font-size:0.8rem;color:#a1a1aa;margin-bottom:14px;line-height:1.5">Plaid API credentials need to be configured first. This is a one time setup in admin settings.</div><a href="/admin" class="trust-btn" style="display:block;text-align:center;text-decoration:none">Go to Admin Settings</a><div class="trust-powered" style="margin-top:12px">You only need to do this once</div>';
+            return;}
           const handler=Plaid.create({
             token:d.link_token,
             onSuccess:async(publicToken)=>{
