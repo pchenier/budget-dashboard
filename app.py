@@ -913,6 +913,8 @@ def logout():
     with _state_lock:
         _state['data']   = None
         _state['status'] = 'idle'
+        _state['error']  = ''
+        _state['msg']    = ''
     return redirect(url_for('setup'))
 
 
