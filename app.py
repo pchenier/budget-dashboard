@@ -702,14 +702,18 @@ def setup():
 
     if request.method == 'POST':
         saved = load_config() or {}
+        # Strip placeholder values from form fields
+        _PLACEHOLDERS = {'your_wise_profile_id', 'your_wise_api_token', 'your_plaid_client_id', 'your_plaid_secret'}
+        wise_profile_raw = request.form.get('wise_profile', '').strip()
+        wise_token_raw = request.form.get('wise_token', '').strip()
         config = {
             'plaid_client':   saved.get('plaid_client', ''),
             'plaid_secret':   saved.get('plaid_secret', ''),
             'plaid_token':    saved.get('plaid_token', ''),
             'plaid_env':      saved.get('plaid_env', 'production'),
             'start_date':     saved.get('start_date', '2025-01-01'),
-            'wise_token':     request.form.get('wise_token', '').strip() or saved.get('wise_token', ''),
-            'wise_profile':   request.form.get('wise_profile', '').strip() or saved.get('wise_profile', ''),
+            'wise_token':     wise_token_raw if (wise_token_raw and wise_token_raw not in _PLACEHOLDERS) else (saved.get('wise_token', '') or ''),
+            'wise_profile':   wise_profile_raw if (wise_profile_raw and wise_profile_raw not in _PLACEHOLDERS and wise_profile_raw.isdigit()) else (saved.get('wise_profile', '') or ''),
             'usd_to_cad':     saved.get('usd_to_cad', '1.38'),
             'wallets':        saved.get('wallets', []),
         }
@@ -753,6 +757,12 @@ def api_data():
 @app.route('/api/refresh', methods=['POST'])
 def api_refresh():
     """Force re-fetch from APIs."""
+    # Reset error state first
+    with _state_lock:
+        if _state['status'] == 'error':
+            _state['status'] = 'idle'
+            _state['error'] = ''
+            _state['data'] = None
     config = load_config()
     if not config:
         return jsonify({'ok': False, 'msg': 'No config saved'}), 400
