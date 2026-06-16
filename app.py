@@ -310,40 +310,48 @@ SETUP_HTML = """<!DOCTYPE html>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Inter',sans-serif;background:#080808;color:#f4f4f5;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
-.card{background:#0f0f0f;border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:40px;width:100%;max-width:480px}
-.logo{display:flex;align-items:center;gap:10px;margin-bottom:28px}
-.logo-mark{width:28px;height:28px;background:#f4f4f5;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#080808}
-.logo-name{font-size:16px;font-weight:600;color:#f4f4f5}
-h2{font-size:18px;font-weight:600;margin-bottom:4px;letter-spacing:-.3px}
-.sub{font-size:13px;color:#71717a;margin-bottom:28px;line-height:1.5}
-.section{margin-bottom:24px}
-.sec-label{font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:#3f3f46;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid rgba(255,255,255,.04)}
-label{display:block;font-size:12px;color:#71717a;margin-bottom:4px;margin-top:12px}
-input,select{width:100%;background:#161616;border:1px solid rgba(255,255,255,.07);border-radius:8px;padding:9px 12px;color:#f4f4f5;font-family:'Inter',sans-serif;font-size:13px;outline:none;transition:border-color .15s}
-input:focus,select:focus{border-color:rgba(255,255,255,.14)}
+.card{background:#111;border:1px solid #222;border-radius:16px;padding:2.5rem;width:100%;max-width:440px}
+.header{display:flex;align-items:center;gap:10px;margin-bottom:2rem}
+.header svg{flex-shrink:0}
+.brand{font-size:1.25rem;font-weight:700;color:#4ade80;letter-spacing:-0.02em}
+.title{font-size:1.1rem;font-weight:600;margin-bottom:0.25rem;letter-spacing:-0.2px}
+.sub{font-size:0.85rem;color:#71717a;margin-bottom:2rem;line-height:1.6}
+.section{margin-bottom:1.5rem}
+.sec-label{font-size:0.65rem;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#4ade80;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid #1a1a1a}
+label{display:block;font-size:0.75rem;font-weight:500;color:#a1a1aa;margin-bottom:4px;margin-top:10px;text-transform:uppercase;letter-spacing:0.04em}
+input,select{width:100%;background:#1a1a1a;border:1px solid #2a2a2a;border-radius:8px;padding:0.65rem 0.85rem;color:#f4f4f5;font-family:'Inter',sans-serif;font-size:0.85rem;outline:none;transition:border-color 0.15s}
+input:focus,select:focus{border-color:#4ade80}
 input::placeholder{color:#3f3f46}
-.optional{font-size:10px;color:#3f3f46;margin-left:4px}
-.btn{width:100%;margin-top:28px;padding:12px;background:#f4f4f5;border:none;border-radius:8px;color:#080808;font-family:'Inter',sans-serif;font-size:14px;font-weight:600;cursor:pointer;transition:opacity .15s}
-.btn:hover{opacity:.88}
-.btn:disabled{opacity:.4;cursor:not-allowed}
-.error{background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.2);border-radius:8px;padding:10px 14px;font-size:13px;color:#f87171;margin-bottom:20px}
-a{color:#60a5fa}
-.wallet-item{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.04);font-size:13px}
-.wallet-chain{background:#1a1a2e;color:#f59e0b;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em}
-.wallet-addr{color:#a1a1aa;font-family:monospace;font-size:12px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.wallet-label{color:#d4d4d8;font-size:12px}
-.wallet-remove{background:none;border:none;color:#ef4444;cursor:pointer;font-size:14px;padding:2px 6px;border-radius:4px}
-.wallet-remove:hover{background:rgba(239,68,68,.1)}
+.optional{font-size:0.65rem;color:#3f3f46;margin-left:4px}
+.btn{width:100%;margin-top:1.75rem;padding:0.85rem;background:#4ade80;border:none;border-radius:8px;color:#080808;font-family:'Inter',sans-serif;font-size:0.9rem;font-weight:700;cursor:pointer;transition:opacity 0.15s}
+.btn:hover{opacity:0.9}
+.btn:disabled{opacity:0.4;cursor:not-allowed}
+.error{background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.25);border-radius:8px;padding:0.65rem 0.85rem;font-size:0.85rem;color:#f87171;margin-bottom:1.25rem}
+a{color:#4ade80;text-decoration:none}
+.wallet-item{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #1a1a1a;font-size:0.85rem}
+.wallet-chain{background:#1a2e1a;color:#4ade80;padding:2px 8px;border-radius:4px;font-size:0.65rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em}
+.wallet-addr{color:#a1a1aa;font-family:monospace;font-size:0.75rem;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wallet-label{color:#d4d4d8;font-size:0.75rem}
+.wallet-remove{background:none;border:none;color:#ef4444;cursor:pointer;font-size:0.85rem;padding:2px 6px;border-radius:4px}
+.wallet-remove:hover{background:rgba(239,68,68,0.1)}
+.add-wallet-btn{margin-top:8px;padding:6px 12px;background:#1a1a1a;border:1px solid #2a2a2a;border-radius:8px;color:#a1a1aa;font-family:'Inter',sans-serif;font-size:0.75rem;font-weight:500;cursor:pointer;transition:all 0.15s}
+.add-wallet-btn:hover{border-color:#4ade80;color:#4ade80}
 </style>
 </head>
 <body>
 <div class="card">
-  <div class="logo">
-    <div class="logo-mark">F</div>
-    <span class="logo-name">Fiscit</span>
+  <div class="header">
+    <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" width="32" height="32">
+      <rect width="32" height="32" rx="8" fill="#0A0F1A"/>
+      <rect x="7" y="6" width="5" height="20" rx="2" fill="#F0F4F8"/>
+      <rect x="7" y="6" width="16" height="5" rx="2" fill="#F0F4F8"/>
+      <rect x="7" y="14" width="12" height="4" rx="2" fill="#F0F4F8"/>
+      <circle cx="26" cy="8.5" r="3.5" fill="#b8f566"/>
+    </svg>
+    <span class="brand">Fiscit</span>
   </div>
-  <h2>Connect your accounts</h2>
-  <p class="sub">Your credentials are saved locally on your machine only — never sent to any server.</p>
+  <div class="title">Connect your accounts</div>
+  <p class="sub">Your credentials are stored locally and encrypted. They never leave your machine.</p>
 
   {% if error %}
   <div class="error">{{ error }}</div>
@@ -351,7 +359,7 @@ a{color:#60a5fa}
 
   <form method="POST" action="/setup" id="form">
     <div class="section">
-      <div class="sec-label">Plaid — Required</div>
+      <div class="sec-label">Plaid</div>
       <label>Client ID</label>
       <input name="plaid_client" placeholder="6a148508..." required value="{{ vals.plaid_client or '' }}">
       <label>Secret</label>
@@ -396,21 +404,20 @@ a{color:#60a5fa}
         <input id="wallet-address" placeholder="Wallet address" style="width:45%">
         <input id="wallet-label" placeholder="Label" style="width:25%">
       </div>
-      <button type="button" class="btn" style="margin-top:8px;padding:8px;font-size:12px" onclick="addWallet()">+ Add Wallet</button>
+      <button type="button" class="add-wallet-btn" onclick="addWallet()">+ Add Wallet</button>
     </div>
 
     <div class="section">
       <div class="sec-label">Options</div>
-      <label>USD → CAD rate</label>
+      <label>USD to CAD rate</label>
       <input name="usd_to_cad" placeholder="1.38" value="{{ vals.usd_to_cad or '1.38' }}">
     </div>
 
-    <button type="submit" class="btn" id="submit-btn">Connect & Open Dashboard</button>
+    <button type="submit" class="btn" id="submit-btn">Connect and Open Dashboard</button>
   </form>
   <script>
     document.getElementById('form').addEventListener('submit',function(){
-      const btn=document.getElementById('submit-btn');
-      btn.disabled=true;btn.textContent='Connecting...';
+      const btn=document.getElementById('submit-btn');btn.disabled=true;btn.textContent='Connecting...';
     });
     function addWallet(){
       const chain=document.getElementById('wallet-chain').value;
@@ -446,11 +453,10 @@ LOADING_HTML = """<!DOCTYPE html>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Inter',sans-serif;background:#080808;color:#f4f4f5;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;gap:16px}
-.logo-mark{width:36px;height:36px;background:#f4f4f5;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:#080808;margin-bottom:8px}
-.spinner{width:20px;height:20px;border:2px solid rgba(255,255,255,.08);border-top-color:rgba(255,255,255,.4);border-radius:50%;animation:spin 0.8s linear infinite}
+.spinner{width:20px;height:20px;border:2px solid #2a2a2a;border-top-color:#4ade80;border-radius:50%;animation:spin 0.8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
-.msg{font-size:14px;color:#71717a}
-.submsg{font-size:12px;color:#3f3f46}
+.msg{font-size:0.85rem;color:#71717a}
+.submsg{font-size:0.75rem;color:#3f3f46}
 </style>
 <script>
 function poll(){
@@ -464,7 +470,13 @@ window.addEventListener('DOMContentLoaded',poll);
 </script>
 </head>
 <body>
-  <div class="logo-mark">V</div>
+  <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" width="36" height="36">
+    <rect width="32" height="32" rx="8" fill="#0A0F1A"/>
+    <rect x="7" y="6" width="5" height="20" rx="2" fill="#F0F4F8"/>
+    <rect x="7" y="6" width="16" height="5" rx="2" fill="#F0F4F8"/>
+    <rect x="7" y="14" width="12" height="4" rx="2" fill="#F0F4F8"/>
+    <circle cx="26" cy="8.5" r="3.5" fill="#b8f566"/>
+  </svg>
   <div class="spinner"></div>
   <div class="msg">Connecting to your accounts</div>
   <div class="submsg">Plaid · Wise · Solana</div>
