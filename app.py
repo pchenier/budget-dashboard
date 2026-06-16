@@ -368,6 +368,11 @@ a{color:#4ade80;text-decoration:none}
 .trust-powered a:hover{color:#71717a}
 .hidden{display:none!important}
 .account-icon.bank{background:#1a2e1a;color:#4ade80}
+.test-btn{width:100%;margin-top:10px;padding:0.6rem;background:transparent;border:1px solid #4ade80;border-radius:8px;color:#4ade80;font-family:'Inter',sans-serif;font-size:0.8rem;font-weight:600;cursor:pointer;transition:all 0.15s}
+.test-btn:hover{background:#4ade80;color:#080808}
+.test-result{margin-top:8px;padding:10px 12px;border-radius:8px;font-size:0.8rem;line-height:1.5}
+.test-result.ok{background:rgba(74,222,128,0.1);border:1px solid rgba(74,222,128,0.25);color:#4ade80}
+.test-result.err{background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.25);color:#f87171}
 .trust-box{margin:-4px 0 8px 0;padding:16px;background:#0f1a0f;border:1px solid #1a3a1a;border-radius:0 0 12px 12px;animation:slideDown .2s ease}
 @keyframes slideDown{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
 .trust-header{font-size:0.85rem;font-weight:600;color:#4ade80;margin-bottom:12px}
@@ -443,9 +448,11 @@ a{color:#4ade80;text-decoration:none}
     </div>
     <div id="wise-form" class="hidden sub-form">
       <label>API Token</label>
-      <input name="wise_token" placeholder="932aba85-..." value="{{ vals.wise_token or '' }}">
+      <input id="wise-token-input" name="wise_token" placeholder="932aba85-..." value="{{ vals.wise_token or '' }}">
       <label>Profile ID</label>
-      <input name="wise_profile" placeholder="63963106" value="{{ vals.wise_profile or '' }}">
+      <input id="wise-profile-input" name="wise_profile" placeholder="63963106" value="{{ vals.wise_profile or '' }}">
+      <button type="button" class="test-btn" onclick="testWise()">Test Connection</button>
+      <div id="wise-test-result"></div>
     </div>
 
     <div class="account-card" onclick="document.getElementById('crypto-form').classList.toggle('hidden')">
@@ -532,6 +539,27 @@ a{color:#4ade80;text-decoration:none}
           else{alert(d.error||'Failed to add wallet');}
         }).catch(e=>alert('Error: '+e));
     }
+    function testWise(){
+      const token=document.getElementById('wise-token-input').value.trim();
+      const profile=document.getElementById('wise-profile-input').value.trim();
+      const el=document.getElementById('wise-test-result');
+      if(!token){el.innerHTML='<div class="test-result err">Enter your API token first.</div>';return;}
+      el.innerHTML='<div class="test-result" style="color:#a1a1aa">Testing...</div>';
+      fetch('/api/wise/test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({wise_token:token})})
+        .then(r=>r.json()).then(d=>{
+          if(d.ok){
+            const profiles=d.profiles.map(p=>`Profile ${p.id} (${p.type})`).join(', ');
+            let msg='Connected! '+profiles;
+            if(!profile&&d.profiles.length===1){
+              document.getElementById('wise-profile-input').value=d.profiles[0].id;
+            }
+            el.innerHTML='<div class="test-result ok">'+msg+'</div>';
+          }else{
+            el.innerHTML='<div class="test-result err">'+(d.error||'Connection failed.')+'</div>';
+          }
+        }).catch(()=>{el.innerHTML='<div class="test-result err">Network error.</div>'});
+    }
+
     function removeWallet(idx){
       if(!confirm('Remove this wallet?'))return;
       fetch('/api/wallets/'+idx,{method:'DELETE'})
@@ -787,6 +815,33 @@ def plaid_exchange():
         t = threading.Thread(target=fetch_data, args=(config,), daemon=True)
         t.start()
         return jsonify({'ok': True, 'msg': 'Account connected! Refreshing data...'})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@app.route('/api/wise/test', methods=['POST'])
+def api_wise_test():
+    """Test Wise API token by fetching profiles."""
+    import requests as req
+    body = request.get_json() or {}
+    token = body.get('wise_token', '').strip()
+    if not token:
+        return jsonify({'ok': False, 'error': 'API Token is required.'}), 400
+    try:
+        r = req.get('https://api.transferwise.com/v1/profiles',
+                    headers={'Authorization': f'Bearer {token}'}, timeout=10)
+        if r.status_code == 200:
+            profiles = r.json()
+            biz = [p for p in profiles if p.get('type') == 'business']
+            per = [p for p in profiles if p.get('type') == 'personal']
+            info = []
+            for p in profiles:
+                info.append({'id': p['id'], 'type': p['type']})
+            return jsonify({'ok': True, 'profiles': info})
+        elif r.status_code == 401:
+            return jsonify({'ok': False, 'error': 'Invalid API token.'}), 401
+        else:
+            return jsonify({'ok': False, 'error': f'Wise API returned {r.status_code}.'}), 400
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)}), 500
 
