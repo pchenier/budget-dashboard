@@ -10,7 +10,7 @@ On first run with no saved config → redirects to /setup.
 After setup, config is saved to saved_config.json — never asks again on restart.
 """
 
-import os, json, threading, uuid
+import os, json, threading, uuid, traceback
 from flask import Flask, request, session, redirect, url_for, render_template_string, jsonify, send_from_directory, flash
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from datetime import datetime, timedelta
@@ -32,6 +32,11 @@ app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {'pool_pre_ping': True}
 db.init_app(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    traceback.print_exc()
+    return f"Internal error: {e}", 500
 
 @login_manager.user_loader
 def load_user(user_id):
