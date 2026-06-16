@@ -651,12 +651,14 @@ def setup():
 
 @app.route('/api/status')
 def api_status():
+    has_plaid = bool(os.getenv('PLAID_CLIENT_ID') and os.getenv('PLAID_SECRET'))
     with _state_lock:
         return jsonify({
             'status':    _state['status'],
-            'msg':       _state['msg'],
-            'error':     _state['error'],
+            'msg':      _state['msg'],
+            'error':    _state['error'],
             'loaded_at': _state['loaded_at'],
+            'plaid_configured': has_plaid,
         })
 
 
