@@ -503,7 +503,7 @@ a{color:#4ade80;text-decoration:none}
     </div>
   </div>
 
-  <button type="submit" class="btn" id="submit-btn">Continue to Dashboard</button>
+  <button type="button" class="btn" id="submit-btn" onclick="window.location.href='/'">Continue to Dashboard</button>
   </form>
   <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
   <script>
@@ -540,9 +540,6 @@ a{color:#4ade80;text-decoration:none}
         }).catch(e=>alert('Error: '+e));
     }
 
-    document.getElementById('form').addEventListener('submit',function(){
-      const btn=document.getElementById('submit-btn');btn.disabled=true;btn.textContent='Connecting...';
-    });
     function addWallet(){
       const chain=document.getElementById('wallet-chain').value;
       const address=document.getElementById('wallet-address').value.trim();
