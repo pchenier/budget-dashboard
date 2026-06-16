@@ -336,6 +336,21 @@ a{color:#4ade80;text-decoration:none}
 .wallet-remove:hover{background:rgba(239,68,68,0.1)}
 .add-wallet-btn{margin-top:8px;padding:6px 12px;background:#1a1a1a;border:1px solid #2a2a2a;border-radius:8px;color:#a1a1aa;font-family:'Inter',sans-serif;font-size:0.75rem;font-weight:500;cursor:pointer;transition:all 0.15s}
 .add-wallet-btn:hover{border-color:#4ade80;color:#4ade80}
+.accounts{display:flex;flex-direction:column;gap:10px;margin-bottom:2rem}
+.account-card{display:flex;align-items:center;gap:12px;background:#1a1a1a;border:1px solid #2a2a2a;border-radius:12px;padding:14px 16px;cursor:pointer;transition:all 0.15s}
+.account-card:hover{border-color:#4ade80;background:#1a1a1a}
+.account-icon{width:40px;height:40px;border-radius:10px;background:#1a2e1a;color:#4ade80;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.account-icon.wise{background:#1a1a2e;color:#60a5fa}
+.account-icon.crypto{background:#2e1a1a;color:#f59e0b}
+.account-info{flex:1}
+.account-name{font-size:0.9rem;font-weight:600;color:#f4f4f5}
+.account-desc{font-size:0.75rem;color:#71717a;margin-top:2px}
+.account-action{font-size:0.75rem;font-weight:600;color:#4ade80;text-transform:uppercase;letter-spacing:0.05em}
+.sub-form{margin:-4px 0 8px 0;padding:12px 16px;background:#161616;border:1px solid #2a2a2a;border-radius:0 0 12px 12px}
+.hidden{display:none!important}
+.admin-link{text-align:center;margin-top:1.5rem;font-size:0.75rem}
+.admin-link a{color:#3f3f46;text-decoration:none}
+.admin-link a:hover{color:#71717a}
 </style>
 </head>
 <body>
@@ -350,41 +365,53 @@ a{color:#4ade80;text-decoration:none}
     </svg>
     <span class="brand">Fiscit</span>
   </div>
-  <div class="title">Connect your accounts</div>
-  <p class="sub">Your credentials are stored locally and encrypted. They never leave your machine.</p>
+  <div class="title">Get started</div>
+  <p class="sub">Connect your accounts to see your full financial picture.</p>
 
   {% if error %}
   <div class="error">{{ error }}</div>
   {% endif %}
 
-  <form method="POST" action="/setup" id="form">
-    <div class="section">
-      <div class="sec-label">Plaid</div>
-      <label>Client ID</label>
-      <input name="plaid_client" placeholder="6a148508..." required value="{{ vals.plaid_client or '' }}">
-      <label>Secret</label>
-      <input name="plaid_secret" type="password" placeholder="e953c3d2..." required value="{{ vals.plaid_secret or '' }}">
-      <label>Access Token</label>
-      <input name="plaid_token" placeholder="access-production-..." required value="{{ vals.plaid_token or '' }}">
-      <label>Environment</label>
-      <select name="plaid_env">
-        <option value="production" {% if vals.plaid_env != 'sandbox' %}selected{% endif %}>Production</option>
-        <option value="sandbox" {% if vals.plaid_env == 'sandbox' %}selected{% endif %}>Sandbox</option>
-      </select>
-      <label>Start Date <span class="optional">transactions since</span></label>
-      <input name="start_date" placeholder="2025-01-01" value="{{ vals.start_date or '2025-01-01' }}">
+  <div class="accounts">
+    <div class="account-card" onclick="openPlaidLink()">
+      <div class="account-icon">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+      </div>
+      <div class="account-info">
+        <div class="account-name">Bank Account</div>
+        <div class="account-desc">Connect via Plaid</div>
+      </div>
+      <div class="account-action">Connect</div>
     </div>
 
-    <div class="section">
-      <div class="sec-label">Wise <span class="optional">Optional</span></div>
+    <div class="account-card" onclick="document.getElementById('wise-form').classList.toggle('hidden')">
+      <div class="account-icon wise">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M16 8l-4 8-4-8"/></svg>
+      </div>
+      <div class="account-info">
+        <div class="account-name">Wise</div>
+        <div class="account-desc">International transfers</div>
+      </div>
+      <div class="account-action">Set up</div>
+    </div>
+    <div id="wise-form" class="hidden sub-form">
       <label>API Token</label>
       <input name="wise_token" placeholder="932aba85-..." value="{{ vals.wise_token or '' }}">
       <label>Profile ID</label>
       <input name="wise_profile" placeholder="63963106" value="{{ vals.wise_profile or '' }}">
     </div>
 
-    <div class="section">
-      <div class="sec-label">Crypto Wallets <span class="optional">Optional</span></div>
+    <div class="account-card" onclick="document.getElementById('crypto-form').classList.toggle('hidden')">
+      <div class="account-icon crypto">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11.767 19.089c4.924.868 9.993-.826 9.993-.826s-2.053 3.078-7.292 4.165c-5.24 1.087-9.625-.075-9.625-.075"/><path d="M2.24 8.648c0 0 4.098-2.785 9.625-1.087 5.527 1.698 7.292 4.165 7.292 4.165"/><circle cx="12" cy="12" r="3"/></svg>
+      </div>
+      <div class="account-info">
+        <div class="account-name">Crypto Wallets</div>
+        <div class="account-desc">Solana, Ethereum, Bitcoin</div>
+      </div>
+      <div class="account-action">Add</div>
+    </div>
+    <div id="crypto-form" class="hidden sub-form">
       <div id="wallet-list">
         {% for w in vals.wallets or [] %}
         <div class="wallet-item" data-idx="{{ loop.index0 }}">
@@ -406,16 +433,39 @@ a{color:#4ade80;text-decoration:none}
       </div>
       <button type="button" class="add-wallet-btn" onclick="addWallet()">+ Add Wallet</button>
     </div>
+  </div>
 
-    <div class="section">
-      <div class="sec-label">Options</div>
-      <label>USD to CAD rate</label>
-      <input name="usd_to_cad" placeholder="1.38" value="{{ vals.usd_to_cad or '1.38' }}">
-    </div>
+  <button type="submit" class="btn" id="submit-btn">Continue to Dashboard</button>
 
-    <button type="submit" class="btn" id="submit-btn">Connect and Open Dashboard</button>
+  <div class="admin-link"><a href="/admin">Admin settings</a></div>
   </form>
+  <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
   <script>
+    let plaidConnected = false;
+
+    function openPlaidLink(){
+      fetch('/api/plaid/link_token',{method:'POST'})
+        .then(r=>r.json()).then(d=>{
+          if(!d.link_token){alert(d.error||'Could not start Plaid. Check admin settings.');return;}
+          const handler=Plaid.create({
+            token:d.link_token,
+            onSuccess:async(publicToken)=>{
+              const res=await fetch('/api/plaid/exchange',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({public_token:publicToken})});
+              const data=await res.json();
+              if(data.ok){
+                plaidConnected=true;
+                document.querySelector('.account-card:first-child .account-action').textContent='Connected';
+                document.querySelector('.account-card:first-child .account-action').style.color='#4ade80';
+                document.querySelector('.account-card:first-child').style.borderColor='#4ade80';
+              } else { alert(data.error||'Failed to connect bank'); }
+            },
+            onExit:()=>{},
+            onEvent:()=>{},
+          });
+          handler.open();
+        }).catch(e=>alert('Error: '+e));
+    }
+
     document.getElementById('form').addEventListener('submit',function(){
       const btn=document.getElementById('submit-btn');btn.disabled=true;btn.textContent='Connecting...';
     });
@@ -523,22 +573,20 @@ def setup():
     if request.method == 'POST':
         saved = load_config() or {}
         config = {
-            'plaid_client':   request.form.get('plaid_client', '').strip(),
-            'plaid_secret':   request.form.get('plaid_secret', '').strip(),
-            'plaid_token':    request.form.get('plaid_token', '').strip(),
-            'plaid_env':      request.form.get('plaid_env', 'production'),
-            'start_date':     request.form.get('start_date', '2025-01-01').strip(),
-            'wise_token':     request.form.get('wise_token', '').strip(),
-            'wise_profile':   request.form.get('wise_profile', '').strip(),
-            'usd_to_cad':     request.form.get('usd_to_cad', '1.38').strip(),
+            'plaid_client':   saved.get('plaid_client', ''),
+            'plaid_secret':   saved.get('plaid_secret', ''),
+            'plaid_token':    saved.get('plaid_token', ''),
+            'plaid_env':      saved.get('plaid_env', 'production'),
+            'start_date':     saved.get('start_date', '2025-01-01'),
+            'wise_token':     request.form.get('wise_token', '').strip() or saved.get('wise_token', ''),
+            'wise_profile':   request.form.get('wise_profile', '').strip() or saved.get('wise_profile', ''),
+            'usd_to_cad':     saved.get('usd_to_cad', '1.38'),
             'wallets':        saved.get('wallets', []),
         }
         vals = config
 
         if not config['plaid_client'] or not config['plaid_secret'] or not config['plaid_token']:
-            return render_template_string(SETUP_HTML,
-                error='Plaid Client ID, Secret and Access Token are required.',
-                vals=vals)
+            return redirect(url_for('admin', error='Plaid credentials needed first. Set them up in Admin settings.'))
 
         # Save to disk permanently
         save_config(config)
@@ -550,6 +598,118 @@ def setup():
         return render_template_string(LOADING_HTML)
 
     return render_template_string(SETUP_HTML, error=error, vals=vals)
+
+
+ADMIN_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fiscit — Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Inter',sans-serif;background:#080808;color:#f4f4f5;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+.card{background:#111;border:1px solid #222;border-radius:16px;padding:2.5rem;width:100%;max-width:440px}
+.header{display:flex;align-items:center;gap:10px;margin-bottom:2rem}
+.brand{font-size:1.25rem;font-weight:700;color:#4ade80;letter-spacing:-0.02em}
+.title{font-size:1.1rem;font-weight:600;margin-bottom:0.25rem;letter-spacing:-0.2px}
+.sub{font-size:0.85rem;color:#71717a;margin-bottom:2rem;line-height:1.6}
+.sec-label{font-size:0.65rem;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#4ade80;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid #1a1a1a}
+label{display:block;font-size:0.75rem;font-weight:500;color:#a1a1aa;margin-bottom:4px;margin-top:10px;text-transform:uppercase;letter-spacing:0.04em}
+input,select{width:100%;background:#1a1a1a;border:1px solid #2a2a2a;border-radius:8px;padding:0.65rem 0.85rem;color:#f4f4f5;font-family:'Inter',sans-serif;font-size:0.85rem;outline:none;transition:border-color 0.15s}
+input:focus,select:focus{border-color:#4ade80}
+input::placeholder{color:#3f3f46}
+.optional{font-size:0.65rem;color:#3f3f46;margin-left:4px}
+.btn{width:100%;margin-top:1.75rem;padding:0.85rem;background:#4ade80;border:none;border-radius:8px;color:#080808;font-family:'Inter',sans-serif;font-size:0.9rem;font-weight:700;cursor:pointer;transition:opacity 0.15s}
+.btn:hover{opacity:0.9}
+.error{background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.25);border-radius:8px;padding:0.65rem 0.85rem;font-size:0.85rem;color:#f87171;margin-bottom:1.25rem}
+.back-link{text-align:center;margin-top:1.5rem;font-size:0.75rem}
+.back-link a{color:#3f3f46;text-decoration:none}
+.back-link a:hover{color:#71717a}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="header">
+    <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" width="32" height="32">
+      <rect width="32" height="32" rx="8" fill="#0A0F1A"/>
+      <rect x="7" y="6" width="5" height="20" rx="2" fill="#F0F4F8"/>
+      <rect x="7" y="6" width="16" height="5" rx="2" fill="#F0F4F8"/>
+      <rect x="7" y="14" width="12" height="4" rx="2" fill="#F0F4F8"/>
+      <circle cx="26" cy="8.5" r="3.5" fill="#b8f566"/>
+    </svg>
+    <span class="brand">Fiscit</span>
+  </div>
+  <div class="title">Admin settings</div>
+  <p class="sub">API credentials and configuration. These are stored locally on the server only.</p>
+
+  {% if error %}
+  <div class="error">{{ error }}</div>
+  {% endif %}
+
+  <form method="POST" action="/admin" id="form">
+    <div class="sec-label">Plaid</div>
+    <label>Client ID</label>
+    <input name="plaid_client" placeholder="6a148508..." required value="{{ vals.plaid_client or '' }}">
+    <label>Secret</label>
+    <input name="plaid_secret" type="password" placeholder="e953c3d2..." required value="{{ vals.plaid_secret or '' }}">
+    <label>Access Token</label>
+    <input name="plaid_token" placeholder="access-production-..." required value="{{ vals.plaid_token or '' }}">
+    <label>Environment</label>
+    <select name="plaid_env">
+      <option value="production" {% if vals.plaid_env != 'sandbox' %}selected{% endif %}>Production</option>
+      <option value="sandbox" {% if vals.plaid_env == 'sandbox' %}selected{% endif %}>Sandbox</option>
+    </select>
+    <label>Start Date <span class="optional">transactions since</span></label>
+    <input name="start_date" placeholder="2025-01-01" value="{{ vals.start_date or '2025-01-01' }}">
+
+    <div style="margin-top:1.5rem">
+    <div class="sec-label">Options</div>
+    <label>USD to CAD rate</label>
+    <input name="usd_to_cad" placeholder="1.38" value="{{ vals.usd_to_cad or '1.38' }}">
+    </div>
+
+    <button type="submit" class="btn" id="submit-btn">Save and Connect</button>
+  </form>
+  <div class="back-link"><a href="/setup">Back to setup</a></div>
+</div>
+</body>
+</html>"""
+
+
+@app.route('/admin', methods=['GET', 'POST'])
+def admin():
+    error = request.args.get('error', '')
+    saved = load_config() or {}
+    vals  = saved
+
+    if request.method == 'POST':
+        saved = load_config() or {}
+        config = {
+            'plaid_client':   request.form.get('plaid_client', '').strip(),
+            'plaid_secret':   request.form.get('plaid_secret', '').strip(),
+            'plaid_token':    request.form.get('plaid_token', '').strip(),
+            'plaid_env':      request.form.get('plaid_env', 'production'),
+            'start_date':     request.form.get('start_date', '2025-01-01').strip(),
+            'wise_token':     saved.get('wise_token', ''),
+            'wise_profile':   saved.get('wise_profile', ''),
+            'usd_to_cad':     request.form.get('usd_to_cad', '1.38').strip(),
+            'wallets':        saved.get('wallets', []),
+        }
+        vals = config
+
+        if not config['plaid_client'] or not config['plaid_secret'] or not config['plaid_token']:
+            return render_template_string(ADMIN_HTML,
+                error='Plaid Client ID, Secret and Access Token are required.',
+                vals=vals)
+
+        save_config(config)
+        t = threading.Thread(target=fetch_data, args=(config,), daemon=True)
+        t.start()
+        return render_template_string(LOADING_HTML)
+
+    return render_template_string(ADMIN_HTML, error=error, vals=vals)
 
 
 @app.route('/api/status')
