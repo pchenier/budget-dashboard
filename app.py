@@ -36,23 +36,41 @@ _state = {
 
 # ── Persistent config ─────────────────────────────────────────────────────────
 def load_config():
+    """Load config from disk, with Plaid credentials from env vars."""
+    cfg = {}
+    # Plaid credentials come from env vars (set on Railway/Vercel)
+    if os.getenv('PLAID_CLIENT_ID'):
+        cfg['plaid_client'] = os.getenv('PLAID_CLIENT_ID')
+    if os.getenv('PLAID_SECRET'):
+        cfg['plaid_secret'] = os.getenv('PLAID_SECRET')
+    if os.getenv('PLAID_ACCESS_TOKEN'):
+        cfg['plaid_token'] = os.getenv('PLAID_ACCESS_TOKEN')
+    if os.getenv('PLAID_ENV'):
+        cfg['plaid_env'] = os.getenv('PLAID_ENV')
+    # Load disk config and merge (wallets, wise, options, etc.)
     try:
         if CONFIG_FILE.exists():
-            cfg = json.loads(CONFIG_FILE.read_text())
-            if cfg.get("plaid_client") and cfg.get("plaid_secret") and cfg.get("plaid_token"):
-                # ── Backwards compat: migrate phantom_wallet → wallets ──
-                if cfg.get("phantom_wallet") and not cfg.get("wallets"):
-                    addr = cfg["phantom_wallet"].strip()
-                    if addr:
-                        cfg["wallets"] = [{"chain": "solana", "address": addr, "label": "Phantom"}]
-                    else:
-                        cfg["wallets"] = []
-                    save_config(cfg)
-                elif "wallets" not in cfg:
-                    cfg["wallets"] = []
-                return cfg
+            disk = json.loads(CONFIG_FILE.read_text())
+            # Backwards compat: migrate phantom_wallet → wallets
+            if disk.get("phantom_wallet") and not disk.get("wallets"):
+                addr = disk["phantom_wallet"].strip()
+                if addr:
+                    disk["wallets"] = [{"chain": "solana", "address": addr, "label": "Phantom"}]
+                else:
+                    disk["wallets"] = []
+                save_config(disk)
+            elif "wallets" not in disk:
+                disk["wallets"] = []
+            # Disk values override env for non-Plaid fields; env Plaid always wins
+            for k, v in disk.items():
+                if k not in ('plaid_client', 'plaid_secret', 'plaid_token', 'plaid_env'):
+                    cfg[k] = v
+                elif not cfg.get(k):
+                    cfg[k] = v
     except Exception:
         pass
+    if cfg:
+        return cfg
     return None
 
 def save_config(config):
@@ -347,10 +365,8 @@ a{color:#4ade80;text-decoration:none}
 .account-desc{font-size:0.75rem;color:#71717a;margin-top:2px}
 .account-action{font-size:0.75rem;font-weight:600;color:#4ade80;text-transform:uppercase;letter-spacing:0.05em}
 .sub-form{margin:-4px 0 8px 0;padding:12px 16px;background:#161616;border:1px solid #2a2a2a;border-radius:0 0 12px 12px}
+.trust-powered a:hover{color:#71717a}
 .hidden{display:none!important}
-.admin-link{text-align:center;margin-top:1.5rem;font-size:0.75rem}
-.admin-link a{color:#3f3f46;text-decoration:none}
-.admin-link a:hover{color:#71717a}
 .account-icon.bank{background:#1a2e1a;color:#4ade80}
 .trust-box{margin:-4px 0 8px 0;padding:16px;background:#0f1a0f;border:1px solid #1a3a1a;border-radius:0 0 12px 12px;animation:slideDown .2s ease}
 @keyframes slideDown{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
@@ -467,8 +483,6 @@ a{color:#4ade80;text-decoration:none}
   </div>
 
   <button type="submit" class="btn" id="submit-btn">Continue to Dashboard</button>
-
-  <div class="admin-link"><a href="/admin">Admin settings</a></div>
   </form>
   <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
   <script>
@@ -483,7 +497,7 @@ a{color:#4ade80;text-decoration:none}
       fetch('/api/plaid/link_token',{method:'POST'})
         .then(r=>r.json()).then(d=>{
           if(!d.link_token){
-            document.getElementById('bank-trust').innerHTML='<div class="trust-header">Almost there!</div><div style="font-size:0.8rem;color:#a1a1aa;margin-bottom:14px;line-height:1.5">Plaid API credentials need to be configured first. This is a one time setup in admin settings.</div><a href="/admin" class="trust-btn" style="display:block;text-align:center;text-decoration:none">Go to Admin Settings</a><div class="trust-powered" style="margin-top:12px">You only need to do this once</div>';
+            document.getElementById('bank-trust').innerHTML='<div class="trust-header">Something went wrong</div><div style="font-size:0.8rem;color:#a1a1aa;margin-bottom:14px;line-height:1.5">We could not connect to Plaid. Please try again later.</div><button type="button" class="trust-btn" onclick="openPlaidLink()">Retry</button><div class="trust-powered" style="margin-top:12px">Powered by <a href="https://plaid.com" target="_blank">Plaid</a></div>';
             return;}
           const handler=Plaid.create({
             token:d.link_token,
@@ -623,9 +637,6 @@ def setup():
         }
         vals = config
 
-        if not config['plaid_client'] or not config['plaid_secret'] or not config['plaid_token']:
-            return redirect(url_for('admin', error='Plaid credentials needed first. Set them up in Admin settings.'))
-
         # Save to disk permanently
         save_config(config)
 
@@ -636,118 +647,6 @@ def setup():
         return render_template_string(LOADING_HTML)
 
     return render_template_string(SETUP_HTML, error=error, vals=vals)
-
-
-ADMIN_HTML = """<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Fiscit — Admin</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<style>
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Inter',sans-serif;background:#080808;color:#f4f4f5;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
-.card{background:#111;border:1px solid #222;border-radius:16px;padding:2.5rem;width:100%;max-width:440px}
-.header{display:flex;align-items:center;gap:10px;margin-bottom:2rem}
-.brand{font-size:1.25rem;font-weight:700;color:#4ade80;letter-spacing:-0.02em}
-.title{font-size:1.1rem;font-weight:600;margin-bottom:0.25rem;letter-spacing:-0.2px}
-.sub{font-size:0.85rem;color:#71717a;margin-bottom:2rem;line-height:1.6}
-.sec-label{font-size:0.65rem;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#4ade80;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid #1a1a1a}
-label{display:block;font-size:0.75rem;font-weight:500;color:#a1a1aa;margin-bottom:4px;margin-top:10px;text-transform:uppercase;letter-spacing:0.04em}
-input,select{width:100%;background:#1a1a1a;border:1px solid #2a2a2a;border-radius:8px;padding:0.65rem 0.85rem;color:#f4f4f5;font-family:'Inter',sans-serif;font-size:0.85rem;outline:none;transition:border-color 0.15s}
-input:focus,select:focus{border-color:#4ade80}
-input::placeholder{color:#3f3f46}
-.optional{font-size:0.65rem;color:#3f3f46;margin-left:4px}
-.btn{width:100%;margin-top:1.75rem;padding:0.85rem;background:#4ade80;border:none;border-radius:8px;color:#080808;font-family:'Inter',sans-serif;font-size:0.9rem;font-weight:700;cursor:pointer;transition:opacity 0.15s}
-.btn:hover{opacity:0.9}
-.error{background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.25);border-radius:8px;padding:0.65rem 0.85rem;font-size:0.85rem;color:#f87171;margin-bottom:1.25rem}
-.back-link{text-align:center;margin-top:1.5rem;font-size:0.75rem}
-.back-link a{color:#3f3f46;text-decoration:none}
-.back-link a:hover{color:#71717a}
-</style>
-</head>
-<body>
-<div class="card">
-  <div class="header">
-    <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" width="32" height="32">
-      <rect width="32" height="32" rx="8" fill="#0A0F1A"/>
-      <rect x="7" y="6" width="5" height="20" rx="2" fill="#F0F4F8"/>
-      <rect x="7" y="6" width="16" height="5" rx="2" fill="#F0F4F8"/>
-      <rect x="7" y="14" width="12" height="4" rx="2" fill="#F0F4F8"/>
-      <circle cx="26" cy="8.5" r="3.5" fill="#b8f566"/>
-    </svg>
-    <span class="brand">Fiscit</span>
-  </div>
-  <div class="title">Admin settings</div>
-  <p class="sub">API credentials and configuration. These are stored locally on the server only.</p>
-
-  {% if error %}
-  <div class="error">{{ error }}</div>
-  {% endif %}
-
-  <form method="POST" action="/admin" id="form">
-    <div class="sec-label">Plaid</div>
-    <label>Client ID</label>
-    <input name="plaid_client" placeholder="6a148508..." required value="{{ vals.plaid_client or '' }}">
-    <label>Secret</label>
-    <input name="plaid_secret" type="password" placeholder="e953c3d2..." required value="{{ vals.plaid_secret or '' }}">
-    <label>Access Token</label>
-    <input name="plaid_token" placeholder="access-production-..." required value="{{ vals.plaid_token or '' }}">
-    <label>Environment</label>
-    <select name="plaid_env">
-      <option value="production" {% if vals.plaid_env != 'sandbox' %}selected{% endif %}>Production</option>
-      <option value="sandbox" {% if vals.plaid_env == 'sandbox' %}selected{% endif %}>Sandbox</option>
-    </select>
-    <label>Start Date <span class="optional">transactions since</span></label>
-    <input name="start_date" placeholder="2025-01-01" value="{{ vals.start_date or '2025-01-01' }}">
-
-    <div style="margin-top:1.5rem">
-    <div class="sec-label">Options</div>
-    <label>USD to CAD rate</label>
-    <input name="usd_to_cad" placeholder="1.38" value="{{ vals.usd_to_cad or '1.38' }}">
-    </div>
-
-    <button type="submit" class="btn" id="submit-btn">Save and Connect</button>
-  </form>
-  <div class="back-link"><a href="/setup">Back to setup</a></div>
-</div>
-</body>
-</html>"""
-
-
-@app.route('/admin', methods=['GET', 'POST'])
-def admin():
-    error = request.args.get('error', '')
-    saved = load_config() or {}
-    vals  = saved
-
-    if request.method == 'POST':
-        saved = load_config() or {}
-        config = {
-            'plaid_client':   request.form.get('plaid_client', '').strip(),
-            'plaid_secret':   request.form.get('plaid_secret', '').strip(),
-            'plaid_token':    request.form.get('plaid_token', '').strip(),
-            'plaid_env':      request.form.get('plaid_env', 'production'),
-            'start_date':     request.form.get('start_date', '2025-01-01').strip(),
-            'wise_token':     saved.get('wise_token', ''),
-            'wise_profile':   saved.get('wise_profile', ''),
-            'usd_to_cad':     request.form.get('usd_to_cad', '1.38').strip(),
-            'wallets':        saved.get('wallets', []),
-        }
-        vals = config
-
-        if not config['plaid_client'] or not config['plaid_secret'] or not config['plaid_token']:
-            return render_template_string(ADMIN_HTML,
-                error='Plaid Client ID, Secret and Access Token are required.',
-                vals=vals)
-
-        save_config(config)
-        t = threading.Thread(target=fetch_data, args=(config,), daemon=True)
-        t.start()
-        return render_template_string(LOADING_HTML)
-
-    return render_template_string(ADMIN_HTML, error=error, vals=vals)
 
 
 @app.route('/api/status')
