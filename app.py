@@ -877,6 +877,21 @@ def api_debug_config():
             safe[k] = safe[k][:6] + '...'
     return jsonify(safe)
 
+@app.route('/api/debug/db')
+@login_required
+def api_debug_db():
+    """Debug: show DB connections for current user."""
+    uid = current_user.model.id
+    pc = PlaidConnection.query.filter_by(user_id=uid).first()
+    wc = WiseConnection.query.filter_by(user_id=uid).first()
+    wallets = CryptoWallet.query.filter_by(user_id=uid).all()
+    return jsonify({
+        'user_id': uid,
+        'plaid': {'id': pc.id, 'access_token': (pc.access_token[:10] + '...') if pc and pc.access_token else None, 'item_id': pc.item_id if pc else None} if pc else None,
+        'wise': {'id': wc.id, 'api_token': (wc.api_token[:10] + '...') if wc and wc.api_token else None, 'profile_id': wc.profile_id if wc else None} if wc else None,
+        'wallets': [{'id': w.id, 'chain': w.chain, 'address': w.address[:10] + '...', 'label': w.label} for w in wallets],
+    })
+
 @app.route('/api/status')
 @login_required
 def api_status():
