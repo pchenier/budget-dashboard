@@ -19,7 +19,13 @@ from models import db, User as UserModel, PlaidConnection, WiseConnection, Crypt
 
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "vault-local-secret-do-not-deploy")
-app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'sqlite:///fiscit.db')
+
+# Handle DATABASE_URL: Railway gives postgres:// but SQLAlchemy needs postgresql://
+_database_url = os.getenv('DATABASE_URL', 'sqlite:///fiscit.db')
+if _database_url.startswith('postgres://'):
+    _database_url = _database_url.replace('postgres://', 'postgresql://', 1)
+
+app.config['SQLALCHEMY_DATABASE_URI'] = _database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {'pool_pre_ping': True}
 
@@ -141,8 +147,15 @@ def fetch_data(user_id, config):
 # ── On startup: create DB tables ─────────────────────────────────────────────
 def startup():
     with app.app_context():
-        db.create_all()
-        print("  DB tables ready")
+        try:
+            db.create_all()
+            print("  DB tables ready")
+            # Verify connection
+            result = db.session.execute(db.text('SELECT 1'))
+            print(f"  DB connection OK: {result.scalar()}")
+        except Exception as e:
+            print(f"  DB ERROR: {e}")
+            raise
 
 # ── Vault HTML with data injection ───────────────────────────────────────────
 def build_vault_html(data):
@@ -767,6 +780,15 @@ def logout():
     return redirect(url_for('login'))
 
 # ── Main routes ─────────────────────────────────────────────────────────────
+@app.route('/health')
+def health():
+    """Health check endpoint for Railway."""
+    try:
+        db.session.execute(db.text('SELECT 1'))
+        return 'OK', 200
+    except Exception:
+        return 'DB error', 503
+
 @app.route('/')
 @login_required
 def index():
