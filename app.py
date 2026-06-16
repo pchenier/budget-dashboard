@@ -467,7 +467,7 @@ a{color:#4ade80;text-decoration:none}
       </div>
       <div class="account-info">
         <div class="account-name">Crypto Wallets</div>
-        <div class="account-desc">BTC, ETH, SOL, and 15 more</div>
+        <div class="account-desc">BTC, ETH, SOL, USDT, USDC & more</div>
       </div>
       <div class="account-action">Add</div>
     </div>
@@ -493,15 +493,8 @@ a{color:#4ade80;text-decoration:none}
           <option value="avalanche">Avalanche</option>
           <option value="base">Base</option>
           <option value="bnb">BNB Chain</option>
-          <option value="fantom">Fantom</option>
-          <option value="cosmos">Cosmos</option>
-          <option value="cardano">Cardano</option>
-          <option value="dogecoin">Dogecoin</option>
-          <option value="litecoin">Litecoin</option>
-          <option value="sui">Sui</option>
-          <option value="near">NEAR</option>
-          <option value="aptos">Aptos</option>
-          <option value="tron">Tron</option>
+          <option value="usdt">USDT</option>
+          <option value="usdc">USDC</option>
         </select>
         <input id="wallet-address" placeholder="Wallet address" style="width:45%">
         <input id="wallet-label" placeholder="Label" style="width:25%">
@@ -760,7 +753,7 @@ def api_add_wallet():
     chain   = (body.get('chain') or '').strip().lower()
     address = (body.get('address') or '').strip()
     label   = (body.get('label') or '').strip()
-    if chain not in ('bitcoin','ethereum','solana','polygon','arbitrum','optimism','avalanche','base','bnb','fantom','cosmos','cardano','dogecoin','litecoin','sui','near','aptos','tron'):
+    if chain not in ('bitcoin','ethereum','solana','polygon','arbitrum','optimism','avalanche','base','bnb','usdt','usdc'):
         return jsonify({'ok': False, 'error': 'Invalid chain.'}), 400
     if not address:
         return jsonify({'ok': False, 'error': 'Address is required.'}), 400
