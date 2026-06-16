@@ -368,6 +368,12 @@ a{color:#4ade80;text-decoration:none}
 .trust-powered a:hover{color:#71717a}
 .hidden{display:none!important}
 .account-icon.bank{background:#1a2e1a;color:#4ade80}
+.account-card.connected{border-color:#1a3a1a;background:#0d1a0d}
+.account-card.connected .account-action{color:#4ade80}
+.account-card.connected .account-action::before{content:'✓ ';font-size:0.7rem}
+.account-card.wise-connected{border-color:#1a3a1a;background:#0d1a0d}
+.account-card.wise-connected .account-action{color:#4ade80}
+.account-card.wise-connected .account-action::before{content:'✓ '}
 .test-btn{width:100%;margin-top:10px;padding:0.6rem;background:transparent;border:1px solid #4ade80;border-radius:8px;color:#4ade80;font-family:'Inter',sans-serif;font-size:0.8rem;font-weight:600;cursor:pointer;transition:all 0.15s}
 .test-btn:hover{background:#4ade80;color:#080808}
 .test-result{margin-top:8px;padding:10px 12px;border-radius:8px;font-size:0.8rem;line-height:1.5}
@@ -406,7 +412,7 @@ a{color:#4ade80;text-decoration:none}
   {% endif %}
 
   <div class="accounts">
-    <div class="account-card" onclick="showBankTrust()">
+    <div class="account-card" id="bank-card" onclick="showBankTrust()">
       <div class="account-icon bank">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 21h18M3 10h18M5 10V21M9 10V21M15 10V21M19 10V21M3 10l9-7 9 7" stroke="#4ade80" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </div>
@@ -436,7 +442,7 @@ a{color:#4ade80;text-decoration:none}
       <div class="trust-powered">Powered by <a href="https://plaid.com" target="_blank">Plaid</a></div>
     </div>
 
-    <div class="account-card" onclick="document.getElementById('wise-form').classList.toggle('hidden')">
+    <div class="account-card" id="wise-card" onclick="document.getElementById('wise-form').classList.toggle('hidden')">
       <div class="account-icon wise">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="#9FE870" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </div>
@@ -513,6 +519,7 @@ a{color:#4ade80;text-decoration:none}
               const data=await res.json();
               if(data.ok){
                 plaidConnected=true;
+                document.getElementById('bank-card').classList.add('connected');
                 document.querySelector('.account-card:first-child .account-action').textContent='Connected';
                 document.querySelector('.account-card:first-child .account-action').style.color='#4ade80';
                 document.querySelector('.account-card:first-child').style.borderColor='#4ade80';
@@ -553,6 +560,8 @@ a{color:#4ade80;text-decoration:none}
             if(!profile&&d.profiles.length===1){
               document.getElementById('wise-profile-input').value=d.profiles[0].id;
             }
+            document.getElementById('wise-card').classList.add('wise-connected');
+            document.querySelector('#wise-card .account-action').textContent='Connected';
             el.innerHTML='<div class="test-result ok">'+msg+'</div>';
           }else{
             el.innerHTML='<div class="test-result err">'+(d.error||'Connection failed.')+'</div>';
