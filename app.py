@@ -351,6 +351,18 @@ a{color:#4ade80;text-decoration:none}
 .admin-link{text-align:center;margin-top:1.5rem;font-size:0.75rem}
 .admin-link a{color:#3f3f46;text-decoration:none}
 .admin-link a:hover{color:#71717a}
+.account-icon.bank{background:#1a2e1a;color:#4ade80}
+.trust-box{margin:-4px 0 8px 0;padding:16px;background:#0f1a0f;border:1px solid #1a3a1a;border-radius:0 0 12px 12px;animation:slideDown .2s ease}
+@keyframes slideDown{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
+.trust-header{font-size:0.85rem;font-weight:600;color:#4ade80;margin-bottom:12px}
+.trust-items{display:flex;flex-direction:column;gap:8px;margin-bottom:14px}
+.trust-item{display:flex;align-items:center;gap:8px;font-size:0.8rem;color:#a1a1aa}
+.trust-item svg{flex-shrink:0}
+.trust-btn{width:100%;padding:0.7rem;background:#4ade80;border:none;border-radius:8px;color:#080808;font-family:'Inter',sans-serif;font-size:0.85rem;font-weight:700;cursor:pointer;transition:opacity 0.15s}
+.trust-btn:hover{opacity:0.9}
+.trust-powered{text-align:center;margin-top:8px;font-size:0.7rem;color:#3f3f46}
+.trust-powered a{color:#52525b;text-decoration:none}
+.trust-powered a:hover{color:#71717a}
 </style>
 </head>
 <body>
@@ -373,20 +385,39 @@ a{color:#4ade80;text-decoration:none}
   {% endif %}
 
   <div class="accounts">
-    <div class="account-card" onclick="openPlaidLink()">
-      <div class="account-icon">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+    <div class="account-card" onclick="showBankTrust()">
+      <div class="account-icon bank">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 21h18M3 10h18M5 10V21M9 10V21M15 10V21M19 10V21M3 10l9-7 9 7" stroke="#4ade80" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </div>
       <div class="account-info">
         <div class="account-name">Bank Account</div>
-        <div class="account-desc">Connect via Plaid</div>
+        <div class="account-desc">Secure connection via Plaid</div>
       </div>
       <div class="account-action">Connect</div>
+    </div>
+    <div id="bank-trust" class="hidden trust-box">
+      <div class="trust-header">Your data is safe</div>
+      <div class="trust-items">
+        <div class="trust-item">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          <span>Bank grade 256-bit encryption</span>
+        </div>
+        <div class="trust-item">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2"><path d="M1 1h22v22H1z" stroke="none"/><path d="M20 6L9 17l-5-5" stroke="#4ade80" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span>Read only access, we cannot move money</span>
+        </div>
+        <div class="trust-item">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+          <span>Used by millions via Plaid</span>
+        </div>
+      </div>
+      <button type="button" class="trust-btn" onclick="openPlaidLink()">Continue to Plaid</button>
+      <div class="trust-powered">Powered by <a href="https://plaid.com" target="_blank">Plaid</a></div>
     </div>
 
     <div class="account-card" onclick="document.getElementById('wise-form').classList.toggle('hidden')">
       <div class="account-icon wise">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M16 8l-4 8-4-8"/></svg>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="#9FE870" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </div>
       <div class="account-info">
         <div class="account-name">Wise</div>
@@ -403,7 +434,7 @@ a{color:#4ade80;text-decoration:none}
 
     <div class="account-card" onclick="document.getElementById('crypto-form').classList.toggle('hidden')">
       <div class="account-icon crypto">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11.767 19.089c4.924.868 9.993-.826 9.993-.826s-2.053 3.078-7.292 4.165c-5.24 1.087-9.625-.075-9.625-.075"/><path d="M2.24 8.648c0 0 4.098-2.785 9.625-1.087 5.527 1.698 7.292 4.165 7.292 4.165"/><circle cx="12" cy="12" r="3"/></svg>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="10" fill="#F7931A"/><path d="M14.5 10.5c0-1.1-.8-1.6-1.8-1.8V7.5h-1.4v1.1c-1 .2-1.8.8-1.8 1.9 0 1.6 1.4 1.6 2.8 1.9.8.2 1.2.5 1.2 1.1 0 .7-.6 1.1-1.4 1.1s-1.4-.4-1.5-1.2l-1.3.3c.2 1.2 1 1.8 2 2v1.2h1.4v-1.2c1.1-.2 1.9-.9 1.9-2 0-1.6-1.4-1.7-2.8-2-.8-.2-1.2-.4-1.2-1 0-.5.5-.9 1.2-.9.6 0 1.1.3 1.2.9l1.3-.3z" fill="#fff"/></svg>
       </div>
       <div class="account-info">
         <div class="account-name">Crypto Wallets</div>
@@ -442,6 +473,11 @@ a{color:#4ade80;text-decoration:none}
   <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
   <script>
     let plaidConnected = false;
+
+    function showBankTrust(){
+      const el=document.getElementById('bank-trust');
+      el.classList.toggle('hidden');
+    }
 
     function openPlaidLink(){
       fetch('/api/plaid/link_token',{method:'POST'})
