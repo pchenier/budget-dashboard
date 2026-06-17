@@ -352,7 +352,7 @@ def pull_all(config):
         "categorySpending": [{"cat": c, "amt": round(a, 2)} for c, a in top_cats],
 
         # Raw for potential future use
-        "_generated": datetime.now().strftime("%B %d, %Y at %H:%M"),
+        "_generated": datetime.now().strftime("%B %d, %Y"),
         "_start_date": gen.START_DATE,
         "_end_date":   gen.END_DATE,
     }

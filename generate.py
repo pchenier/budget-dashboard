@@ -802,7 +802,7 @@ def build_html(balances, wise_bal, sol_balance, sol_usd, txns, qt_data=None):
     qt_balances_json  = json.dumps(qt_balances)
     qt_accounts_json  = json.dumps(qt_accounts)
 
-    generated_at = datetime.now().strftime("%B %d, %Y at %H:%M")
+    generated_at = datetime.now().strftime("%B %d, %Y")
 
     return f"""<!DOCTYPE html>
 <html lang="fr">

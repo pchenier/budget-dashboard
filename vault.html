@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<script src="https://unpkg.com/feather-icons/dist/feather.min.js"></script>
+<script src="/static/feather.min.js"></script>
 <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
 <style>
 :root {
@@ -528,6 +528,7 @@ const D = {
 
 // ═══════════════════════════ HELPERS ═══════════════════════════
 const fmt = (n,decimals=0)=>{
+  if(typeof n!=='number'||isNaN(n)) return '—';
   const abs = Math.abs(n);
   const s = abs.toLocaleString('en-CA',{minimumFractionDigits:decimals,maximumFractionDigits:decimals});
   return n<0?'-$'+s:'$'+s;
@@ -553,7 +554,7 @@ function navigate(page){
   const titles={dashboard:'Dashboard',accounts:'Accounts',transactions:'Transactions',
     budget:'Budget',insights:'Insights',investments:'Investments',crypto:'Crypto',
     gym:'Gym Tracker',eating:'Eating',habits:'Habits',calendar:'Calendar',settings:'Settings'};
-  const subs={dashboard:nowStr,accounts:'6 connected accounts',transactions:'All transactions',
+  const subs={dashboard:nowStr,accounts:D.accounts?D.accounts.length+' connected account'+(D.accounts.length!==1?'s':''):transactions:'All transactions',
     budget:nowStr,insights:'AI-powered insights',investments:'Portfolio overview',
     crypto:'Crypto holdings',gym:'Workout tracker',eating:'Nutrition',habits:'Daily habits',
     calendar:nowStr,settings:'Account & preferences'};
@@ -794,7 +795,7 @@ function initDashCharts(){
 
 // ═══════════════════════════ ACCOUNTS ═══════════════════════════
 function pgAccounts(){
-  const total=D.accounts.filter(a=>a.type!=='Credit Card').reduce((s,a)=>s+a.bal,0);
+  const total=D.accounts.filter(a=>a.type!=='Credit Card').reduce((s,a)=>s+(typeof a.bal==='number'?a.bal:0),0);
   const cards=D.accounts.map(a=>`
     <div class="acc-card">
       <div class="acc-top">
