@@ -554,7 +554,7 @@ function navigate(page){
   const titles={dashboard:'Dashboard',accounts:'Accounts',transactions:'Transactions',
     budget:'Budget',insights:'Insights',investments:'Investments',crypto:'Crypto',
     gym:'Gym Tracker',eating:'Eating',habits:'Habits',calendar:'Calendar',settings:'Settings'};
-  const subs={dashboard:nowStr,accounts:D.accounts?D.accounts.length+' connected account'+(D.accounts.length!==1?'s':''):transactions:'All transactions',
+  const subs={dashboard:nowStr,accounts:D.accounts?(D.accounts.length+' connected account'+(D.accounts.length!==1?'s':'')):'0 connected accounts',transactions:'All transactions',
     budget:nowStr,insights:'AI-powered insights',investments:'Portfolio overview',
     crypto:'Crypto holdings',gym:'Workout tracker',eating:'Nutrition',habits:'Daily habits',
     calendar:nowStr,settings:'Account & preferences'};
