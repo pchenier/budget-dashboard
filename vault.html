@@ -497,8 +497,10 @@ button{font-family:var(--font)}
 <script>
 // Feather icon helper — generates inline SVG processed by feather.replace()
 // If name is an emoji or non-Feather icon, map it to a valid Feather name
-const EMOJI_TO_FEATHER={'🛒':'shopping-cart','🍽️':'utensils','🍽':'utensils','⛽':'fuel','🚇':'map','🛍️':'shopping-bag','💪':'zap','💊':'heart','📱':'smartphone','🎬':'film','📺':'monitor','🏠':'home','⚡':'zap','💸':'trending-down','📈':'trending-up','💼':'briefcase','📂':'folder','💳':'credit-card'};
-function ico(name,sz){sz=sz||14;const fn=EMOJI_TO_FEATHER[name]||name;return '<svg data-feather="'+fn+'" width="'+sz+'" height="'+sz+'"></svg>';}
+const EMOJI_TO_FEATHER={'🛒':'shopping-cart','🍽️':'cafe','🍽':'cafe','⛽':'bolt','🚇':'map-pin','🛍️':'shopping-bag','💪':'bolt','💊':'health','📱':'cellphone','🎬':'film','📺':'screen','🏠':'house','⚡':'bolt','💸':'trending-down','📈':'trending-up','💼':'bag','📂':'folder','💳':'credit-card'};
+// Also map known-invalid Feather names to valid ones in this build
+const FEATHER_ALIAS={'utensils':'cafe','fuel':'bolt','smartphone':'cellphone','monitor':'screen','briefcase':'bag','home':'house','heart':'health','map':'map-pin','zap':'bolt','calendar':'date','coffee':'cup'};
+function ico(name,sz){sz=sz||14;const fn=EMOJI_TO_FEATHER[name]||FEATHER_ALIAS[name]||name;return '<svg data-feather="'+fn+'" width="'+sz+'" height="'+sz+'"></svg>';}
 
 // ═══════════════════════════ MOCK DATA ═══════════════════════════
 const D = {
