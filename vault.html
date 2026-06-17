@@ -432,7 +432,7 @@ button{font-family:var(--font)}
   <nav class="nav-group">
     <div class="nav-label">Money</div>
     <div class="nav-item" data-page="investments" onclick="navigate('investments')">
-      <svg class="ico" data-feather="trending-up"></svg> Investments
+      <svg class="ico" data-feather="plus"></svg> Investments
     </div>
     <div class="nav-item" data-page="crypto" onclick="navigate('crypto')">
       <svg class="ico" data-feather="hexagon"></svg> Crypto
@@ -448,7 +448,7 @@ button{font-family:var(--font)}
       <svg class="ico" data-feather="coffee"></svg> Eating
     </div>
     <div class="nav-item" data-page="habits" onclick="navigate('habits')">
-      <svg class="ico" data-feather="check-square"></svg> Habits
+      <svg class="ico" data-feather="circle"></svg> Habits
     </div>
     <div class="nav-item" data-page="calendar" onclick="navigate('calendar')">
       <svg class="ico" data-feather="calendar"></svg> Calendar
@@ -995,7 +995,7 @@ const FEATHER_RESOLVE = {
   'zoom-in':'zoom-in',
   'zoom-out':'zoom-out'
 };
-const EMOJI_TO_FEATHER={'🛒':'shopping-cart','🍽️':'coffee','🍽':'coffee','⛽':'fuel','🚇':'map','🛍️':'shopping-bag','💪':'zap','💊':'heart','📱':'smartphone','🎬':'film','📺':'monitor','🏠':'home','⚡':'zap','💸':'trending-down','📈':'trending-up','💼':'briefcase','📂':'folder','💳':'credit-card'};
+const EMOJI_TO_FEATHER={'🛒':'shopping-cart','🍽️':'coffee','🍽':'coffee','⛽':'fuel','🚇':'map','🛍️':'shopping-bag','💪':'zap','💊':'heart','📱':'smartphone','🎬':'film','📺':'monitor','🏠':'home','⚡':'zap','💸':'minus','📈':'plus','💼':'briefcase','📂':'folder','💳':'credit-card'};
 function ico(name,sz){sz=sz||14;const fn=EMOJI_TO_FEATHER[name]||FEATHER_RESOLVE[name]||name;return '<svg data-feather="'+fn+'" width="'+sz+'" height="'+sz+'"></svg>';}
 
 // ═══════════════════════════ MOCK DATA ═══════════════════════════
@@ -1565,7 +1565,7 @@ function applyQuickRule(nameFragment, cat){
   D.txns = applyRules(D.txns);
   filterTxns();
 }
-const CAT_ICOS = {'Groceries':'shopping-cart','Food/Dining':'coffee','Gas':'droplet','Transport':'map','Shopping':'shopping-bag','Gym':'zap','Health':'heart','Phone/Internet':'smartphone','Entertainment':'film','Subscriptions':'monitor','Housing':'home','Utilities':'zap','Cash/Transfers':'trending-down','Investments':'trending-up','Income':'briefcase','P2P/Personal Transfer':'repeat','Other':'folder'};
+const CAT_ICOS = {'Groceries':'shopping-cart','Food/Dining':'coffee','Gas':'droplet','Transport':'map','Shopping':'shopping-bag','Gym':'zap','Health':'heart','Phone/Internet':'smartphone','Entertainment':'film','Subscriptions':'monitor','Housing':'home','Utilities':'zap','Cash/Transfers':'minus','Investments':'plus','Income':'briefcase','P2P/Personal Transfer':'repeat','Other':'folder'};
 
 // Categories excluded from spending/budget calculations
 const EXCLUDED_CATS = new Set(['P2P/Personal Transfer']);
@@ -2082,7 +2082,7 @@ function pgSavings(){
     <div><h4 style="color:var(--red)">Savings rate under 10% this month</h4>
     <p>You spent ${fmt(cur.exp,0)} out of ${fmt(cur.inc,0)} of income. Aim for at least 20% to build wealth — that's ${fmt(cur.inc*0.2,0)} saved this month.</p></div>
   </div>`:cur.rate>=20?`<div class="insight mb20" style="border-color:var(--green-br);background:var(--green-bg)">
-    <div class="insight-ico" style="background:var(--green-bg)"><svg data-feather="check-circle" style="width:14px;height:14px"></svg></div>
+    <div class="insight-ico" style="background:var(--green-bg)"><svg data-feather="circle" style="width:14px;height:14px"></svg></div>
     <div><h4 style="color:var(--green)">Excellent — ${cur.rate.toFixed(1)}% savings rate this month</h4>
     <p>You saved ${fmt(cur.cf,0)} out of ${fmt(cur.inc,0)} of income. That's above the 20% recommended threshold for financial freedom.</p></div>
   </div>`:''}
@@ -2267,7 +2267,7 @@ function pgSubscriptions(){
 // ═══════════════════════════ INSIGHTS ═══════════════════════════
 function pgInsights(){
   const insights=[
-    {ico:'trending-up',bg:'var(--green-bg)',title:'Net worth increased $1,890 this month',body:'Your net worth is up 2.2% from May. This is driven by investment growth of $1,200 and a positive cash flow of $2,562.',type:'positive'},
+    {ico:'plus',bg:'var(--green-bg)',title:'Net worth increased $1,890 this month',body:'Your net worth is up 2.2% from May. This is driven by investment growth of $1,200 and a positive cash flow of $2,562.',type:'positive'},
     {ico:'coffee',bg:'var(--red-bg)',title:'Dining out is 6% over your budget',body:'You spent $265 on dining this month vs your $250 limit. You have 27 days left in June — consider cooking at home 2 more times this week.',type:'warning'},
     {ico:'package',bg:'var(--yellow-bg)',title:'Shopping increased 34% vs last month',body:'Your shopping spending jumped from $235 to $315. Amazon and Simons account for most of the increase.',type:'warning'},
     {ico:'dollar-sign',bg:'var(--blue-bg)',title:'You are on track to save $2,562 this month',body:'Based on your income of $6,800 and current spending of $4,238, you will save approximately $2,562 — 37.7% of income.',type:'positive'},
@@ -3092,7 +3092,7 @@ function pgHabits(){
       <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
         <span class="habit-stat">${rate}% this month</span>
         <button onclick="toggleHabitDay('${h.id}')" class="btn btn-sm ${doneToday?'btn-primary':'btn-ghost'}" style="font-size:11px;padding:4px 10px">
-          ${doneToday?'<svg data-feather="check" style="width:12px;height:12px;vertical-align:middle"></svg> Done':'Mark done'}
+          ${doneToday?'<svg data-feather="circle" style="width:12px;height:12px;vertical-align:middle"></svg> Done':'Mark done'}
         </button>
       </div>
     </div>`;
@@ -3281,7 +3281,7 @@ function _calBuildEvents(year, month){
     else d=new Date(raw+' '+year);
     if(isNaN(d)||d.getMonth()!==month||d.getFullYear()!==year) return;
     const day=d.getDate();
-    if(t.amt<0) add(day,'txn','trending-down',t.name.slice(0,18),'var(--red)', (Math.abs(t.amt)).toFixed(0)+'$');
+    if(t.amt<0) add(day,'txn','minus',t.name.slice(0,18),'var(--red)', (Math.abs(t.amt)).toFixed(0)+'$');
     else        add(day,'income','dollar-sign',t.name.slice(0,18),'var(--green)', '+'+t.amt.toFixed(0)+'$');
   });
   // Gym
@@ -3308,7 +3308,7 @@ function _calBuildEvents(year, month){
     (h.log||[]).forEach(iso=>{
       const d=new Date(iso+'T00:00');
       if(d.getMonth()!==month||d.getFullYear()!==year) return;
-      add(d.getDate(),'habit','check-circle',h.name,'var(--green2,#4ade80)','');
+      add(d.getDate(),'habit','circle',h.name,'var(--green2,#4ade80)','');
     });
   });
   // Custom events (birthdays, rdv, events, reminders, travel)
@@ -3338,7 +3338,7 @@ function _calBuildDayPanel(day, year, month){
   const customEvMap = {};
   getCalEvents().forEach(e=>{ if(e.date===isoPrefix || (e.repeat==='yearly' && e.date.slice(5)===isoPrefix.slice(5))) customEvMap[e.title]=e.id; });
 
-  const TYPE_ICO = {txn:'trending-down',income:'dollar-sign',gym:'zap',meal:'coffee',habit:'check-circle'};
+  const TYPE_ICO = {txn:'minus',income:'dollar-sign',gym:'zap',meal:'coffee',habit:'circle'};
   const rows = evs.map(e=>{
     const evIco = e.type.startsWith('custom_') ? ico((CAL_EV_TYPES[e.type.replace('custom_','')]||CAL_EV_TYPES.event).icon||'calendar',12) : ico(TYPE_ICO[e.type]||'folder',12);
     const evLabel = e.label;
@@ -3358,7 +3358,7 @@ function _calBuildDayPanel(day, year, month){
   const txnBtn = txnCount>0 ? `
     <button onclick="goToTxnDate('${isoDate}')"
       style="width:100%;margin-top:10px;padding:8px 12px;background:var(--bg4);border:1px solid var(--border);border-radius:var(--r-sm);color:var(--text2);font-family:var(--font);font-size:12px;cursor:pointer;text-align:left;display:flex;align-items:center;justify-content:space-between">
-      <span style="display:inline-flex;align-items:center;gap:4px"><svg data-feather="trending-down" style="width:14px;height:14px"></svg> Transactions le ${day} ${new Date(year,month,day).toLocaleString('en',{month:'short'})}</span>
+      <span style="display:inline-flex;align-items:center;gap:4px"><svg data-feather="minus" style="width:14px;height:14px"></svg> Transactions le ${day} ${new Date(year,month,day).toLocaleString('en',{month:'short'})}</span>
       <span style="color:var(--text3)">${txnCount} →</span>
     </button>` : '';
 
@@ -3491,7 +3491,7 @@ function pgCalendar(){
     weekDays.forEach((di,i)=>{
       const col = i + 2;
       di.events.forEach(ev=>{
-        const _wkIco = {txn:'trending-down',income:'dollar-sign',gym:'zap',meal:'coffee',habit:'check-circle'};
+        const _wkIco = {txn:'minus',income:'dollar-sign',gym:'zap',meal:'coffee',habit:'circle'};
         const evIco = ev.type.startsWith('custom_') ? ((CAL_EV_TYPES[ev.type.replace('custom_','')]||CAL_EV_TYPES.event).icon||'calendar') : (_wkIco[ev.type]||'folder');
         const cleanLabel = ev.label;
         eventBlocks += `<div class="cal-ev-block" style="grid-column:${col};top:${pos.top+40}px;height:${pos.height-2}px;background:${ev.color}22;color:${ev.color};border-left:3px solid ${ev.color}" title="${cleanLabel}${ev.sub?' - '+ev.sub:''}">${ico(evIco,10)} ${cleanLabel.slice(0,20)}</div>`;
@@ -3522,9 +3522,9 @@ function pgCalendar(){
       <div style="padding:14px 16px 0;position:sticky;top:0;z-index:4;background:var(--bg2)">
         <div class="sec-hdr mb12">
           <div style="display:flex;align-items:center;gap:10px">
-            <button onclick="calWeekNav(-1)" style="background:var(--bg4);border:1px solid var(--border);border-radius:6px;color:var(--text3);cursor:pointer;font-size:14px;padding:3px 10px;font-family:var(--font)">${ico('chevron-left',14)}</button>
+            <button onclick="calWeekNav(-1)" style="background:var(--bg4);border:1px solid var(--border);border-radius:6px;color:var(--text3);cursor:pointer;font-size:14px;padding:3px 10px;font-family:var(--font)">${ico('skip-back',14)}</button>
             <span class="sec-title">${rangeLabel}</span>
-            <button onclick="calWeekNav(1)" style="background:var(--bg4);border:1px solid var(--border);border-radius:6px;color:var(--text3);cursor:pointer;font-size:14px;padding:3px 10px;font-family:var(--font)">${ico('chevron-right',14)}</button>
+            <button onclick="calWeekNav(1)" style="background:var(--bg4);border:1px solid var(--border);border-radius:6px;color:var(--text3);cursor:pointer;font-size:14px;padding:3px 10px;font-family:var(--font)">${ico('skip-forward',14)}</button>
           </div>
           <div style="display:flex;align-items:center;gap:8px">
             <button onclick="_calWeekStart=(function(){const n=new Date();const d=n.getDay();const diff=d===0?6:d-1;const m=new Date(n);m.setDate(n.getDate()-diff);m.setHours(0,0,0,0);return m;})();navigate('calendar')" class="btn btn-ghost btn-sm">Today</button>
@@ -3565,7 +3565,7 @@ function pgCalendar(){
     let eventBlocks = '';
     dayEvs.forEach(ev=>{
       const pos = _calEvTimePosition(ev);
-      const _dyIco = {txn:'trending-down',income:'dollar-sign',gym:'zap',meal:'coffee',habit:'check-circle'};
+      const _dyIco = {txn:'minus',income:'dollar-sign',gym:'zap',meal:'coffee',habit:'circle'};
       const evIco = ev.type.startsWith('custom_') ? ((CAL_EV_TYPES[ev.type.replace('custom_','')]||CAL_EV_TYPES.event).icon||'calendar') : (_dyIco[ev.type]||'folder');
       const cleanLabel = ev.label;
       eventBlocks += `<div class="cal-ev-block" style="grid-column:2;top:${pos.top+40}px;height:${pos.height-2}px;background:${ev.color}22;color:${ev.color};border-left:3px solid ${ev.color}" title="${cleanLabel}${ev.sub?' - '+ev.sub:''}">${ico(evIco,10)} ${cleanLabel.slice(0,30)}</div>`;
@@ -3600,9 +3600,9 @@ function pgCalendar(){
       <div style="padding:14px 16px 0;position:sticky;top:0;z-index:4;background:var(--bg2)">
         <div class="sec-hdr mb12">
           <div style="display:flex;align-items:center;gap:10px">
-            <button onclick="_calDayDate.setDate(_calDayDate.getDate()-1);navigate('calendar')" style="background:var(--bg4);border:1px solid var(--border);border-radius:6px;color:var(--text3);cursor:pointer;font-size:14px;padding:3px 10px;font-family:var(--font)">${ico('chevron-left',14)}</button>
+            <button onclick="_calDayDate.setDate(_calDayDate.getDate()-1);navigate('calendar')" style="background:var(--bg4);border:1px solid var(--border);border-radius:6px;color:var(--text3);cursor:pointer;font-size:14px;padding:3px 10px;font-family:var(--font)">${ico('skip-back',14)}</button>
             <span class="sec-title">${dateLabel}</span>
-            <button onclick="_calDayDate.setDate(_calDayDate.getDate()+1);navigate('calendar')" style="background:var(--bg4);border:1px solid var(--border);border-radius:6px;color:var(--text3);cursor:pointer;font-size:14px;padding:3px 10px;font-family:var(--font)">${ico('chevron-right',14)}</button>
+            <button onclick="_calDayDate.setDate(_calDayDate.getDate()+1);navigate('calendar')" style="background:var(--bg4);border:1px solid var(--border);border-radius:6px;color:var(--text3);cursor:pointer;font-size:14px;padding:3px 10px;font-family:var(--font)">${ico('skip-forward',14)}</button>
           </div>
           <div style="display:flex;align-items:center;gap:8px">
             <button onclick="_calDayDate=new Date();_calDayDate.setHours(0,0,0,0);navigate('calendar')" class="btn btn-ghost btn-sm">Today</button>
@@ -3677,9 +3677,9 @@ function pgCalendar(){
     <div class="card">
       <div class="sec-hdr mb12">
         <div style="display:flex;align-items:center;gap:10px">
-          <button onclick="calNav(-1)" style="background:var(--bg4);border:1px solid var(--border);border-radius:6px;color:var(--text3);cursor:pointer;font-size:14px;padding:3px 10px;font-family:var(--font)">${ico('chevron-left',14)}</button>
+          <button onclick="calNav(-1)" style="background:var(--bg4);border:1px solid var(--border);border-radius:6px;color:var(--text3);cursor:pointer;font-size:14px;padding:3px 10px;font-family:var(--font)">${ico('skip-back',14)}</button>
           <span class="sec-title">${monthName} ${year}</span>
-          <button onclick="calNav(1)" style="background:var(--bg4);border:1px solid var(--border);border-radius:6px;color:var(--text3);cursor:pointer;font-size:14px;padding:3px 10px;font-family:var(--font)">${ico('chevron-right',14)}</button>
+          <button onclick="calNav(1)" style="background:var(--bg4);border:1px solid var(--border);border-radius:6px;color:var(--text3);cursor:pointer;font-size:14px;padding:3px 10px;font-family:var(--font)">${ico('skip-forward',14)}</button>
         </div>
         <div style="display:flex;align-items:center;gap:8px">
           <button onclick="_calYear=new Date().getFullYear();_calMonth=new Date().getMonth();navigate('calendar')" class="btn btn-ghost btn-sm">Today</button>
@@ -3763,7 +3763,7 @@ function pgSettings(){
     row('Compact mode','Reduce spacing for more content',tog(false)),
   ].join(''))}
   ${section('Data',[
-    row('Export data','Download all your financial data','<button class="btn btn-ghost btn-sm"><svg data-feather="download"></svg> Export CSV</button>'),
+    row('Export data','Download all your financial data','<button class="btn btn-ghost btn-sm"><svg data-feather="save"></svg> Export CSV</button>'),
     row('Sync now','Force refresh all accounts','<button class="btn btn-ghost btn-sm" onclick="doRefresh()"><svg data-feather="refresh-cw"></svg> Sync</button>'),
     row('Delete account','Permanently delete all data','<button class="btn btn-sm" style="background:var(--red-bg);color:var(--red);border:1px solid var(--red-br)">Delete</button>'),
     row('Replay onboarding','Walk through the intro tour again','<button class="btn btn-ghost btn-sm" onclick="localStorage.removeItem(ONBOARDED_KEY);location.reload()"><svg data-feather="play-circle"></svg> Replay</button>'),
@@ -3993,7 +3993,7 @@ function showAddAccount(preselect){
           <div><div style="font-size:14px;font-weight:500;color:var(--text)">Bank Account</div><div style="font-size:11px;color:var(--text3)">Connect via Plaid, 12,000+ banks</div></div>
         </button>
         <button onclick="addAccCrypto()" style="display:flex;align-items:center;gap:12px;background:var(--bg3);border:1px solid var(--border);border-radius:12px;padding:14px 16px;cursor:pointer;text-align:left;width:100%;font-family:var(--font)">
-          <span style="width:36px;height:36px;border-radius:10px;background:rgba(245,158,11,.15);display:flex;align-items:center;justify-content:center;flex-shrink:0">${ico('bitcoin',18)}</span>
+          <span style="width:36px;height:36px;border-radius:10px;background:rgba(245,158,11,.15);display:flex;align-items:center;justify-content:center;flex-shrink:0">${ico('dollar-sign',18)}</span>
           <div><div style="font-size:14px;font-weight:500;color:var(--text)">Crypto Wallet</div><div style="font-size:11px;color:var(--text3)">Solana, Ethereum, Bitcoin addresses</div></div>
         </button>
         <button onclick="location.href='/setup'" style="display:flex;align-items:center;gap:12px;background:var(--bg3);border:1px solid var(--border);border-radius:12px;padding:14px 16px;cursor:pointer;text-align:left;width:100%;font-family:var(--font)">
@@ -4032,7 +4032,7 @@ function addAccCrypto(){
         <select id="cw-chain" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-family:var(--font);font-size:13px;outline:none">
           <option value="solana">Solana</option>
           <option value="ethereum">Ethereum</option>
-          <option value="bitcoin">Bitcoin</option>
+          <option value="dollar-sign">Bitcoin</option>
         </select>
       </div>
       <div style="text-align:left;margin-bottom:14px">
@@ -4192,7 +4192,7 @@ function closeNotifDropdown(e){
 
 // ═══════════════════════════ ONBOARDING ═══════════════════════════
 const ONBOARDED_KEY = 'vault_onboarded';
-const CONN_ICOS = {plaid:'credit-card',wise:'globe',crypto:'bitcoin'};
+const CONN_ICOS = {plaid:'credit-card',wise:'globe',crypto:'dollar-sign'};
 
 function showOnboarding(){
   let step = 0;
@@ -4287,7 +4287,7 @@ function showOnboarding(){
       skipBtn.style.display = '';
     }
     else if(s.id==='crypto'){
-      iconEl.innerHTML = ico('bitcoin',28);
+      iconEl.innerHTML = ico('dollar-sign',28);
       titleEl.textContent = 'Track your crypto';
       subEl.textContent = 'Add wallet addresses to track balances.';
       const wallets = D.wallets || [];
@@ -4309,7 +4309,7 @@ function showOnboarding(){
       skipBtn.style.display = '';
     }
     else if(s.id==='done'){
-      iconEl.innerHTML = ico('check-circle',28);
+      iconEl.innerHTML = ico('circle',28);
       titleEl.textContent = 'You\'re all set!';
       subEl.textContent = 'Fiscit is ready to go.';
       bodyEl.innerHTML = `<p style="color:var(--text3);font-size:13px;text-align:center;margin-bottom:14px">Here are the categories Fiscit tracks for you:</p><div style="max-height:180px;overflow-y:auto;scrollbar-width:thin">${catGrid}</div><p style="color:var(--text4);font-size:12px;margin-top:14px;text-align:center">You can always add more connections later in Settings.</p>`;
