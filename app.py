@@ -270,7 +270,7 @@ def _build_real_data_js(data):
     connections = {
         'plaid': any(a.get('type', '') in ('Chequing / Savings', 'Credit Card', 'Investment', 'Loan') for a in raw_accounts),
         'wise': any(a.get('id', '').startswith('wise_') for a in raw_accounts),
-        'crypto': bool(crypto_balances),
+        'crypto': bool(data.get('crypto_balances') or data.get('wallets')),
         'wealthsimple': False,
         'kraken': False,
     }
@@ -788,11 +788,6 @@ def logout():
     return redirect(url_for('login'))
 
 # ── Main routes ─────────────────────────────────────────────────────────────
-@app.errorhandler(Exception)
-def handle_exception(e):
-    import traceback
-    traceback.print_exc()
-    return f"Internal error: {e}", 500
 
 @app.route('/health')
 def health():
@@ -870,46 +865,6 @@ def setup():
     return render_template_string(SETUP_HTML, error=error, vals=vals)
 
 # ── API routes ──────────────────────────────────────────────────────────────
-@app.route('/api/debug/config')
-@login_required
-def api_debug_config():
-    """Debug: show config for current user (tokens masked)."""
-    cfg = build_user_config(current_user)
-    # Mask sensitive values
-    safe = dict(cfg)
-    for k in ('plaid_client', 'plaid_secret', 'plaid_token', 'wise_token'):
-        if safe.get(k):
-            safe[k] = safe[k][:6] + '...'
-    return jsonify(safe)
-
-@app.route('/api/debug/env')
-def api_debug_env():
-    """Debug: show relevant env vars (masked)."""
-    return jsonify({
-        'WISE_PROFILE_ID': os.getenv('WISE_PROFILE_ID', '<NOT SET>'),
-        'WISE_TOKEN_SET': bool(os.getenv('WISE_TOKEN')),
-        'PLAID_CLIENT_ID_SET': bool(os.getenv('PLAID_CLIENT_ID')),
-        'PLAID_SECRET_SET': bool(os.getenv('PLAID_SECRET')),
-        'PLAID_ENV': os.getenv('PLAID_ENV', '<NOT SET>'),
-        'DATABASE_URL_SET': bool(os.getenv('DATABASE_URL')),
-        'SECRET_KEY_SET': bool(os.getenv('SECRET_KEY')),
-    })
-
-@app.route('/api/debug/db')
-@login_required
-def api_debug_db():
-    """Debug: show all DB connections for current user."""
-    uid = current_user.model.id
-    all_plaid = PlaidConnection.query.filter_by(user_id=uid).all()
-    all_wise = WiseConnection.query.filter_by(user_id=uid).all()
-    wallets = CryptoWallet.query.filter_by(user_id=uid).all()
-    return jsonify({
-        'user_id': uid,
-        'plaid': [{'id': p.id, 'access_token': (p.access_token[:10] + '...') if p.access_token else None, 'item_id': p.item_id} for p in all_plaid],
-        'wise': [{'id': w.id, 'api_token': (w.api_token[:10] + '...') if w.api_token else None, 'profile_id': w.profile_id} for w in all_wise],
-        'wallets': [{'id': w.id, 'chain': w.chain, 'address': w.address[:10] + '...', 'label': w.label} for w in wallets],
-    })
-
 @app.route('/api/status')
 @login_required
 def api_status():
