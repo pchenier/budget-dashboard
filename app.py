@@ -766,7 +766,7 @@ def register():
         db.session.commit()
         flask_user = FlaskUser(user)
         login_user(flask_user)
-        return redirect(url_for('setup'))
+        return redirect(url_for('index'))
     return render_template_string(REGISTER_HTML, error='')
 
 @app.route('/login', methods=['GET', 'POST'])
