@@ -812,12 +812,15 @@ def index():
 
     if status == "idle" or data is None:
         cfg = build_user_config(current_user)
-        if not _has_any_account(cfg):
-            return redirect(url_for('setup'))
         if status == "idle":
-            t = threading.Thread(target=fetch_data, args=(uid, cfg), daemon=True)
-            t.start()
-            return render_template_string(LOADING_HTML)
+            if _has_any_account(cfg):
+                t = threading.Thread(target=fetch_data, args=(uid, cfg), daemon=True)
+                t.start()
+                return render_template_string(LOADING_HTML)
+            # No accounts yet — serve vault.html as-is, JS onboarding handles setup
+            if VAULT_HTML.exists():
+                return VAULT_HTML.read_text(encoding="utf-8")
+            return "<h1>vault.html not found</h1>"
         return render_template_string(LOADING_HTML)
 
     return build_vault_html(data)
