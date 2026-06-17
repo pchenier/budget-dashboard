@@ -3762,7 +3762,7 @@ function showOnboarding(){
     backBtn.style.display = step > 0 ? 'inline-block' : 'none';
 
     if(s.id==='welcome'){
-      iconEl.innerHTML = ico('home',28);
+      iconEl.innerHTML = '<img src="/static/fiscit-logo.svg" style="width:56px;height:56px;border-radius:14px" alt="Fiscit">';
       titleEl.textContent = 'Welcome to Fiscit';
       subEl.textContent = 'Your finances, finally clear.';
       bodyEl.innerHTML = '<p style="color:var(--text3);font-size:13px;text-align:center">Track spending, budgets, investments, and more, all in one place. Let\'s get you set up in under a minute.</p>';
