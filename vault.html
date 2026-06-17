@@ -3895,29 +3895,31 @@ function loadRealData(){
 // ═══════════════════════════ INIT ═══════════════════════════
 document.addEventListener('DOMContentLoaded',()=>{
   feather.replace({width:14,height:14});
-  // Check auth first, then decide what to show
+  // Check auth + load data, then show onboarding or dashboard
   fetch('/api/data',{credentials:'include'}).then(r=>{
     if(r.status===401){window.location.href='/login';return null;}
+    if(!r.ok) return null; // 404 etc — use defaults
     return r.json();
   }).then(d=>{
-    if(!d) return; // redirected to login
-    // Merge API data into D
-    Object.keys(d).forEach(k=>{if(d[k]!==undefined)D[k]=d[k];});
-    // Update sidebar user info
-    const un=document.getElementById('user-name');
-    const ue=document.getElementById('user-email');
-    const av=document.getElementById('user-avatar');
-    const displayName = D.userName || D.userEmail?.split('@')[0] || 'User';
-    const displayEmail = D.userEmail || '';
-    if(un) un.textContent = displayName;
-    if(ue) ue.textContent = displayEmail;
-    if(av) av.textContent = displayName.slice(0,2).toUpperCase();
-    // Update sync timestamp
-    if(D.generated){
-      const ts=document.getElementById('sync-ts');
-      if(ts) ts.textContent=D.generated;
+    if(d){
+      // Merge API data into D
+      Object.keys(d).forEach(k=>{if(d[k]!==undefined)D[k]=d[k];});
+      // Update sidebar user info
+      const displayName = D.userName || D.userEmail?.split('@')[0] || 'User';
+      const displayEmail = D.userEmail || '';
+      const un=document.getElementById('user-name');
+      const ue=document.getElementById('user-email');
+      const av=document.getElementById('user-avatar');
+      if(un) un.textContent = displayName;
+      if(ue) ue.textContent = displayEmail;
+      if(av) av.textContent = displayName.slice(0,2).toUpperCase();
+      // Update sync timestamp
+      if(D.generated){
+        const ts=document.getElementById('sync-ts');
+        if(ts) ts.textContent=D.generated;
+      }
     }
-    // Auth confirmed — show onboarding or dashboard
+    // Show onboarding or dashboard
     if(!localStorage.getItem(ONBOARDED_KEY)){
       showOnboarding();
     } else {
@@ -3930,7 +3932,7 @@ document.addEventListener('DOMContentLoaded',()=>{
       feather.replace({width:14,height:14});
     }
   }).catch(()=>{
-    // Network error — still try to show cached state
+    // Network error — still show something
     if(!localStorage.getItem(ONBOARDED_KEY)){
       showOnboarding();
     } else {
