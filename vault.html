@@ -2781,14 +2781,14 @@ function _calBuildEvents(year, month){
     else d=new Date(raw+' '+year);
     if(isNaN(d)||d.getMonth()!==month||d.getFullYear()!==year) return;
     const day=d.getDate();
-    if(t.amt<0) add(day,'txn',ico('trending-down',12)+' '+t.name.slice(0,18),'var(--red)', (Math.abs(t.amt)).toFixed(0)+'$');
-    else        add(day,'income',ico('dollar-sign',12)+' '+t.name.slice(0,18),'var(--green)', '+'+t.amt.toFixed(0)+'$');
+    if(t.amt<0) add(day,'txn','trending-down',t.name.slice(0,18),'var(--red)', (Math.abs(t.amt)).toFixed(0)+'$');
+    else        add(day,'income','dollar-sign',t.name.slice(0,18),'var(--green)', '+'+t.amt.toFixed(0)+'$');
   });
   // Gym
   getGymLogs().forEach(l=>{
     const d=new Date(l.date+'T00:00');
     if(d.getMonth()!==month||d.getFullYear()!==year) return;
-    add(d.getDate(),'gym',ico('zap',12)+' '+l.workout,'var(--accent)', l.duration||'');
+    add(d.getDate(),'gym','zap',l.workout,'var(--accent)', l.duration||'');
   });
   // Meals (summarize per day: X meals, Y kcal)
   const mealsByDay={};
@@ -2801,14 +2801,14 @@ function _calBuildEvents(year, month){
     mealsByDay[day].items.push(m);
   });
   Object.entries(mealsByDay).forEach(([day,ms])=>{
-    add(+day,'meal',ico('coffee',12)+' '+ms.count+' meal'+(ms.count>1?'s':''),'var(--yellow)', ms.cal+'kcal · '+ms.protein+'g prot');
+    add(+day,'meal','coffee',ms.count+' meal'+(ms.count>1?'s':''),'var(--yellow)', ms.cal+'kcal · '+ms.protein+'g prot');
   });
   // Habits — check each habit's log array for this month's dates
   getHabits().forEach(h=>{
     (h.log||[]).forEach(iso=>{
       const d=new Date(iso+'T00:00');
       if(d.getMonth()!==month||d.getFullYear()!==year) return;
-      add(d.getDate(),'habit',ico('check-circle',12)+' '+h.name,'var(--green2,#4ade80)','');
+      add(d.getDate(),'habit','check-circle',h.name,'var(--green2,#4ade80)','');
     });
   });
   // Custom events (birthdays, rdv, events, reminders, travel)
@@ -2821,7 +2821,7 @@ function _calBuildEvents(year, month){
       ? (d.getMonth()===month)
       : (d.getMonth()===month && d.getFullYear()===year);
     if(!matches) return;
-    add(d.getDate(), 'custom_'+e.type, ico(tpl.icon||'calendar',12)+' '+e.title, tpl.color, e.notes||'');
+    add(d.getDate(), 'custom_'+e.type, tpl.icon||'calendar', e.title, tpl.color, e.notes||'');
   });
   return events;
 }
@@ -2838,16 +2838,20 @@ function _calBuildDayPanel(day, year, month){
   const customEvMap = {};
   getCalEvents().forEach(e=>{ if(e.date===isoPrefix || (e.repeat==='yearly' && e.date.slice(5)===isoPrefix.slice(5))) customEvMap[e.title]=e.id; });
 
-  const rows = evs.map(e=>`
-    <div style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid var(--border2)">
+  const TYPE_ICO = {txn:'trending-down',income:'dollar-sign',gym:'zap',meal:'coffee',habit:'check-circle'};
+  const rows = evs.map(e=>{
+    const evIco = e.type.startsWith('custom_') ? ico((CAL_EV_TYPES[e.type.replace('custom_','')]||CAL_EV_TYPES.event).icon||'calendar',12) : ico(TYPE_ICO[e.type]||'folder',12);
+    const evLabel = e.label;
+    return `<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid var(--border2)">
       <div style="width:3px;min-height:32px;border-radius:2px;background:${e.color};flex-shrink:0;margin-top:2px"></div>
       <div style="flex:1;min-width:0">
-        <div style="font-size:12.5px;color:var(--text);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${e.label}</div>
+        <div style="font-size:12.5px;color:var(--text);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:inline-flex;align-items:center;gap:4px">${evIco} ${evLabel}</div>
         ${e.sub?`<div style="font-size:11px;color:var(--text3);margin-top:1px">${e.sub}</div>`:''}
       </div>
-      ${e.type.startsWith('custom_')&&customEvMap[e.label.slice(e.label.indexOf(' ')+1)]?
-        `<button onclick="deleteCalEv('${customEvMap[e.label.slice(e.label.indexOf(' ')+1)]}')" style="background:none;border:none;color:var(--text4);cursor:pointer;font-size:14px;padding:2px 4px;flex-shrink:0">×</button>`:''}
-    </div>`).join('');
+      ${e.type.startsWith('custom_')&&customEvMap[e.label]?
+        `<button onclick="deleteCalEv('${customEvMap[e.label]}')" style="background:none;border:none;color:var(--text4);cursor:pointer;font-size:14px;padding:2px 4px;flex-shrink:0">×</button>`:''}
+    </div>`;
+  }).join('');
 
   const empty = !evs.length ? `<div style="padding:12px 0;text-align:center;color:var(--text3);font-size:12px">Nothing logged on ${day} ${new Date(year,month,day).toLocaleString('en',{month:'short'})}</div>` : '';
 
@@ -2987,9 +2991,10 @@ function pgCalendar(){
     weekDays.forEach((di,i)=>{
       const col = i + 2;
       di.events.forEach(ev=>{
-        const pos = _calEvTimePosition(ev);
-        const cleanLabel = ev.label.replace(/<[^>]*>/g,'').trim();
-        eventBlocks += `<div class="cal-ev-block" style="grid-column:${col};top:${pos.top+40}px;height:${pos.height-2}px;background:${ev.color}22;color:${ev.color};border-left:3px solid ${ev.color}" title="${cleanLabel}${ev.sub?' - '+ev.sub:''}">${cleanLabel.slice(0,20)}</div>`;
+        const _wkIco = {txn:'trending-down',income:'dollar-sign',gym:'zap',meal:'coffee',habit:'check-circle'};
+        const evIco = ev.type.startsWith('custom_') ? ((CAL_EV_TYPES[ev.type.replace('custom_','')]||CAL_EV_TYPES.event).icon||'calendar') : (_wkIco[ev.type]||'folder');
+        const cleanLabel = ev.label;
+        eventBlocks += `<div class="cal-ev-block" style="grid-column:${col};top:${pos.top+40}px;height:${pos.height-2}px;background:${ev.color}22;color:${ev.color};border-left:3px solid ${ev.color}" title="${cleanLabel}${ev.sub?' - '+ev.sub:''}">${ico(evIco,10)} ${cleanLabel.slice(0,20)}</div>`;
       });
     });
 
@@ -3060,8 +3065,10 @@ function pgCalendar(){
     let eventBlocks = '';
     dayEvs.forEach(ev=>{
       const pos = _calEvTimePosition(ev);
-      const cleanLabel = ev.label.replace(/<[^>]*>/g,'').trim();
-      eventBlocks += `<div class="cal-ev-block" style="grid-column:2;top:${pos.top+40}px;height:${pos.height-2}px;background:${ev.color}22;color:${ev.color};border-left:3px solid ${ev.color}" title="${cleanLabel}${ev.sub?' - '+ev.sub:''}">${cleanLabel.slice(0,30)}</div>`;
+      const _dyIco = {txn:'trending-down',income:'dollar-sign',gym:'zap',meal:'coffee',habit:'check-circle'};
+      const evIco = ev.type.startsWith('custom_') ? ((CAL_EV_TYPES[ev.type.replace('custom_','')]||CAL_EV_TYPES.event).icon||'calendar') : (_dyIco[ev.type]||'folder');
+      const cleanLabel = ev.label;
+      eventBlocks += `<div class="cal-ev-block" style="grid-column:2;top:${pos.top+40}px;height:${pos.height-2}px;background:${ev.color}22;color:${ev.color};border-left:3px solid ${ev.color}" title="${cleanLabel}${ev.sub?' - '+ev.sub:''}">${ico(evIco,10)} ${cleanLabel.slice(0,30)}</div>`;
     });
 
     let nowLine = '';
@@ -3138,9 +3145,10 @@ function pgCalendar(){
     const customEvs = dayEvs.filter(e=>e.type.startsWith('custom_'));
     const bgEvs     = dayEvs.filter(e=>!e.type.startsWith('custom_'));
 
-    const chips = customEvs.slice(0,2).map(e=>
-      `<span class="cal-ev-chip" style="background:${e.color}22;color:${e.color};border:1px solid ${e.color}55">${e.label.slice(0,13)}</span>`
-    ).join('');
+    const chips = customEvs.slice(0,2).map(e=>{
+      const tpl = CAL_EV_TYPES[e.type.replace('custom_','')]||CAL_EV_TYPES.event;
+      return `<span class="cal-ev-chip" style="background:${e.color}22;color:${e.color};border:1px solid ${e.color}55">${ico(tpl.icon||'calendar',10)} ${e.label.slice(0,13)}</span>`;
+    }).join('');
 
     const typesSeen=new Set();
     const dots = bgEvs.filter(e=>{ if(typesSeen.has(e.type)) return false; typesSeen.add(e.type); return true; })
