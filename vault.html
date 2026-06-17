@@ -496,7 +496,9 @@ button{font-family:var(--font)}
 
 <script>
 // Feather icon helper — generates inline SVG processed by feather.replace()
-function ico(name,sz){sz=sz||14;return '<svg data-feather="'+name+'" width="'+sz+'" height="'+sz+'"></svg>';}
+// If name is an emoji or non-Feather icon, map it to a valid Feather name
+const EMOJI_TO_FEATHER={'🛒':'shopping-cart','🍽️':'utensils','🍽':'utensils','⛽':'fuel','🚇':'map','🛍️':'shopping-bag','💪':'zap','💊':'heart','📱':'smartphone','🎬':'film','📺':'monitor','🏠':'home','⚡':'zap','💸':'trending-down','📈':'trending-up','💼':'briefcase','📂':'folder','💳':'credit-card'};
+function ico(name,sz){sz=sz||14;const fn=EMOJI_TO_FEATHER[name]||name;return '<svg data-feather="'+fn+'" width="'+sz+'" height="'+sz+'"></svg>';}
 
 // ═══════════════════════════ MOCK DATA ═══════════════════════════
 const D = {
