@@ -908,8 +908,8 @@ def sso():
 @app.route('/login/google')
 def google_login():
     """Initiate Google OAuth2 flow."""
-    # Build the redirect URI dynamically so it works on any host (localhost or Railway)
-    redirect_uri = url_for('google_callback', _external=True)
+    # Force HTTPS redirect URI — Railway terminates SSL so Flask sees http://
+    redirect_uri = url_for('google_callback', _external=True, _scheme='https')
     return google.authorize_redirect(redirect_uri)
 
 @app.route('/login/google/callback')
