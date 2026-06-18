@@ -1632,6 +1632,24 @@ function pgTransactions(){
   const allCatOpts = ALL_CATS.map(c=>`<option value="${c}">${c}</option>`).join('');
 
   return`
+  <!-- Delete Account Modal -->
+  <div id="delete-modal" style="display:none;opacity:0;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:1000;align-items:center;justify-content:center;transition:opacity .15s">
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:28px;width:420px;max-width:95vw;text-align:center">
+      <div style="display:flex;align-items:center;justify-content:center;margin-bottom:16px">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--red)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      </div>
+      <h3 style="font-size:17px;font-weight:600;color:var(--text);margin-bottom:6px">Delete your account?</h3>
+      <p style="font-size:13px;color:var(--text3);margin-bottom:20px;line-height:1.5">This will permanently delete all your data, including transactions, connections, and settings. This action cannot be undone.</p>
+      <label id="delete-confirm-label" style="display:block;text-align:left;font-size:12px;color:var(--text3);margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em">Type your email to confirm:</label>
+      <input id="delete-confirm-input" type="email" autocomplete="off" style="width:100%;padding:10px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-sm);color:var(--text);font-family:var(--font);font-size:13px;outline:none;margin-bottom:16px" placeholder="your@email.com">
+      <div id="delete-error" style="display:none;margin-bottom:12px;padding:8px 12px;background:var(--red-bg);border:1px solid var(--red-br);border-radius:var(--r-sm);color:var(--red);font-size:12px;text-align:left"></div>
+      <div style="display:flex;gap:10px">
+        <button onclick="closeDeleteModal()" style="flex:1;padding:10px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-sm);color:var(--text2);font-family:var(--font);font-size:13px;font-weight:500;cursor:pointer">Cancel</button>
+        <button id="delete-confirm-btn" onclick="confirmDeleteAccount()" style="flex:1;padding:10px;background:var(--red-bg);border:1px solid var(--red-br);border-radius:var(--r-sm);color:var(--red);font-family:var(--font);font-size:13px;font-weight:600;cursor:pointer">Delete my account</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Rules Modal -->
   <div id="rules-modal" style="display:none;opacity:0;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:999;align-items:center;justify-content:center;transition:opacity .15s">
     <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:24px;width:520px;max-width:95vw;max-height:85vh;overflow-y:auto">
@@ -3765,7 +3783,7 @@ function pgSettings(){
   ${section('Data',[
     row('Export data','Download all your financial data','<button class="btn btn-ghost btn-sm"><svg data-feather="save"></svg> Export CSV</button>'),
     row('Sync now','Force refresh all accounts','<button class="btn btn-ghost btn-sm" onclick="doRefresh()"><svg data-feather="refresh-cw"></svg> Sync</button>'),
-    row('Delete account','Permanently delete all data','<button class="btn btn-sm" style="background:var(--red-bg);color:var(--red);border:1px solid var(--red-br)">Delete</button>'),
+    row('Delete account','Permanently delete all data','<button class=\"btn btn-sm\" style=\"background:var(--red-bg);color:var(--red);border:1px solid var(--red-br)\" onclick=\"showDeleteModal()\">Delete</button>'),
     row('Replay onboarding','Walk through the intro tour again','<button class="btn btn-ghost btn-sm" onclick="replayOnboarding()"><svg data-feather="play-circle"></svg> Replay</button>'),
     row('Sign out','Log out of your account','<button class="btn btn-ghost btn-sm" onclick="doLogout()"><svg data-feather="log-out" style="width:14px;height:14px;vertical-align:middle;margin-right:4px"></svg> Sign out</button>'),
   ].join(''))}`;
@@ -3777,6 +3795,59 @@ function doLogout(){
     window.location.href='/login';
   }).catch(()=>{
     window.location.href='/login';
+  });
+}
+
+function showDeleteModal(){
+  const email = (D.userEmail||'').trim();
+  const m=document.getElementById('delete-modal');
+  m.style.display='flex';
+  setTimeout(()=>m.style.opacity='1',10);
+  const inp=document.getElementById('delete-confirm-input');
+  inp.value='';
+  document.getElementById('delete-confirm-label').textContent='Type '+email+' to confirm:';
+  document.getElementById('delete-error').style.display='none';
+  setTimeout(()=>inp.focus(),200);
+}
+
+function closeDeleteModal(){
+  const m=document.getElementById('delete-modal');
+  m.style.opacity='0';
+  setTimeout(()=>m.style.display='none',150);
+}
+
+function confirmDeleteAccount(){
+  const email=(D.userEmail||'').trim();
+  const inp=document.getElementById('delete-confirm-input');
+  const errEl=document.getElementById('delete-error');
+  const btn=document.getElementById('delete-confirm-btn');
+  if(inp.value.trim().toLowerCase()!==email.toLowerCase()){
+    errEl.textContent='Email does not match. Type your email to confirm.';
+    errEl.style.display='block';
+    return;
+  }
+  errEl.style.display='none';
+  btn.disabled=true;
+  btn.textContent='Deleting...';
+  fetch('/api/auth/delete',{
+    method:'POST',
+    credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({confirmation:inp.value.trim()})
+  }).then(r=>r.json()).then(d=>{
+    if(d.ok){
+      window.location.href='/login';
+    }else{
+      errEl.textContent=d.error||'Delete failed. Please try again.';
+      errEl.style.display='block';
+      btn.disabled=false;
+      btn.textContent='Delete my account';
+    }
+  }).catch(()=>{
+    errEl.textContent='Network error. Please try again.';
+    errEl.style.display='block';
+    btn.disabled=false;
+    btn.textContent='Delete my account';
   });
 }
 

@@ -1116,6 +1116,31 @@ def api_delete_wallet(wallet_id):
         t.start()
     return jsonify({'ok': True})
 
+# ── Delete account ──────────────────────────────────────────────────────────
+@app.route('/api/auth/delete', methods=['POST'])
+@login_required
+def api_delete_account():
+    """Permanently delete the user's account and all associated data."""
+    data = request.get_json(silent=True) or {}
+    confirmation = data.get('confirmation', '')
+    uid = current_user.model.id
+    email = current_user.model.email
+    # Require user to type their email to confirm
+    if confirmation.strip().lower() != email.strip().lower():
+        return jsonify({'ok': False, 'error': 'Confirmation does not match email.'}), 400
+
+    # Delete related data
+    CryptoWallet.query.filter_by(user_id=uid).delete()
+    PlaidConnection.query.filter_by(user_id=uid).delete()
+    WiseConnection.query.filter_by(user_id=uid).delete()
+    db.session.execute(db.text('DELETE FROM email_verifications WHERE user_id = :uid'), {'uid': uid})
+    db.session.execute(db.text('DELETE FROM vault_credentials WHERE user_id = :uid'), {'uid': uid})
+    # Delete user
+    UserModel.query.filter_by(id=uid).delete()
+    db.session.commit()
+    logout_user()
+    return jsonify({'ok': True})
+
 @app.route('/api/plaid/link_token', methods=['POST'])
 @login_required
 def plaid_link_token():
