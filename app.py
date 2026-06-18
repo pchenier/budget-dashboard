@@ -167,6 +167,61 @@ with app.app_context():
         raise
 
 # ── Vault HTML with data injection ───────────────────────────────────────────
+def _normalize_api_data(data):
+    """Normalize raw API data field names to match vault.html mock format.
+    Raw data uses 'balance', 'amount', 'category', 'institution' etc.
+    Vault.html expects 'bal', 'amt', 'cat', 'inst' etc.
+    """
+    TYPE_COLORS = {
+        "Chequing / Savings": "#22c55e",
+        "Credit Card":        "#ef4444",
+        "Investment":         "#3b82f6",
+        "Savings":            "#6366f1",
+        "Crypto":             "#f59e0b",
+        "International":      "#8b5cf6",
+        "Loan":               "#f87171",
+        "Other":              "#71717a",
+    }
+    out = dict(data)
+    # Normalize accounts
+    raw_accs = data.get("accounts", [])
+    norm_accs = []
+    for a in raw_accs:
+        color = TYPE_COLORS.get(a.get("type", ""), "#71717a")
+        init = (a.get("name") or "?")[0].upper()
+        norm_accs.append({
+            "id":    a.get("id", ""),
+            "name":  a.get("name", ""),
+            "inst":  a.get("inst", a.get("institution", a.get("name", ""))),
+            "bal":   a.get("bal", a.get("balance", 0)),
+            "type":  a.get("type", ""),
+            "delta": a.get("delta", 0),
+            "sync":  a.get("sync", "just now"),
+            "color": a.get("color", color),
+            "init":  a.get("init", init),
+            "ico":   a.get("ico", ""),
+        })
+    out["accounts"] = norm_accs
+    # Normalize transactions
+    raw_txns = data.get("transactions", [])
+    norm_txns = []
+    for t in raw_txns:
+        amt = t.get("amt", t.get("amount", 0))
+        if isinstance(amt, (int, float)) and amt > 0:
+            amt = -abs(amt)  # debit display convention
+        norm_txns.append({
+            "name":     t.get("name", ""),
+            "merchant": t.get("merchant", t.get("name", "")),
+            "amt":      round(amt, 2) if isinstance(amt, (int, float)) else 0,
+            "date":     t.get("date", ""),
+            "date_iso": t.get("date_iso", t.get("date", "")),
+            "cat":      t.get("cat", t.get("category", "")),
+            "ico":      t.get("ico", ""),
+            "account":  t.get("account", t.get("_account", "")),
+        })
+    out["transactions"] = norm_txns
+    return out
+
 def build_vault_html(data):
     """Read vault.html and inject real data by replacing the mock D = {...} block."""
     if not VAULT_HTML.exists():
@@ -845,7 +900,8 @@ def api_data():
         data = state['data']
     if not data:
         return jsonify({'error': 'No data loaded'}), 404
-    return jsonify(data)
+    # Normalize field names to match vault.html mock format
+    return jsonify(_normalize_api_data(data))
 
 @app.route('/api/refresh', methods=['POST'])
 @login_required
