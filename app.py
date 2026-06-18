@@ -701,73 +701,355 @@ REGISTER_HTML = """<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Fiscit — Sign Up</title>
+<title>Fiscit — Get Started</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Inter',sans-serif;background:#080808;color:#f4f4f5;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
-.card{background:#111;border:1px solid #222;border-radius:16px;padding:2.5rem;width:100%;max-width:400px}
-.header{display:flex;align-items:center;gap:10px;margin-bottom:2rem}
+.card{background:#111;border:1px solid #222;border-radius:16px;padding:2.5rem;width:100%;max-width:440px;transition:opacity 0.3s}
+.header{display:flex;align-items:center;gap:10px;margin-bottom:1.5rem}
 .brand{font-size:1.25rem;font-weight:700;color:#4ade80;letter-spacing:-0.02em}
-.title{font-size:1.1rem;font-weight:600;margin-bottom:1.5rem;letter-spacing:-0.2px}
-label{display:block;font-size:0.75rem;font-weight:500;color:#a1a1aa;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.04em}
-input{width:100%;background:#1a1a1a;border:1px solid #2a2a2a;border-radius:8px;padding:0.65rem 0.85rem;color:#f4f4f5;font-family:'Inter',sans-serif;font-size:0.85rem;outline:none;transition:border-color 0.15s;margin-bottom:1rem}
-input:focus{border-color:#4ade80}
-.btn{width:100%;padding:0.85rem;background:#4ade80;border:none;border-radius:8px;color:#080808;font-family:'Inter',sans-serif;font-size:0.9rem;font-weight:700;cursor:pointer;transition:opacity 0.15s}
+.step-dots{display:flex;gap:6px;margin-bottom:1.5rem;justify-content:center}
+.dot{width:8px;height:8px;border-radius:50%;background:#2a2a2a;transition:all 0.3s}
+.dot.active{background:#4ade80;width:24px;border-radius:4px}
+.dot.done{background:#4ade80}
+.title{font-size:1.15rem;font-weight:600;margin-bottom:0.3rem;letter-spacing:-0.3px}
+.sub{font-size:0.85rem;color:#71717a;margin-bottom:1.5rem;line-height:1.6}
+label{display:block;font-size:0.7rem;font-weight:600;color:#a1a1aa;margin-bottom:4px;margin-top:12px;text-transform:uppercase;letter-spacing:0.06em}
+input,select{width:100%;background:#1a1a1a;border:1px solid #2a2a2a;border-radius:8px;padding:0.7rem 0.85rem;color:#f4f4f5;font-family:'Inter',sans-serif;font-size:0.85rem;outline:none;transition:border-color 0.15s}
+input:focus,select:focus{border-color:#4ade80}
+input::placeholder{color:#3f3f46}
+.btn{width:100%;margin-top:1.5rem;padding:0.85rem;background:#4ade80;border:none;border-radius:8px;color:#080808;font-family:'Inter',sans-serif;font-size:0.9rem;font-weight:700;cursor:pointer;transition:opacity 0.15s}
 .btn:hover{opacity:0.9}
+.btn:disabled{opacity:0.4;cursor:not-allowed}
+.btn-outline{width:100%;margin-top:0.75rem;padding:0.75rem;background:transparent;border:1px solid #2a2a2a;border-radius:8px;color:#71717a;font-family:'Inter',sans-serif;font-size:0.85rem;font-weight:500;cursor:pointer;transition:all 0.15s}
+.btn-outline:hover{border-color:#4ade80;color:#4ade80}
 .error{background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.25);border-radius:8px;padding:0.65rem 0.85rem;font-size:0.85rem;color:#f87171;margin-bottom:1.25rem}
-a{color:#4ade80;text-decoration:none;font-size:0.85rem}
-.link{text-align:center;margin-top:1.25rem}
+a{color:#4ade80;text-decoration:none}
+.link{text-align:center;margin-top:1.25rem;font-size:0.85rem;color:#71717a}
+.account-card{display:flex;align-items:center;gap:12px;background:#1a1a1a;border:1px solid #2a2a2a;border-radius:12px;padding:14px 16px;cursor:pointer;transition:all 0.15s;margin-bottom:10px}
+.account-card:hover{border-color:#4ade80}
+.account-icon{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.account-icon.bank{background:#1a2e1a}
+.account-icon.wise{background:#1a1a2e}
+.account-icon.crypto{background:#2e1a1a}
+.account-info{flex:1}
+.account-name{font-size:0.9rem;font-weight:600;color:#f4f4f5}
+.account-desc{font-size:0.75rem;color:#71717a;margin-top:2px}
+.account-action{font-size:0.75rem;font-weight:600;color:#4ade80;text-transform:uppercase;letter-spacing:0.05em}
+.account-card.connected{border-color:#1a3a1a;background:#0d1a0d}
+.account-card.connected .account-action{color:#4ade80}
+.account-card.connected .account-action::before{content:'\\2713 '}
+.hidden{display:none!important}
+.success-card{text-align:center;padding:2rem 0}
+.success-icon{width:64px;height:64px;border-radius:50%;background:#1a2e1a;display:inline-flex;align-items:center;justify-content:center;margin-bottom:1rem}
+.success-icon svg{color:#4ade80}
+.skip{font-size:0.8rem;color:#3f3f46;text-align:center;margin-top:1rem;cursor:pointer}
+.skip:hover{color:#71717a}
 </style>
 </head>
 <body>
-<div class="card">
-  <div class="header">
-    <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" width="32" height="32">
-      <rect width="32" height="32" rx="8" fill="#0A0F1A"/>
-      <rect x="7" y="6" width="5" height="20" rx="2" fill="#F0F4F8"/>
-      <rect x="7" y="6" width="16" height="5" rx="2" fill="#F0F4F8"/>
-      <rect x="7" y="14" width="12" height="4" rx="2" fill="#F0F4F8"/>
-      <circle cx="26" cy="8.5" r="3.5" fill="#b8f566"/>
-    </svg>
-    <span class="brand">Fiscit</span>
+<div class="card" id="onboarding">
+
+  <!-- Step indicators -->
+  <div class="step-dots" id="dots">
+    <div class="dot active" data-step="0"></div>
+    <div class="dot" data-step="1"></div>
+    <div class="dot" data-step="2"></div>
+    <div class="dot" data-step="3"></div>
+    <div class="dot" data-step="4"></div>
   </div>
-  <div class="title">Create your account</div>
-  {% if error %}<div class="error">{{ error }}</div>{% endif %}
-  <form method="POST">
+
+  <!-- Step 0: Email + Password -->
+  <div id="step-0">
+    <div class="header">
+      <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" width="32" height="32">
+        <rect width="32" height="32" rx="8" fill="#0A0F1A"/>
+        <rect x="7" y="6" width="5" height="20" rx="2" fill="#F0F4F8"/>
+        <rect x="7" y="6" width="16" height="5" rx="2" fill="#F0F4F8"/>
+        <rect x="7" y="14" width="12" height="4" rx="2" fill="#F0F4F8"/>
+        <circle cx="26" cy="8.5" r="3.5" fill="#b8f566"/>
+      </svg>
+      <span class="brand">Fiscit</span>
+    </div>
+    <div class="title">Create your account</div>
+    <p class="sub">Your finances, finally clear.</p>
+    {% if error %}<div class="error">{{ error }}</div>{% endif %}
+    <form method="POST" id="reg-form">
+      <label>Email</label>
+      <input type="email" name="email" placeholder="you@example.com" required>
+      <label>Password</label>
+      <input type="password" name="password" placeholder="At least 6 characters" required>
+      <button type="submit" class="btn">Sign up</button>
+    </form>
+    <div class="link">Already have an account? <a href="/login">Log in</a></div>
+  </div>
+
+  <!-- Step 1: Name -->
+  <div id="step-1" class="hidden">
+    <div class="title">What should we call you?</div>
+    <p class="sub">This will be your display name in Fiscit.</p>
     <label>Name</label>
-    <input type="text" name="name" placeholder="Your name">
-    <label>Email</label>
-    <input type="email" name="email" placeholder="you@example.com" required>
-    <label>Password</label>
-    <input type="password" name="password" placeholder="Choose a password" required>
-    <button type="submit" class="btn">Sign up</button>
-  </form>
-  <div class="link">Already have an account? <a href="/login">Log in</a></div>
+    <input type="text" id="ob-name" placeholder="Your name" autofocus>
+    <button type="button" class="btn" onclick="saveName()">Continue</button>
+    <div class="skip" onclick="skipName()">Skip for now</div>
+  </div>
+
+  <!-- Step 2: Bank (Plaid) -->
+  <div id="step-2" class="hidden">
+    <div class="title">Connect your bank</div>
+    <p class="sub">Securely sync your accounts via Plaid. Read only, we cannot move money.</p>
+    <div class="account-card" id="bank-card" onclick="showBankTrust()">
+      <div class="account-icon bank">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M3 21h18M3 10h18M5 10V21M9 10V21M15 10V21M19 10V21M3 10l9-7 9 7" stroke="#4ade80" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="account-info">
+        <div class="account-name">Bank Account</div>
+        <div class="account-desc" id="bank-status">Plaid, used by millions</div>
+      </div>
+      <div class="account-action" id="bank-action">Connect</div>
+    </div>
+    <div id="bank-trust" class="hidden" style="margin-top:-10px;margin-bottom:10px;padding:14px 16px;background:#0f1a0f;border:1px solid #1a3a1a;border-radius:0 0 12px 12px">
+      <div style="font-size:0.85rem;font-weight:600;color:#4ade80;margin-bottom:10px">Your data is safe</div>
+      <div style="font-size:0.8rem;color:#a1a1aa;line-height:1.8">Bank grade 256-bit encryption.<br>Read only, we cannot move money.<br>Used by millions via Plaid.</div>
+      <button type="button" class="btn" style="margin-top:12px" onclick="openPlaidLink()">Continue to Plaid</button>
+      <div style="text-align:center;margin-top:8px;font-size:0.7rem;color:#3f3f46">Powered by <a href="https://plaid.com" target="_blank">Plaid</a></div>
+    </div>
+    <button type="button" class="btn-outline" onclick="goStep(3)">Skip for now</button>
+  </div>
+
+  <!-- Step 3: Crypto -->
+  <div id="step-3" class="hidden">
+    <div class="title">Add crypto wallets</div>
+    <p class="sub">Track BTC, ETH, SOL, USDT, USDC and more.</p>
+    <div class="account-card" onclick="document.getElementById('crypto-form').classList.toggle('hidden')">
+      <div class="account-icon crypto">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" fill="#F7931A"/><path d="M14.5 10.5c0-1.1-.8-1.6-1.8-1.8V7.5h-1.4v1.1c-1 .2-1.8.8-1.8 1.9 0 1.6 1.4 1.6 2.8 1.9.8.2 1.2.5 1.2 1.1 0 .7-.6 1.1-1.4 1.1s-1.4-.4-1.5-1.2l-1.3.3c.2 1.2 1 1.8 2 2v1.2h1.4v-1.2c1.1-.2 1.9-.9 1.9-2 0-1.6-1.4-1.7-2.8-2-.8-.2-1.2-.4-1.2-1 0-.5.5-.9 1.2-.9.6 0 1.1.3 1.2.9l1.3-.3z" fill="#fff"/></svg>
+      </div>
+      <div class="account-info">
+        <div class="account-name">Crypto Wallet</div>
+        <div class="account-desc" id="crypto-status">Optional, add anytime</div>
+      </div>
+      <div class="account-action">Add</div>
+    </div>
+    <div id="crypto-form" class="hidden" style="padding:12px 16px;background:#161616;border:1px solid #2a2a2a;border-radius:12px;margin-top:-10px;margin-bottom:10px">
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <select id="wallet-chain" style="width:35%;margin:0">
+          <option value="bitcoin">Bitcoin</option>
+          <option value="ethereum">Ethereum</option>
+          <option value="solana">Solana</option>
+          <option value="polygon">Polygon</option>
+          <option value="base">Base</option>
+          <option value="usdc">USDC</option>
+        </select>
+        <input id="wallet-address" placeholder="Wallet address" style="width:65%;margin:0">
+      </div>
+      <input id="wallet-label" placeholder="Label (optional)" style="margin-top:8px">
+      <button type="button" style="width:100%;margin-top:10px;padding:8px;background:#1a2e1a;border:1px solid #1a3a1a;border-radius:8px;color:#4ade80;font-family:'Inter',sans-serif;font-size:0.8rem;font-weight:600;cursor:pointer" onclick="addWallet()">Add Wallet</button>
+      <div id="wallet-list" style="margin-top:8px"></div>
+    </div>
+    <button type="button" class="btn-outline" onclick="goStep(4)">Skip for now</button>
+  </div>
+
+  <!-- Step 4: Wise + Other + Done -->
+  <div id="step-4" class="hidden">
+    <div class="title">International accounts?</div>
+    <p class="sub">Connect Wise for multi-currency transfers, or skip to start using Fiscit.</p>
+    <div class="account-card" onclick="document.getElementById('wise-form').classList.toggle('hidden')">
+      <div class="account-icon wise">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="#9FE870" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="account-info">
+        <div class="account-name">Wise</div>
+        <div class="account-desc" id="wise-status">International transfers</div>
+      </div>
+      <div class="account-action" id="wise-action">Set up</div>
+    </div>
+    <div id="wise-form" class="hidden" style="padding:12px 16px;background:#161616;border:1px solid #2a2a2a;border-radius:12px;margin-top:-10px;margin-bottom:10px">
+      <label style="margin-top:0">API Token</label>
+      <input id="wise-token" placeholder="932aba85-...">
+      <label>Profile ID</label>
+      <input id="wise-profile" placeholder="63963106">
+      <button type="button" style="width:100%;margin-top:10px;padding:8px;background:transparent;border:1px solid #4ade80;border-radius:8px;color:#4ade80;font-family:'Inter',sans-serif;font-size:0.8rem;font-weight:600;cursor:pointer" onclick="saveWise()">Save and Test</button>
+      <div id="wise-result" style="margin-top:8px"></div>
+    </div>
+    <button type="button" class="btn" onclick="finishOnboarding()" style="margin-top:0.5rem">You're all set!</button>
+    <div class="skip" onclick="finishOnboarding()">Skip, I'll add later</div>
+  </div>
+
+  <!-- Success animation -->
+  <div id="step-done" class="hidden">
+    <div class="success-card">
+      <div class="success-icon">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+      </div>
+      <div class="title" style="margin-bottom:0.5rem">You're all set!</div>
+      <p class="sub">Your financial life, finally clear.</p>
+      <div style="margin-top:1rem"><div class="spinner" style="margin:0 auto"></div><div style="font-size:0.75rem;color:#3f3f46;margin-top:10px">Loading your dashboard...</div></div>
+    </div>
+  </div>
+
 </div>
+
+<style>.spinner{width:20px;height:20px;border:2px solid #2a2a2a;border-top-color:#4ade80;border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto}@keyframes spin{to{transform:rotate(360deg)}}</style>
+
+<script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
+<script>
+let currentStep = 0;
+let userName = '';
+let plaidConnected = false;
+
+function updateDots(){
+  document.querySelectorAll('.dot').forEach((d,i)=>{
+    d.classList.remove('active','done');
+    if(i < currentStep) d.classList.add('done');
+    if(i === currentStep) d.classList.add('active');
+  });
+}
+
+function showStep(n){
+  document.querySelectorAll('[id^="step-"]').forEach(el=>el.classList.add('hidden'));
+  const el = document.getElementById('step-'+n);
+  if(el){el.classList.remove('hidden');updateDots();}
+}
+
+function goStep(n){
+  currentStep = n;
+  showStep(n);
+}
+
+// Step 0 handled by form POST
+
+// Step 1: Save name
+function saveName(){
+  userName = document.getElementById('ob-name').value.trim();
+  if(!userName){userName='Friend';}
+  fetch('/api/profile',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:userName})}).catch(()=>{});
+  goStep(2);
+}
+function skipName(){userName='Friend';goStep(2);}
+
+// Step 2: Plaid
+function showBankTrust(){document.getElementById('bank-trust').classList.toggle('hidden');}
+function openPlaidLink(){
+  fetch('/api/plaid/link_token',{method:'POST'}).then(r=>r.json()).then(d=>{
+    if(!d.link_token){alert('Could not connect to Plaid. Try again later.');return;}
+    const handler=Plaid.create({
+      token:d.link_token,
+      onSuccess:async(publicToken)=>{
+        const res=await fetch('/api/plaid/exchange',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({public_token:publicToken})});
+        const data=await res.json();
+        if(data.ok){
+          plaidConnected=true;
+          document.getElementById('bank-card').classList.add('connected');
+          document.getElementById('bank-status').textContent='Connected!';
+          document.getElementById('bank-action').textContent='Connected';
+          document.getElementById('bank-trust').classList.add('hidden');
+          setTimeout(()=>goStep(3),800);
+        } else { alert(data.error||'Failed to connect bank'); }
+      },
+      onExit:()=>{},
+      onEvent:()=>{},
+    });
+    handler.open();
+  }).catch(e=>alert('Error: '+e));
+}
+
+// Step 3: Crypto wallets
+function addWallet(){
+  const chain=document.getElementById('wallet-chain').value;
+  const address=document.getElementById('wallet-address').value.trim();
+  const label=document.getElementById('wallet-label').value.trim();
+  if(!address){alert('Enter a wallet address');return;}
+  fetch('/api/wallets',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chain,address,label})})
+    .then(r=>r.json()).then(d=>{
+      if(d.ok){
+        const list=document.getElementById('wallet-list');
+        const div=document.createElement('div');
+        div.style.cssText='display:flex;align-items:center;gap:8px;padding:6px 0;font-size:0.8rem';
+        div.innerHTML='<span style="background:#1a2e1a;color:#4ade80;padding:2px 6px;border-radius:4px;font-size:0.65rem;font-weight:600;text-transform:uppercase">'+chain+'</span><span style="color:#a1a1aa;font-family:monospace;font-size:0.75rem">'+address.slice(0,8)+'...'+address.slice(-4)+'</span>';
+        list.appendChild(div);
+        document.getElementById('wallet-address').value='';
+        document.getElementById('wallet-label').value='';
+        document.getElementById('crypto-status').textContent=d.wallets+' wallet'+(d.wallets>1?'s':'');
+      } else { alert(d.error||'Failed to add wallet'); }
+    }).catch(e=>alert('Error: '+e));
+}
+
+// Step 4: Wise
+function saveWise(){
+  const token=document.getElementById('wise-token').value.trim();
+  const profile=document.getElementById('wise-profile').value.trim();
+  if(!token){document.getElementById('wise-result').innerHTML='<div style="color:#f87171;font-size:0.8rem">Enter your API token first.</div>';return;}
+  document.getElementById('wise-result').innerHTML='<div style="color:#71717a;font-size:0.8rem">Testing...</div>';
+  fetch('/api/wise/test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({wise_token:token})})
+    .then(r=>r.json()).then(d=>{
+      if(d.ok){
+        // Save wise connection
+        fetch('/setup',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'wise_token='+encodeURIComponent(token)+'&wise_profile='+encodeURIComponent(profile)});
+        document.getElementById('wise-action').textContent='Connected';
+        document.getElementById('wise-status').textContent='Connected!';
+        document.getElementById('wise-result').innerHTML='<div style="color:#4ade80;font-size:0.8rem">Connected!</div>';
+      } else {
+        document.getElementById('wise-result').innerHTML='<div style="color:#f87171;font-size:0.8rem">'+(d.error||'Connection failed.')+'</div>';
+      }
+    }).catch(()=>{document.getElementById('wise-result').innerHTML='<div style="color:#f87171;font-size:0.8rem">Network error.</div>'});
+}
+
+function finishOnboarding(){
+  // Mark onboarding complete
+  localStorage.setItem('fiscit_onboarded','1');
+  // Show success animation
+  document.querySelectorAll('[id^="step-"]').forEach(el=>el.classList.add('hidden'));
+  document.getElementById('step-done').classList.remove('hidden');
+  document.getElementById('dots').classList.add('hidden');
+  // Trigger data fetch in background then redirect
+  fetch('/api/data').catch(()=>{});
+  setTimeout(()=>{window.location.href='/';},2000);
+}
+
+// Auto-advance based on Jinja step parameter
+{% if step == '1' %}
+// User just registered, show name step
+currentStep = 1;
+showStep(1);
+{% elif step == '2' %}
+currentStep = 2;
+showStep(2);
+{% elif step == '3' %}
+currentStep = 3;
+showStep(3);
+{% elif step == '4' %}
+currentStep = 4;
+showStep(4);
+{% elif error %}
+// Stay on step 0 on error
+{% endif %}
+</script>
 </body>
 </html>"""
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
+    step = request.args.get('step', '0')
     if request.method == 'POST':
         email = request.form.get('email', '').strip().lower()
         password = request.form.get('password', '')
         name = request.form.get('name', '').strip()
         if not email or not password:
-            return render_template_string(REGISTER_HTML, error='Email and password are required.')
+            return render_template_string(REGISTER_HTML, error='Email and password are required.', step='0')
         if len(password) < 6:
-            return render_template_string(REGISTER_HTML, error='Password must be at least 6 characters.')
+            return render_template_string(REGISTER_HTML, error='Password must be at least 6 characters.', step='0')
         if UserModel.query.filter_by(email=email).first():
-            return render_template_string(REGISTER_HTML, error='An account with that email already exists.')
+            return render_template_string(REGISTER_HTML, error='An account with that email already exists.', step='0')
         user = UserModel(email=email, name=name)
         user.set_password(password)
         db.session.add(user)
         db.session.commit()
         flask_user = FlaskUser(user)
         login_user(flask_user)
-        return redirect(url_for('index'))
-    return render_template_string(REGISTER_HTML, error='')
+        return redirect(url_for('register', step='1'))
+    return render_template_string(REGISTER_HTML, error='', step=step)
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -817,10 +1099,8 @@ def index():
                 t = threading.Thread(target=fetch_data, args=(uid, cfg), daemon=True)
                 t.start()
                 return render_template_string(LOADING_HTML)
-            # No accounts yet — serve vault.html as-is, JS onboarding handles setup
-            if VAULT_HTML.exists():
-                return VAULT_HTML.read_text(encoding="utf-8")
-            return "<h1>vault.html not found</h1>"
+            # No accounts yet — redirect to onboarding
+            return redirect(url_for('register', step='1'))
         return render_template_string(LOADING_HTML)
 
     return build_vault_html(data)
@@ -868,6 +1148,16 @@ def setup():
     return render_template_string(SETUP_HTML, error=error, vals=vals)
 
 # ── API routes ──────────────────────────────────────────────────────────────
+@app.route('/api/profile', methods=['POST'])
+@login_required
+def api_profile():
+    data = request.get_json(silent=True) or {}
+    name = data.get('name', '').strip()
+    if name:
+        current_user.model.name = name
+        db.session.commit()
+    return jsonify({'ok': True})
+
 @app.route('/api/status')
 @login_required
 def api_status():
