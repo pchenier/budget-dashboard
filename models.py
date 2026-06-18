@@ -13,6 +13,7 @@ class User(db.Model):
     __tablename__ = 'users'
     id            = db.Column(db.Integer, primary_key=True)
     email         = db.Column(db.String(255), unique=True, nullable=False, index=True)
+    password_hash = db.Column(db.String(255), nullable=True)   # nullable for Google-only users
     google_id     = db.Column(db.String(255), unique=True, nullable=True, index=True)
     name          = db.Column(db.String(100), default='')
     onboarded     = db.Column(db.Boolean, default=False, nullable=False)
@@ -22,6 +23,19 @@ class User(db.Model):
     plaid_connections = db.relationship('PlaidConnection', backref='user', lazy=True, cascade='all, delete-orphan')
     wise_connections  = db.relationship('WiseConnection', backref='user', lazy=True, cascade='all, delete-orphan')
     crypto_wallets    = db.relationship('CryptoWallet', backref='user', lazy=True, cascade='all, delete-orphan')
+
+    def set_password(self, pw):
+        import bcrypt
+        self.password_hash = bcrypt.hashpw(pw.encode(), bcrypt.gensalt()).decode()
+
+    def check_password(self, pw):
+        import bcrypt
+        if not self.password_hash:
+            return False  # Google-only users have no password
+        try:
+            return bcrypt.checkpw(pw.encode(), self.password_hash.encode())
+        except Exception:
+            return False
 
 
 
