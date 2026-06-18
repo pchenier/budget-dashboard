@@ -757,10 +757,9 @@ a{color:#4ade80;text-decoration:none}
     <div class="dot" data-step="1"></div>
     <div class="dot" data-step="2"></div>
     <div class="dot" data-step="3"></div>
-    <div class="dot" data-step="4"></div>
   </div>
 
-  <!-- Step 0: Email + Password -->
+  <!-- Step 0: Sign up (name + email + password) -->
   <div id="step-0">
     <div class="header">
       <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" width="32" height="32">
@@ -776,6 +775,8 @@ a{color:#4ade80;text-decoration:none}
     <p class="sub">Your finances, finally clear.</p>
     {% if error %}<div class="error">{{ error }}</div>{% endif %}
     <form method="POST" id="reg-form">
+      <label>Name</label>
+      <input type="text" name="name" placeholder="How should we call you?" required>
       <label>Email</label>
       <input type="email" name="email" placeholder="you@example.com" required>
       <label>Password</label>
@@ -785,18 +786,8 @@ a{color:#4ade80;text-decoration:none}
     <div class="link">Already have an account? <a href="/login">Log in</a></div>
   </div>
 
-  <!-- Step 1: Name -->
+  <!-- Step 1: Bank (Plaid) -->
   <div id="step-1" class="hidden">
-    <div class="title">What should we call you?</div>
-    <p class="sub">This will be your display name in Fiscit.</p>
-    <label>Name</label>
-    <input type="text" id="ob-name" placeholder="Your name" autofocus>
-    <button type="button" class="btn" onclick="saveName()">Continue</button>
-    <div class="skip" onclick="skipName()">Skip for now</div>
-  </div>
-
-  <!-- Step 2: Bank (Plaid) -->
-  <div id="step-2" class="hidden">
     <div class="title">Connect your bank</div>
     <p class="sub">Securely sync your accounts via Plaid. Read only, we cannot move money.</p>
     <div class="account-card" id="bank-card" onclick="showBankTrust()">
@@ -815,11 +806,11 @@ a{color:#4ade80;text-decoration:none}
       <button type="button" class="btn" style="margin-top:12px" onclick="openPlaidLink()">Continue to Plaid</button>
       <div style="text-align:center;margin-top:8px;font-size:0.7rem;color:#3f3f46">Powered by <a href="https://plaid.com" target="_blank">Plaid</a></div>
     </div>
-    <button type="button" class="btn-outline" onclick="goStep(3)">Skip for now</button>
+    <button type="button" class="btn-outline" onclick="goStep(2)">Skip for now</button>
   </div>
 
-  <!-- Step 3: Crypto -->
-  <div id="step-3" class="hidden">
+  <!-- Step 1: Crypto -->
+  <div id="step-2" class="hidden">
     <div class="title">Add crypto wallets</div>
     <p class="sub">Track BTC, ETH, SOL, USDT, USDC and more.</p>
     <div class="account-card" onclick="document.getElementById('crypto-form').classList.toggle('hidden')">
@@ -848,11 +839,11 @@ a{color:#4ade80;text-decoration:none}
       <button type="button" style="width:100%;margin-top:10px;padding:8px;background:#1a2e1a;border:1px solid #1a3a1a;border-radius:8px;color:#4ade80;font-family:'Inter',sans-serif;font-size:0.8rem;font-weight:600;cursor:pointer" onclick="addWallet()">Add Wallet</button>
       <div id="wallet-list" style="margin-top:8px"></div>
     </div>
-    <button type="button" class="btn-outline" onclick="goStep(4)">Skip for now</button>
+    <button type="button" class="btn-outline" onclick="goStep(3)">Skip for now</button>
   </div>
 
-  <!-- Step 4: Wise + Other + Done -->
-  <div id="step-4" class="hidden">
+  <!-- Step 2: Wise + Done -->
+  <div id="step-3" class="hidden">
     <div class="title">International accounts?</div>
     <p class="sub">Connect Wise for multi-currency transfers, or skip to start using Fiscit.</p>
     <div class="account-card" onclick="document.getElementById('wise-form').classList.toggle('hidden')">
@@ -918,18 +909,9 @@ function goStep(n){
   showStep(n);
 }
 
-// Step 0 handled by form POST
+// Step 0 handled by form POST (name+email+password)
 
-// Step 1: Save name
-function saveName(){
-  userName = document.getElementById('ob-name').value.trim();
-  if(!userName){userName='Friend';}
-  fetch('/api/profile',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:userName})}).catch(()=>{});
-  goStep(2);
-}
-function skipName(){userName='Friend';goStep(2);}
-
-// Step 2: Plaid
+// Step 1: Plaid
 function showBankTrust(){document.getElementById('bank-trust').classList.toggle('hidden');}
 function openPlaidLink(){
   fetch('/api/plaid/link_token',{method:'POST'}).then(r=>r.json()).then(d=>{
@@ -945,7 +927,7 @@ function openPlaidLink(){
           document.getElementById('bank-status').textContent='Connected!';
           document.getElementById('bank-action').textContent='Connected';
           document.getElementById('bank-trust').classList.add('hidden');
-          setTimeout(()=>goStep(3),800);
+          setTimeout(()=>goStep(2),800);
         } else { alert(data.error||'Failed to connect bank'); }
       },
       onExit:()=>{},
@@ -1010,7 +992,7 @@ function finishOnboarding(){
 
 // Auto-advance based on Jinja step parameter
 {% if step == '1' %}
-// User just registered, show name step
+// User just registered, show Plaid step
 currentStep = 1;
 showStep(1);
 {% elif step == '2' %}
@@ -1019,9 +1001,6 @@ showStep(2);
 {% elif step == '3' %}
 currentStep = 3;
 showStep(3);
-{% elif step == '4' %}
-currentStep = 4;
-showStep(4);
 {% elif error %}
 // Stay on step 0 on error
 {% endif %}
