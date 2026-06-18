@@ -13,8 +13,9 @@ class User(db.Model):
     __tablename__ = 'users'
     id            = db.Column(db.Integer, primary_key=True)
     email         = db.Column(db.String(255), unique=True, nullable=False, index=True)
-    password_hash = db.Column(db.String(255), nullable=False)
+    google_id     = db.Column(db.String(255), unique=True, nullable=True, index=True)
     name          = db.Column(db.String(100), default='')
+    onboarded     = db.Column(db.Boolean, default=False, nullable=False)
     created_at    = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     # Relationships
@@ -22,16 +23,7 @@ class User(db.Model):
     wise_connections  = db.relationship('WiseConnection', backref='user', lazy=True, cascade='all, delete-orphan')
     crypto_wallets    = db.relationship('CryptoWallet', backref='user', lazy=True, cascade='all, delete-orphan')
 
-    def set_password(self, pw):
-        import bcrypt
-        self.password_hash = bcrypt.hashpw(pw.encode(), bcrypt.gensalt()).decode()
 
-    def check_password(self, pw):
-        import bcrypt
-        try:
-            return bcrypt.checkpw(pw.encode(), self.password_hash.encode())
-        except Exception:
-            return False
 
 class PlaidConnection(db.Model):
     __tablename__ = 'plaid_connections'

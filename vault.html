@@ -3766,7 +3766,7 @@ function pgSettings(){
     row('Export data','Download all your financial data','<button class="btn btn-ghost btn-sm"><svg data-feather="save"></svg> Export CSV</button>'),
     row('Sync now','Force refresh all accounts','<button class="btn btn-ghost btn-sm" onclick="doRefresh()"><svg data-feather="refresh-cw"></svg> Sync</button>'),
     row('Delete account','Permanently delete all data','<button class="btn btn-sm" style="background:var(--red-bg);color:var(--red);border:1px solid var(--red-br)">Delete</button>'),
-    row('Replay onboarding','Walk through the intro tour again','<button class="btn btn-ghost btn-sm" onclick="localStorage.removeItem(ONBOARDED_KEY);location.reload()"><svg data-feather="play-circle"></svg> Replay</button>'),
+    row('Replay onboarding','Walk through the intro tour again','<button class="btn btn-ghost btn-sm" onclick="replayOnboarding()"><svg data-feather="play-circle"></svg> Replay</button>'),
     row('Sign out','Log out of your account','<button class="btn btn-ghost btn-sm" onclick="doLogout()"><svg data-feather="log-out" style="width:14px;height:14px;vertical-align:middle;margin-right:4px"></svg> Sign out</button>'),
   ].join(''))}`;
 }
@@ -3777,6 +3777,15 @@ function doLogout(){
     window.location.href='/login';
   }).catch(()=>{
     window.location.href='/login';
+  });
+}
+
+function replayOnboarding(){
+  localStorage.removeItem(ONBOARDED_KEY);
+  fetch('/api/onboarding/reset',{method:'POST',credentials:'include'}).then(()=>{
+    location.reload();
+  }).catch(()=>{
+    location.reload();
   });
 }
 
@@ -4191,17 +4200,15 @@ function closeNotifDropdown(e){
 }
 
 // ═══════════════════════════ ONBOARDING ═══════════════════════════
-const ONBOARDED_KEY = 'vault_onboarded';
-const CONN_ICOS = {plaid:'credit-card',wise:'globe',crypto:'dollar-sign'};
+const ONBOARDED_KEY = 'fiscit_onboarded';
+
 
 function showOnboarding(){
   let step = 0;
   const STEPS = [
     {id:'welcome'},
     {id:'profile'},
-    {id:'bank'},
-    {id:'crypto'},
-    {id:'other'},
+    {id:'tour'},
     {id:'done'},
   ];
 
@@ -4234,22 +4241,7 @@ function showOnboarding(){
   const iconEl = document.getElementById('ob-icon');
   const bodyEl = document.getElementById('ob-body');
 
-  const guideBox = (steps) => `<div style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin:12px 0">${steps.map((s,i)=>`<div style="display:flex;gap:10px;align-items:flex-start;${i<steps.length-1?'margin-bottom:10px':''}"><span style="background:var(--green);color:#000;font-size:11px;font-weight:700;width:20px;height:20px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0">${i+1}</span><span style="color:var(--text2);font-size:12.5px;line-height:1.5">${s}</span></div>`).join('')}</div>`;
 
-  const connCard = (name, desc, key, guideSteps) => {
-    const isOn = D.connections && D.connections[key];
-    return `<div style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin:8px 0">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-        <div style="display:flex;align-items:center;gap:8px"><span style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:8px;background:var(--bg2)">${ico(CONN_ICOS[key]||'link',14)}</span><span style="font-size:13px;font-weight:500;color:var(--text)">${name}</span></div>
-        <span class="badge ${isOn?'b-green':'b-gray'}" style="${isOn?'':'opacity:.6'}">${isOn?'Connected':'Not connected'}</span>
-      </div>
-      <div style="font-size:12px;color:var(--text3);margin-bottom:8px">${desc}</div>
-      ${isOn?'':guideBox(guideSteps)}
-      ${isOn?'':'<a href="/setup" style="display:inline-block;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:7px 16px;font-size:12.5px;color:var(--text);text-decoration:none;font-weight:500">Go to Setup</a>'}
-    </div>`;
-  };
-
-  const catGrid = Object.keys(CAT_ICOS).map(c=>`<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border2)"><span style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:8px;background:var(--bg3)">${ico(CAT_ICOS[c]||'folder',14)}</span><span style="font-size:13px;color:var(--text)">${c}</span></div>`).join('');
 
   function render(){
     const s = STEPS[step];
@@ -4275,44 +4267,39 @@ function showOnboarding(){
       nextBtn.textContent = 'Next';
       skipBtn.style.display = '';
     }
-    else if(s.id==='bank'){
-      iconEl.innerHTML = ico('credit-card',28);
-      titleEl.textContent = 'Connect your bank';
-      subEl.textContent = 'Plaid syncs your accounts automatically.';
-      const isOn = D.connections && D.connections.plaid;
-      bodyEl.innerHTML = isOn
-        ? '<p style="color:var(--green);font-size:13px;text-align:center;padding:12px">Your bank is already connected via Plaid.</p>'
-        : connCard('Plaid','Bank accounts, credit cards, and transactions.', 'plaid', ['Click "Go to Setup" below','Enter your Plaid API credentials','Select your bank and log in','Your transactions will sync automatically']);
-      nextBtn.textContent = 'Next';
-      skipBtn.style.display = '';
-    }
-    else if(s.id==='crypto'){
-      iconEl.innerHTML = ico('dollar-sign',28);
-      titleEl.textContent = 'Track your crypto';
-      subEl.textContent = 'Add wallet addresses to track balances.';
-      const wallets = D.wallets || [];
-      const isOn = wallets.length > 0;
-      bodyEl.innerHTML = isOn
-        ? `<p style="color:var(--green);font-size:13px;text-align:center;padding:12px">${wallets.length} wallet${wallets.length>1?'s':''} connected.</p>`
-          + wallets.map(w=>`<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border2)"><span class="badge b-gray" style="font-size:10px">${w.chain}</span><span style="font-size:12px;color:var(--text2)">${w.address.slice(0,8)}...${w.address.slice(-6)}</span>${w.label?`<span style="font-size:11px;color:var(--text4)">(${w.label})</span>`:''}</div>`).join('')
-        : connCard('Crypto Wallets','Solana, Ethereum, Bitcoin wallet addresses.', 'crypto', ['Open Settings and go to Setup','Add your wallet address for any chain','Balances sync automatically on refresh']);
-      bodyEl.innerHTML += `<p style="font-size:12px;color:var(--text4);margin-top:12px;text-align:center">Supports Solana, Ethereum, and Bitcoin wallets.</p>`;
-      nextBtn.textContent = 'Next';
-      skipBtn.style.display = '';
-    }
-    else if(s.id==='other'){
-      iconEl.innerHTML = ico('globe',28);
-      titleEl.textContent = 'Other connections';
-      subEl.textContent = 'International and investment accounts.';
-      bodyEl.innerHTML = connCard('Wise','Multi-currency international transfers.', 'wise', ['Go to Setup page','Enter your Wise API token and profile ID','Balances sync automatically']);
+    else if(s.id==='tour'){
+      iconEl.innerHTML = ico('layout',28);
+      titleEl.textContent = 'Your dashboard';
+      subEl.textContent = 'Everything at a glance.';
+      const tourItems = [
+        {icon:'home', label:'Dashboard', desc:'Spending, income, and net worth overview'},
+        {icon:'credit-card', label:'Transactions', desc:'All your transactions, searchable and filtered'},
+        {icon:'pie-chart', label:'Budget', desc:'Set limits per category and track progress'},
+        {icon:'trending-up', label:'Insights', desc:'AI-powered spending patterns and tips'},
+        {icon:'bar-chart-2', label:'Investments', desc:'Portfolio performance and asset allocation'},
+        {icon:'dollar-sign', label:'Crypto', desc:'Wallet balances and holdings'},
+      ];
+      bodyEl.innerHTML = `<div style="display:grid;gap:8px">${tourItems.map(t=>`<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:8px"><span style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:8px;background:var(--bg2)">${ico(t.icon,14)}</span><div><div style="font-size:13px;font-weight:500;color:var(--text)">${t.label}</div><div style="font-size:11px;color:var(--text3)">${t.desc}</div></div></div>`).join('')}</div>`;
       nextBtn.textContent = 'Next';
       skipBtn.style.display = '';
     }
     else if(s.id==='done'){
-      iconEl.innerHTML = ico('circle',28);
-      titleEl.textContent = 'You\'re all set!';
-      subEl.textContent = 'Fiscit is ready to go.';
-      bodyEl.innerHTML = `<p style="color:var(--text3);font-size:13px;text-align:center;margin-bottom:14px">Here are the categories Fiscit tracks for you:</p><div style="max-height:180px;overflow-y:auto;scrollbar-width:thin">${catGrid}</div><p style="color:var(--text4);font-size:12px;margin-top:14px;text-align:center">You can always add more connections later in Settings.</p>`;
+      iconEl.innerHTML = ico('check-circle',28);
+      titleEl.textContent = 'Almost there!';
+      subEl.textContent = 'One last step to unlock everything.';
+      const hasPlaid = D.connections && D.connections.plaid;
+      const hasWise = D.connections && D.connections.wise;
+      const hasCrypto = (D.wallets || []).length > 0;
+      const connCount = [hasPlaid, hasWise, hasCrypto].filter(Boolean).length;
+      bodyEl.innerHTML = hasPlaid && hasWise && hasCrypto
+        ? '<p style="color:var(--green);font-size:13px;text-align:center;padding:12px">All your connections are already set up. You\'re good to go!</p>'
+        : `<p style="color:var(--text3);font-size:13px;text-align:center;margin-bottom:14px">To see your real financial data, connect your accounts in Settings.</p>
+           <div style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin:8px 0">
+             <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px"><span style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:8px;background:var(--bg2)">${ico('credit-card',14)}</span><span style="font-size:13px;font-weight:500;color:var(--text)">Bank accounts</span>${hasPlaid?'<span class="badge b-green">Connected</span>':'<span class="badge b-gray" style="opacity:.6">Not connected</span>'}</div>
+             <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px"><span style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:8px;background:var(--bg2)">${ico('globe',14)}</span><span style="font-size:13px;font-weight:500;color:var(--text)">Wise</span>${hasWise?'<span class="badge b-green">Connected</span>':'<span class="badge b-gray" style="opacity:.6">Not connected</span>'}</div>
+             <div style="display:flex;align-items:center;gap:8px"><span style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:8px;background:var(--bg2)">${ico('dollar-sign',14)}</span><span style="font-size:13px;font-weight:500;color:var(--text)">Crypto wallets</span>${hasCrypto?'<span class="badge b-green">Connected</span>':'<span class="badge b-gray" style="opacity:.6">Not connected</span>'}</div>
+           </div>
+           <p style="color:var(--text4);font-size:12px;margin-top:12px;text-align:center">You can always connect later from Settings.</p>`;
       nextBtn.textContent = 'Start Fiscit';
       skipBtn.style.display = 'none';
     }
@@ -4325,16 +4312,21 @@ function showOnboarding(){
     const emailInput = document.getElementById('ob-email');
     if(nameInput){
       D.userName = nameInput.value;
-      localStorage.setItem('vault_userName', D.userName);
+      localStorage.setItem('fiscit_userName', D.userName);
     }
     if(emailInput){
       D.userEmail = emailInput.value;
-      localStorage.setItem('vault_userEmail', D.userEmail);
+      localStorage.setItem('fiscit_userEmail', D.userEmail);
     }
+    // Save to server
+    const payload = {};
+    if(nameInput && nameInput.value) payload.name = nameInput.value;
+    if(payload.name) fetch('/api/profile',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),credentials:'include'}).catch(()=>{});
   }
 
   function finish(){
     localStorage.setItem(ONBOARDED_KEY,'1');
+    fetch('/api/onboarding/complete',{method:'POST',credentials:'include'}).catch(()=>{});
     const o = document.getElementById('onboard-overlay');
     if(o){ o.style.opacity='0'; o.style.transition='opacity .2s'; setTimeout(()=>o.remove(),200); }
     navigate('dashboard');
@@ -4364,8 +4356,8 @@ function showOnboarding(){
 
 function loadRealData(){
   // Restore profile from localStorage (saved during onboarding)
-  const lsName = localStorage.getItem('vault_userName');
-  const lsEmail = localStorage.getItem('vault_userEmail');
+  const lsName = localStorage.getItem('fiscit_userName') || localStorage.getItem('vault_userName');
+  const lsEmail = localStorage.getItem('fiscit_userEmail') || localStorage.getItem('vault_userEmail');
   if(lsName && !D.userName) D.userName = lsName;
   if(lsEmail && !D.userEmail) D.userEmail = lsEmail;
 
@@ -4421,8 +4413,9 @@ document.addEventListener('DOMContentLoaded',()=>{
     }
     // Show onboarding or dashboard
     const hasAccounts = d && (d.accounts && d.accounts.length > 0);
-    const didOnboard = localStorage.getItem('fiscit_onboarded') || localStorage.getItem(ONBOARDED_KEY);
-    if(!didOnboard || (!hasAccounts && !didOnboard)){
+    const didOnboard = localStorage.getItem(ONBOARDED_KEY) || (d && d.onboarded);
+    // Show onboarding only if user hasn't completed it yet (server-side flag persists across sessions)
+    if(!didOnboard){
       showOnboarding();
     } else {
       navigate('dashboard');
