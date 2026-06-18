@@ -580,9 +580,9 @@ a{color:#4ade80;text-decoration:none}
     </div>
     <div id="wise-form" class="hidden" style="padding:12px 16px;background:#161616;border:1px solid #2a2a2a;border-radius:12px;margin-top:-10px;margin-bottom:10px">
       <label style="margin-top:0">API Token</label>
-      <input id="wise-token" placeholder="932aba85-...">
+      <input id="wise-token" placeholder="Your Wise API token">
       <label>Profile ID</label>
-      <input id="wise-profile" placeholder="63963106">
+      <input id="wise-profile" placeholder="Your profile ID">
       <button type="button" style="width:100%;margin-top:10px;padding:8px;background:transparent;border:1px solid #4ade80;border-radius:8px;color:#4ade80;font-family:'Inter',sans-serif;font-size:0.8rem;font-weight:600;cursor:pointer" onclick="saveWise()">Save and Test</button>
       <div id="wise-result" style="margin-top:8px"></div>
     </div>
