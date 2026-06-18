@@ -15,6 +15,7 @@ from flask import Flask, request, session, redirect, url_for, render_template_st
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from authlib.integrations.flask_client import OAuth
 from datetime import datetime, timedelta
+import jwt as pyjwt
 from pathlib import Path
 from models import db, User as UserModel, PlaidConnection, WiseConnection, CryptoWallet
 
@@ -882,6 +883,26 @@ def login():
 def logout():
     logout_user()
     return redirect(url_for('login'))
+
+# ── SSO: accept JWT from fiscit.com ──────────────────────────────────────
+@app.route('/sso')
+def sso():
+    """Accept a JWT token from fiscit.com and create a Flask session."""
+    token = request.args.get('token')
+    if not token:
+        return redirect(url_for('login'))
+    try:
+        payload = pyjwt.decode(token, os.getenv('JWT_SECRET', ''), algorithms=['HS256'])
+        user_id = payload.get('sub')
+        if not user_id:
+            return redirect(url_for('login'))
+        user = db.session.get(UserModel, int(user_id))
+        if not user:
+            return redirect(url_for('login'))
+        login_user(FlaskUser(user))
+        return redirect(url_for('index'))
+    except Exception:
+        return redirect(url_for('login'))
 
 # ── Google OAuth routes ──────────────────────────────────────────────────────
 @app.route('/login/google')
