@@ -689,8 +689,6 @@ function saveWise(){
   fetch('/api/wise/test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({wise_token:token})})
     .then(r=>r.json()).then(d=>{
       if(d.ok){
-        // Save wise connection
-        fetch('/setup',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'wise_token='+encodeURIComponent(token)+'&wise_profile='+encodeURIComponent(profile)});
         document.getElementById('wise-action').textContent='Connected';
         document.getElementById('wise-status').textContent='Connected!';
         document.getElementById('wise-result').innerHTML='<div style="color:#4ade80;font-size:0.8rem">Connected!</div>';
@@ -800,8 +798,8 @@ def index():
                 t = threading.Thread(target=fetch_data, args=(uid, cfg), daemon=True)
                 t.start()
                 return render_template_string(LOADING_HTML)
-            # No accounts yet — redirect to onboarding
-            return redirect(url_for('register', step='1'))
+            # No accounts yet — serve dashboard, JS will show onboarding prompt
+            return build_vault_html(data or {})
         return render_template_string(LOADING_HTML)
 
     return build_vault_html(data)

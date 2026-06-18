@@ -4421,7 +4421,8 @@ document.addEventListener('DOMContentLoaded',()=>{
     }
     // Show onboarding or dashboard
     const hasAccounts = d && (d.accounts && d.accounts.length > 0);
-    if(!localStorage.getItem(ONBOARDED_KEY) || !hasAccounts){
+    const didOnboard = localStorage.getItem('fiscit_onboarded') || localStorage.getItem(ONBOARDED_KEY);
+    if(!didOnboard || (!hasAccounts && !didOnboard)){
       showOnboarding();
     } else {
       navigate('dashboard');
