@@ -49,11 +49,14 @@ def pull_all(config):
     # ── Apply config to generate module ───────────────────────────────────────
     gen.PLAID_CLIENT = config["plaid_client"]
     gen.PLAID_SECRET = config["plaid_secret"]
-    gen.PLAID_TOKEN  = config["plaid_token"]
     _env = config.get("plaid_env", "production")
     gen.PLAID_BASE   = ("https://production.plaid.com" if _env == "production"
                         else "https://development.plaid.com" if _env == "development"
                         else "https://sandbox.plaid.com")
+    # Support multiple Plaid items (banks)
+    plaid_tokens = config.get("plaid_tokens", [])
+    if not plaid_tokens and config.get("plaid_token"):
+        plaid_tokens = [config["plaid_token"]]
     gen.WISE_TOKEN   = config.get("wise_token", "")
     gen.WISE_PROFILE = int(config.get("wise_profile", 0) or 0) if str(config.get("wise_profile", "")).isdigit() else 0
     gen.PHANTOM_ADDR = ""  # Legacy: no longer used; wallets handled below
@@ -91,9 +94,17 @@ def pull_all(config):
     except Exception as _e:
         print(f"  Plaid: prev cache load failed: {_e}")
 
-    # ── Plaid balances ─────────────────────────────────────────────────────────
+    # ── Plaid balances (multiple banks) ──────────────────────────────────────────
     status_cb("Plaid: balances...")
-    balances = gen.get_plaid_balances()
+    balances = {}
+    for token in plaid_tokens:
+        gen.PLAID_TOKEN = token
+        try:
+            bank_bal = gen.get_plaid_balances()
+            if bank_bal:
+                balances.update(bank_bal)
+        except Exception as e:
+            print(f"  Plaid token {token[:8]}...: error → {e}")
 
     # If Plaid failed, fall back to previous accounts
     if not balances and _prev_plaid_accounts:
@@ -172,9 +183,17 @@ def pull_all(config):
         except Exception as e:
             print(f"  Crypto {label} ({chain}): error → {e}")
 
-    # ── Plaid transactions ────────────────────────────────────────────────────
+    # ── Plaid transactions (multiple banks) ──────────────────────────────────────
     status_cb("Plaid: transactions...")
-    raw_txns = gen.get_plaid_transactions()
+    raw_txns = []
+    for token in plaid_tokens:
+        gen.PLAID_TOKEN = token
+        try:
+            bank_txns = gen.get_plaid_transactions()
+            if bank_txns:
+                raw_txns.extend(bank_txns)
+        except Exception as e:
+            print(f"  Plaid token {token[:8]}... txns error → {e}")
 
     status_cb("Processing transactions...")
     txns = gen.process_transactions(raw_txns, wise_txns=wise_txns)

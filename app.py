@@ -100,10 +100,11 @@ def build_user_config(user):
         'start_date': '2025-01-01',
         'wallets': [],
     }
-    # Plaid connection (first active one)
-    pc = PlaidConnection.query.filter_by(user_id=user.model.id).first()
-    if pc:
-        cfg['plaid_token'] = pc.access_token
+    # Plaid connections (user can have multiple banks)
+    plaid_conns = PlaidConnection.query.filter_by(user_id=user.model.id).all()
+    if plaid_conns:
+        cfg['plaid_tokens'] = [pc.access_token for pc in plaid_conns]
+        cfg['plaid_token'] = plaid_conns[0].access_token  # backwards compat
     # Wise connection
     wc = WiseConnection.query.filter_by(user_id=user.model.id).first()
     if wc:
@@ -121,7 +122,7 @@ def build_user_config(user):
 def _has_any_account(config):
     """Check if config has at least one account source."""
     return bool(
-        config.get("plaid_token") or
+        config.get("plaid_tokens") or config.get("plaid_token") or
         config.get("wise_token") or
         (config.get("wallets") and len(config["wallets"]) > 0)
     )
@@ -1240,13 +1241,33 @@ def plaid_exchange():
         r.raise_for_status()
         data = r.json()
         access_token = data['access_token']
-        # Save to DB for this user
-        pc = PlaidConnection.query.filter_by(user_id=uid).first()
-        if pc:
-            pc.access_token = access_token
-        else:
-            pc = PlaidConnection(user_id=uid, access_token=access_token)
-            db.session.add(pc)
+        # Save to DB for this user (support multiple banks)
+        item_id = data.get('item_id', '')
+        # Try to get institution name from Plaid
+        institution = ''
+        try:
+            ir = req.post(f'{base}/item/get', json={
+                'client_id': plaid_client,
+                'secret':    plaid_secret,
+                'access_token': access_token,
+            }, timeout=10)
+            if ir.ok:
+                idata = ir.json().get('item', {})
+                inst_id = idata.get('institution_id', '')
+                if inst_id:
+                    # Get institution name
+                    inr = req.post(f'{base}/institutions/get_by_id', json={
+                        'client_id': plaid_client,
+                        'secret':    plaid_secret,
+                        'institution_id': inst_id,
+                        'country_codes': ['CA', 'US'],
+                    }, timeout=10)
+                    if inr.ok:
+                        institution = inr.json().get('institution', {}).get('name', inst_id)
+        except Exception:
+            pass
+        pc = PlaidConnection(user_id=uid, access_token=access_token, item_id=item_id, institution=institution)
+        db.session.add(pc)
         db.session.commit()
         # Trigger refresh
         cfg = build_user_config(current_user)
