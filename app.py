@@ -402,7 +402,7 @@ def _build_real_data_js(data, user=None):
   wallets: {json.dumps(wallets_list)},
 
   // Investment accounts (manual + future integrations)
-  investments: {json.dumps([{'id': a.id, 'platform': a.platform, 'label': a.label, 'balance': a.balance, 'ticker': a.platform[:4].upper(), 'val': a.balance, 'color': '#3b82f6'} for a in InvestmentAccount.query.filter_by(user_id=user.model.id).all()])},
+  investments: {json.dumps([{'id': a.id, 'platform': a.platform, 'label': a.label, 'balance': a.balance, 'ticker': a.platform[:4].upper(), 'val': a.balance, 'color': '#3b82f6'} for a in InvestmentAccount.query.filter_by(user_id=user.id).all()])},
   investHistory: [],
   crypto: [],
   habits: [],
