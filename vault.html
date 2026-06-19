@@ -1477,7 +1477,7 @@ function getTxnOverrides(){ try{ return JSON.parse(localStorage.getItem(TXN_OVER
 function saveTxnOverride(id, patch){ const o=getTxnOverrides(); o[id]=Object.assign(o[id]||{},patch); localStorage.setItem(TXN_OVERRIDES_KEY,JSON.stringify(o)); }
 function applyOverrides(txns){ const o=getTxnOverrides(); return txns.map(t=>o[t.id||t.name+t.date]?Object.assign({},t,o[t.id||t.name+t.date]):t); }
 
-const DEFAULT_CATS = ['Groceries','Food/Dining','Gas','Transport','Shopping','Gym','Health','Phone/Internet','Entertainment','Subscriptions','Housing','Utilities','Cash/Transfers','Investments','Income','P2P/Personal Transfer','Other'];
+const DEFAULT_CATS = ['Groceries','Food/Dining','Gas','Transport','Shopping','Business/Tech','Gym','Health','Phone/Internet','Entertainment','Subscriptions','Housing','Utilities','Cash/Transfers','Investments','Income','P2P/Personal Transfer','Other'];
 const CATS_KEY = 'vault_categories';
 function getCats(){ try{ const s=localStorage.getItem(CATS_KEY); return s?JSON.parse(s):DEFAULT_CATS; }catch(e){return DEFAULT_CATS;} }
 function saveCats(cats){ localStorage.setItem(CATS_KEY,JSON.stringify(cats)); }
