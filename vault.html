@@ -3821,8 +3821,13 @@ function confirmDeleteAccount(){
   const inp=document.getElementById('delete-confirm-input');
   const errEl=document.getElementById('delete-error');
   const btn=document.getElementById('delete-confirm-btn');
+  if(!email){
+    errEl.textContent='Could not determine your email. Please refresh and try again.';
+    errEl.style.display='block';
+    return;
+  }
   if(inp.value.trim().toLowerCase()!==email.toLowerCase()){
-    errEl.textContent='Email does not match. Type your email to confirm.';
+    errEl.textContent='Email does not match. Type '+email+' to confirm.';
     errEl.style.display='block';
     return;
   }
@@ -3834,7 +3839,10 @@ function confirmDeleteAccount(){
     credentials:'include',
     headers:{'Content-Type':'application/json'},
     body:JSON.stringify({confirmation:inp.value.trim()})
-  }).then(r=>r.json()).then(d=>{
+  }).then(r=>{
+    if(!r.ok) return r.json().then(d=>{throw new Error(d.error||'Server error');}).catch(()=>{throw new Error('Server error ('+r.status+')');});
+    return r.json();
+  }).then(d=>{
     if(d.ok){
       window.location.href='/login';
     }else{
@@ -3843,8 +3851,8 @@ function confirmDeleteAccount(){
       btn.disabled=false;
       btn.textContent='Delete my account';
     }
-  }).catch(()=>{
-    errEl.textContent='Network error. Please try again.';
+  }).catch(e=>{
+    errEl.textContent=e.message||'Network error. Please try again.';
     errEl.style.display='block';
     btn.disabled=false;
     btn.textContent='Delete my account';
@@ -4549,6 +4557,8 @@ document.addEventListener('DOMContentLoaded',()=>{
     // Show onboarding or dashboard
     const hasAccounts = d && (d.accounts && d.accounts.length > 0);
     const didOnboard = localStorage.getItem(ONBOARDED_KEY) || (d && d.onboarded);
+    // Sync localStorage with server state
+    if(d && d.onboarded) localStorage.setItem(ONBOARDED_KEY,'1');
     // Show onboarding only if user hasn't completed it yet (server-side flag persists across sessions)
     if(!didOnboard){
       showOnboarding();

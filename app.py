@@ -12,9 +12,9 @@ After setup, config is saved to saved_config.json — never asks again on restar
 
 import os, json, threading, uuid
 from flask import Flask, request, session, redirect, url_for, render_template_string, jsonify, send_from_directory, flash
+from datetime import datetime, timedelta
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from authlib.integrations.flask_client import OAuth
-from datetime import datetime, timedelta
 import jwt as pyjwt
 from pathlib import Path
 from models import db, User as UserModel, PlaidConnection, WiseConnection, CryptoWallet, InvestmentAccount
@@ -34,6 +34,7 @@ app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {'pool_pre_ping': True}
 db.init_app(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
+app.permanent_session_lifetime = timedelta(days=30)
 
 # ── Google OAuth setup ──────────────────────────────────────────────────────
 oauth = OAuth(app)
@@ -855,7 +856,8 @@ def register():
         db.session.add(user)
         db.session.commit()
         flask_user = FlaskUser(user)
-        login_user(flask_user)
+        session.permanent = True
+        login_user(flask_user, remember=True)
         return redirect(url_for('index'))
     return render_template_string(REGISTER_HTML, error='', step='0')
 
@@ -867,7 +869,8 @@ def login():
         user = UserModel.query.filter_by(email=email).first()
         if not user or not user.check_password(password):
             return render_template_string(LOGIN_HTML, error='Invalid email or password.')
-        login_user(FlaskUser(user))
+        session.permanent = True
+        login_user(FlaskUser(user), remember=True)
         return redirect(url_for('index'))
     # Show error from Google OAuth redirect if any
     error = ''
@@ -899,7 +902,8 @@ def sso():
         user = db.session.get(UserModel, int(user_id))
         if not user:
             return redirect(url_for('login'))
-        login_user(FlaskUser(user))
+        session.permanent = True
+        login_user(FlaskUser(user), remember=True)
         return redirect(url_for('index'))
     except Exception:
         return redirect(url_for('login'))
@@ -950,7 +954,8 @@ def google_callback():
             db.session.add(user)
             db.session.commit()
 
-    login_user(FlaskUser(user))
+    session.permanent = True
+    login_user(FlaskUser(user), remember=True)
     return redirect(url_for('index'))
 
 # ── Main routes ─────────────────────────────────────────────────────────────
