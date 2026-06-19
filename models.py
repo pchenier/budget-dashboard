@@ -23,6 +23,7 @@ class User(db.Model):
     plaid_connections = db.relationship('PlaidConnection', backref='user', lazy=True, cascade='all, delete-orphan')
     wise_connections  = db.relationship('WiseConnection', backref='user', lazy=True, cascade='all, delete-orphan')
     crypto_wallets    = db.relationship('CryptoWallet', backref='user', lazy=True, cascade='all, delete-orphan')
+    investment_accounts = db.relationship('InvestmentAccount', backref='user', lazy=True, cascade='all, delete-orphan')
 
     def set_password(self, pw):
         import bcrypt
@@ -63,4 +64,13 @@ class CryptoWallet(db.Model):
     chain    = db.Column(db.String(50), nullable=False)
     address  = db.Column(db.String(200), nullable=False)
     label    = db.Column(db.String(100), default='')
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+class InvestmentAccount(db.Model):
+    __tablename__ = 'investment_accounts'
+    id       = db.Column(db.Integer, primary_key=True)
+    user_id  = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
+    platform = db.Column(db.String(100), nullable=False)
+    label    = db.Column(db.String(100), default='')
+    balance  = db.Column(db.Float, default=0)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))

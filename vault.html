@@ -4076,7 +4076,7 @@ function showAddAccount(preselect){
           <span style="width:36px;height:36px;border-radius:10px;background:rgba(245,158,11,.15);display:flex;align-items:center;justify-content:center;flex-shrink:0">${ico('dollar-sign',18)}</span>
           <div><div style="font-size:14px;font-weight:500;color:var(--text)">Crypto Wallet</div><div style="font-size:11px;color:var(--text3)">Solana, Ethereum, Bitcoin addresses</div></div>
         </button>
-        <button onclick="location.href='/setup'" style="display:flex;align-items:center;gap:12px;background:var(--bg3);border:1px solid var(--border);border-radius:12px;padding:14px 16px;cursor:pointer;text-align:left;width:100%;font-family:var(--font)">
+        <button onclick="addAccInvestment()" style="display:flex;align-items:center;gap:12px;background:var(--bg3);border:1px solid var(--border);border-radius:12px;padding:14px 16px;cursor:pointer;text-align:left;width:100%;font-family:var(--font)">
           <span style="width:36px;height:36px;border-radius:10px;background:rgba(59,130,246,.15);display:flex;align-items:center;justify-content:center;flex-shrink:0">${ico('bar-chart-2',18)}</span>
           <div><div style="font-size:14px;font-weight:500;color:var(--text)">Investment / Other</div><div style="font-size:11px;color:var(--text3)">Wise, Wealthsimple, and more</div></div>
         </button>
@@ -4155,6 +4155,70 @@ async function submitWallet(){
   } catch(e){
     msg.style.color='var(--red)'; msg.textContent='Network error.';
     btn.disabled=false; btn.textContent='Add Wallet';
+  }
+}
+
+function addAccInvestment(){
+  const o = document.getElementById('add-acc-overlay');
+  if(o) o.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'inv-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.85);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);animation:fadeIn .25s ease';
+  overlay.innerHTML = `
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:32px;max-width:420px;width:90%;text-align:center">
+      <h2 style="font-size:18px;font-weight:600;color:var(--text);margin:0 0 6px">Add Investment Account</h2>
+      <p style="font-size:13px;color:var(--text3);margin:0 0 20px">Track your investment portfolio manually.</p>
+      <div style="text-align:left;margin-bottom:14px">
+        <label style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px">Platform</label>
+        <select id="inv-platform" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-family:var(--font);font-size:13px;outline:none">
+          <option value="Wealthsimple">Wealthsimple</option>
+          <option value="Questrade">Questrade</option>
+          <option value="Interactive Brokers">Interactive Brokers</option>
+          <option value="TD Direct Investing">TD Direct Investing</option>
+          <option value="Wise">Wise</option>
+          <option value="Other">Other</option>
+        </select>
+      </div>
+      <div style="text-align:left;margin-bottom:14px">
+        <label style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px">Label <span style="color:var(--text4)">(optional)</span></label>
+        <input id="inv-label" placeholder="e.g. My TFSA" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-family:var(--font);font-size:13px;outline:none">
+      </div>
+      <div style="text-align:left;margin-bottom:14px">
+        <label style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px">Balance ($)</label>
+        <input id="inv-balance" type="number" step="0.01" placeholder="0.00" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-family:var(--font);font-size:13px;outline:none">
+      </div>
+      <div id="inv-msg" style="font-size:12px;margin-bottom:10px;min-height:16px"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button onclick="document.getElementById('inv-overlay').remove()" style="background:none;border:1px solid var(--border);color:var(--text3);border-radius:8px;padding:8px 16px;font-size:13px;cursor:pointer;font-family:var(--font)">Cancel</button>
+        <button id="inv-submit" onclick="submitInvestment()" style="background:var(--green);color:#000;border:none;border-radius:8px;padding:8px 20px;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--font)">Add Account</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.remove();});
+  document.getElementById('inv-label').focus();
+}
+
+async function submitInvestment(){
+  const platform = document.getElementById('inv-platform').value;
+  const label = document.getElementById('inv-label').value.trim();
+  const balance = document.getElementById('inv-balance').value || '0';
+  const msg = document.getElementById('inv-msg');
+  const btn = document.getElementById('inv-submit');
+  btn.disabled = true; btn.textContent = 'Adding...';
+  try {
+    const res = await fetch('/api/investments', {method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include', body:JSON.stringify({platform, label:label||platform, balance:parseFloat(balance)||0})});
+    const data = await res.json();
+    if(data.ok){
+      msg.style.color='var(--green)'; msg.textContent='Account added! Refreshing...';
+      setTimeout(()=>location.reload(), 1500);
+    } else {
+      msg.style.color='var(--red)'; msg.textContent=data.error||'Failed to add account.';
+      btn.disabled=false; btn.textContent='Add Account';
+    }
+  } catch(e){
+    msg.style.color='var(--red)'; msg.textContent='Network error.';
+    btn.disabled=false; btn.textContent='Add Account';
   }
 }
 

@@ -17,7 +17,7 @@ from authlib.integrations.flask_client import OAuth
 from datetime import datetime, timedelta
 import jwt as pyjwt
 from pathlib import Path
-from models import db, User as UserModel, PlaidConnection, WiseConnection, CryptoWallet
+from models import db, User as UserModel, PlaidConnection, WiseConnection, CryptoWallet, InvestmentAccount
 
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "vault-local-secret-do-not-deploy")
@@ -401,8 +401,8 @@ def _build_real_data_js(data, user=None):
   // Wallets list (for frontend wallet management)
   wallets: {json.dumps(wallets_list)},
 
-  // Life data (manual / future integrations)
-  investments: [],
+  // Investment accounts (manual + future integrations)
+  investments: {json.dumps([{'id': a.id, 'platform': a.platform, 'label': a.label, 'balance': a.balance, 'ticker': a.platform[:4].upper(), 'val': a.balance, 'color': '#3b82f6'} for a in InvestmentAccount.query.filter_by(user_id=user.model.id).all()])},
   investHistory: [],
   crypto: [],
   habits: [],
@@ -1116,6 +1116,44 @@ def api_delete_wallet(wallet_id):
         t.start()
     return jsonify({'ok': True})
 
+# ── Investment accounts ────────────────────────────────────────────────────
+@app.route('/api/investments', methods=['GET'])
+@login_required
+def api_get_investments():
+    uid = current_user.model.id
+    accts = InvestmentAccount.query.filter_by(user_id=uid).all()
+    return jsonify({'ok': True, 'investments': [{'id': a.id, 'platform': a.platform, 'label': a.label, 'balance': a.balance} for a in accts]})
+
+@app.route('/api/investments', methods=['POST'])
+@login_required
+def api_add_investment():
+    uid = current_user.model.id
+    data = request.get_json(silent=True) or {}
+    platform = data.get('platform', '').strip()
+    label = data.get('label', '').strip()
+    balance = data.get('balance', 0)
+    if not platform:
+        return jsonify({'ok': False, 'error': 'Platform is required.'}), 400
+    try:
+        balance = float(balance)
+    except (TypeError, ValueError):
+        balance = 0
+    acct = InvestmentAccount(user_id=uid, platform=platform, label=label or platform, balance=balance)
+    db.session.add(acct)
+    db.session.commit()
+    return jsonify({'ok': True, 'id': acct.id})
+
+@app.route('/api/investments/<int:acct_id>', methods=['DELETE'])
+@login_required
+def api_delete_investment(acct_id):
+    uid = current_user.model.id
+    a = InvestmentAccount.query.filter_by(id=acct_id, user_id=uid).first()
+    if not a:
+        return jsonify({'ok': False, 'error': 'Not found.'}), 404
+    db.session.delete(a)
+    db.session.commit()
+    return jsonify({'ok': True})
+
 # ── Delete account ──────────────────────────────────────────────────────────
 @app.route('/api/auth/delete', methods=['POST'])
 @login_required
@@ -1131,6 +1169,7 @@ def api_delete_account():
 
     # Delete related data
     CryptoWallet.query.filter_by(user_id=uid).delete()
+    InvestmentAccount.query.filter_by(user_id=uid).delete()
     PlaidConnection.query.filter_by(user_id=uid).delete()
     WiseConnection.query.filter_by(user_id=uid).delete()
     db.session.execute(db.text('DELETE FROM email_verifications WHERE user_id = :uid'), {'uid': uid})
