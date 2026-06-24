@@ -1177,7 +1177,14 @@ def api_data():
     with _user_state_lock:
         data = state['data']
     if not data:
-        return jsonify({'error': 'No data loaded'}), 404
+        return jsonify({
+            'net_worth': 0,
+            'accounts': [],
+            'transactions': [],
+            'userName': current_user.model.name or '',
+            'userEmail': current_user.model.email or '',
+            'onboarded': current_user.model.onboarded,
+        })
     # Normalize field names to match vault.html mock format
     result = _normalize_api_data(data)
     # Override userName/userEmail with real DB values
