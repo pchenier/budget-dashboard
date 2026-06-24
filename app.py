@@ -248,6 +248,10 @@ with app.app_context():
             db.session.execute(text('ALTER TABLE users ADD COLUMN google_id VARCHAR(255) UNIQUE'))
             db.session.commit()
             print("  Migrated: added users.google_id")
+        if 'email_confirmed' not in existing_cols:
+            db.session.execute(text("ALTER TABLE users ADD COLUMN email_confirmed BOOLEAN NOT NULL DEFAULT TRUE"))
+            db.session.commit()
+            print("  Migrated: added users.email_confirmed")
         # Make password_hash nullable for Google-only users
         if 'password_hash' in existing_cols:
             try:
