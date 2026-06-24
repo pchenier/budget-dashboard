@@ -26,23 +26,24 @@ app.secret_key = os.getenv("SECRET_KEY", "vault-local-secret-do-not-deploy")
 @app.after_request
 def add_cors_headers(response):
     origin = request.headers.get('Origin', '')
-    if origin in ('https://fiscit.com', 'http://localhost:3000', 'http://localhost:8081',
-                   'https://app.fiscit.com', 'capacitor://fiscit.com',
-                   'ionic://fiscit.com', 'https://localhost'):
-        response.headers['Access-Control-Allow-Origin'] = origin
-        response.headers['Access-Control-Allow-Credentials'] = 'true'
+    # Allow all origins for API routes (mobile apps don't always send Origin)
+    if request.path.startswith('/api/'):
+        if origin:
+            response.headers['Access-Control-Allow-Origin'] = origin
+        else:
+            response.headers['Access-Control-Allow-Origin'] = '*'
         response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
         response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+    elif origin in ('https://fiscit.com', 'http://localhost:3000', 'http://localhost:8081',
+                     'https://app.fiscit.com'):
+        response.headers['Access-Control-Allow-Origin'] = origin
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
     return response
 
 @app.before_request
 def handle_preflight():
-    if request.method == 'OPTIONS':
-        origin = request.headers.get('Origin', '')
-        if origin in ('https://fiscit.com', 'http://localhost:3000', 'http://localhost:8081',
-                       'https://app.fiscit.com', 'capacitor://fiscit.com',
-                       'ionic://fiscit.com', 'https://localhost'):
-            return '', 204
+    if request.method == 'OPTIONS' and request.path.startswith('/api/'):
+        return '', 204
 
 # ── JWT auth for mobile API ──────────────────────────────────────────────────
 JWT_SECRET = os.getenv("JWT_SECRET", os.getenv("SECRET_KEY", "vault-local-secret-do-not-deploy"))
