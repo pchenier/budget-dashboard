@@ -17,6 +17,7 @@ class User(db.Model):
     google_id     = db.Column(db.String(255), unique=True, nullable=True, index=True)
     name          = db.Column(db.String(100), default='')
     onboarded     = db.Column(db.Boolean, default=False, nullable=False)
+    email_confirmed = db.Column(db.Boolean, default=True, nullable=False)  # auto-confirmed for API users
     created_at    = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     # Relationships
