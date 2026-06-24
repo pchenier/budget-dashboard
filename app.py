@@ -1035,6 +1035,60 @@ def sso():
         return redirect(url_for('login'))
 
 # ── Google OAuth routes ──────────────────────────────────────────────────────
+@app.route('/api/auth/google', methods=['POST'])
+def api_auth_google():
+    """Google OAuth for mobile — accepts an ID token from expo-auth-session."""
+    import google.auth.transport.requests as google_transport
+    from google.oauth2 import id_token as google_id_token
+
+    data = request.get_json(silent=True) or {}
+    id_token_str = data.get('id_token') or ''
+    if not id_token_str:
+        return jsonify({'error': 'Missing id_token'}), 400
+
+    try:
+        # Verify the Google ID token
+        google_client_id = os.getenv('GOOGLE_CLIENT_ID', '')
+        idinfo = google_id_token.verify_oauth2_token(
+            id_token_str,
+            google_transport.Request(),
+            google_client_id,
+        )
+    except Exception as e:
+        print(f"Google ID token verification failed: {e}")
+        return jsonify({'error': 'Invalid Google token'}), 401
+
+    google_id = idinfo.get('sub')
+    email = (idinfo.get('email') or '').strip().lower()
+    name = (idinfo.get('name') or '').strip()
+
+    if not google_id or not email:
+        return jsonify({'error': 'Missing Google account info'}), 400
+
+    # Look up existing user by google_id or email (same logic as web callback)
+    user = UserModel.query.filter_by(google_id=google_id).first()
+    if not user:
+        user = UserModel.query.filter_by(email=email).first()
+        if user:
+            # Existing email/password user — link their Google account
+            user.google_id = google_id
+            db.session.commit()
+        else:
+            # Brand new user via Google
+            user = UserModel(email=email, name=name, google_id=google_id)
+            user.password_hash = None  # no password for Google-only users
+            user.email_confirmed = True  # Google verified the email
+            db.session.add(user)
+            db.session.commit()
+
+    token = make_jwt(user.id, user.email)
+    return jsonify({
+        'ok': True,
+        'token': token,
+        'user': {'id': user.id, 'email': user.email, 'name': user.name or '', 'onboarded': user.onboarded},
+    })
+
+
 @app.route('/login/google')
 def google_login():
     """Initiate Google OAuth2 flow."""
