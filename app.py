@@ -12,7 +12,7 @@ After setup, config is saved to saved_config.json — never asks again on restar
 
 import os, json, threading, uuid
 from flask import Flask, request, session, redirect, url_for, render_template_string, jsonify, send_from_directory, flash
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from authlib.integrations.flask_client import OAuth
 import jwt as pyjwt
@@ -53,7 +53,7 @@ def make_jwt(user_id, email):
     return pyjwt.encode({
         'sub': str(user_id),
         'email': email,
-        'exp': datetime.utcnow() + timedelta(days=JWT_EXPIRY_DAYS),
+        'exp': datetime.now(timezone.utc) + timedelta(days=JWT_EXPIRY_DAYS),
     }, JWT_SECRET, algorithm='HS256')
 
 def verify_jwt(token):
