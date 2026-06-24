@@ -22,6 +22,68 @@ from models import db, User as UserModel, PlaidConnection, WiseConnection, Crypt
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "vault-local-secret-do-not-deploy")
 
+# ── CORS for mobile app ─────────────────────────────────────────────────────
+@app.after_request
+def add_cors_headers(response):
+    origin = request.headers.get('Origin', '')
+    if origin in ('https://fiscit.com', 'http://localhost:3000', 'http://localhost:8081',
+                   'https://app.fiscit.com', 'capacitor://fiscit.com',
+                   'ionic://fiscit.com', 'https://localhost'):
+        response.headers['Access-Control-Allow-Origin'] = origin
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+    return response
+
+@app.before_request
+def handle_preflight():
+    if request.method == 'OPTIONS':
+        origin = request.headers.get('Origin', '')
+        if origin in ('https://fiscit.com', 'http://localhost:3000', 'http://localhost:8081',
+                       'https://app.fiscit.com', 'capacitor://fiscit.com',
+                       'ionic://fiscit.com', 'https://localhost'):
+            return '', 204
+
+# ── JWT auth for mobile API ──────────────────────────────────────────────────
+JWT_SECRET = os.getenv("JWT_SECRET", os.getenv("SECRET_KEY", "vault-local-secret-do-not-deploy"))
+JWT_EXPIRY_DAYS = 30
+
+def make_jwt(user_id, email):
+    return pyjwt.encode({
+        'sub': str(user_id),
+        'email': email,
+        'exp': datetime.utcnow() + timedelta(days=JWT_EXPIRY_DAYS),
+    }, JWT_SECRET, algorithm='HS256')
+
+def verify_jwt(token):
+    try:
+        payload = pyjwt.decode(token, JWT_SECRET, algorithms=['HS256'])
+        return payload
+    except (pyjwt.ExpiredSignatureError, pyjwt.InvalidTokenError):
+        return None
+
+def api_auth_required(f):
+    """Accept either Flask-Login cookie auth or JWT Bearer token."""
+    from functools import wraps
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        # Try JWT Bearer token first
+        auth_header = request.headers.get('Authorization', '')
+        if auth_header.startswith('Bearer '):
+            token = auth_header[7:]
+            payload = verify_jwt(token)
+            if payload:
+                user = UserModel.query.filter_by(id=int(payload['sub'])).first()
+                if user:
+                    from flask_login import login_user as _login_user
+                    _login_user(FlaskUser(user), remember=False)
+                    return f(*args, **kwargs)
+        # Fall back to Flask-Login cookie auth
+        if current_user.is_authenticated:
+            return f(*args, **kwargs)
+        return jsonify({'error': 'Authentication required'}), 401
+    return decorated
+
 # Handle DATABASE_URL: Railway gives postgres:// but SQLAlchemy needs postgresql://
 _database_url = os.getenv('DATABASE_URL', 'sqlite:///fiscit.db')
 if _database_url.startswith('postgres://'):
@@ -888,6 +950,64 @@ def logout():
     logout_user()
     return redirect(url_for('login'))
 
+# ── JWT auth endpoints for mobile app ────────────────────────────────────────
+@app.route('/api/auth/login', methods=['POST'])
+def api_auth_login():
+    """Login via API — returns JWT token for mobile app."""
+    data = request.get_json(silent=True) or {}
+    email = (data.get('email') or '').strip().lower()
+    password = data.get('password') or ''
+    if not email or not password:
+        return jsonify({'error': 'Email and password required'}), 400
+    user = UserModel.query.filter_by(email=email).first()
+    if not user or not user.check_password(password):
+        return jsonify({'error': 'Invalid email or password'}), 401
+    if not user.email_confirmed:
+        return jsonify({'error': 'Please confirm your email first', 'needsVerification': True}), 403
+    token = make_jwt(user.id, user.email)
+    return jsonify({
+        'ok': True,
+        'token': token,
+        'user': {'id': user.id, 'email': user.email, 'name': user.name or '', 'onboarded': user.onboarded},
+    })
+
+@app.route('/api/auth/register', methods=['POST'])
+def api_auth_register():
+    """Register via API — returns JWT token for mobile app."""
+    data = request.get_json(silent=True) or {}
+    email = (data.get('email') or '').strip().lower()
+    password = data.get('password') or ''
+    name = (data.get('name') or '').strip()
+    if not email or not password:
+        return jsonify({'error': 'Email and password required'}), 400
+    if len(password) < 8:
+        return jsonify({'error': 'Password must be at least 8 characters'}), 400
+    if UserModel.query.filter_by(email=email).first():
+        return jsonify({'error': 'An account with that email already exists'}), 409
+    user = UserModel(email=email, name=name or email.split('@')[0])
+    user.set_password(password)
+    db.session.add(user)
+    db.session.commit()
+    # Auto-confirm for mobile (no email verification flow yet)
+    user.email_confirmed = True
+    db.session.commit()
+    token = make_jwt(user.id, user.email)
+    return jsonify({
+        'ok': True,
+        'token': token,
+        'user': {'id': user.id, 'email': user.email, 'name': user.name or '', 'onboarded': user.onboarded},
+    })
+
+@app.route('/api/auth/me', methods=['GET'])
+@api_auth_required
+def api_auth_me():
+    """Get current user info via JWT or cookie."""
+    u = current_user.model
+    return jsonify({
+        'id': u.id, 'email': u.email, 'name': u.name or '',
+        'onboarded': u.onboarded, 'email_confirmed': u.email_confirmed,
+    })
+
 # ── SSO: accept JWT from fiscit.com ──────────────────────────────────────
 @app.route('/sso')
 def sso():
@@ -1003,7 +1123,7 @@ def setup():
 
 # ── API routes ──────────────────────────────────────────────────────────────
 @app.route('/api/profile', methods=['POST'])
-@login_required
+@api_auth_required
 def api_profile():
     data = request.get_json(silent=True) or {}
     name = data.get('name', '').strip()
@@ -1013,7 +1133,7 @@ def api_profile():
     return jsonify({'ok': True})
 
 @app.route('/api/onboarding/complete', methods=['POST'])
-@login_required
+@api_auth_required
 def api_onboarding_complete():
     """Mark onboarding as complete for the current user."""
     current_user.model.onboarded = True
@@ -1021,7 +1141,7 @@ def api_onboarding_complete():
     return jsonify({'ok': True})
 
 @app.route('/api/onboarding/reset', methods=['POST'])
-@login_required
+@api_auth_required
 def api_onboarding_reset():
     """Reset onboarding so user can replay it."""
     current_user.model.onboarded = False
@@ -1029,7 +1149,7 @@ def api_onboarding_reset():
     return jsonify({'ok': True})
 
 @app.route('/api/status')
-@login_required
+@api_auth_required
 def api_status():
     uid = current_user.model.id
     state = _get_state(uid)
@@ -1045,7 +1165,7 @@ def api_status():
         })
 
 @app.route('/api/data')
-@login_required
+@api_auth_required
 def api_data():
     uid = current_user.model.id
     state = _get_state(uid)
@@ -1062,7 +1182,7 @@ def api_data():
     return jsonify(result)
 
 @app.route('/api/refresh', methods=['POST'])
-@login_required
+@api_auth_required
 def api_refresh():
     uid = current_user.model.id
     state = _get_state(uid)
@@ -1079,14 +1199,14 @@ def api_refresh():
     return jsonify({'ok': True, 'msg': 'Refresh started'})
 
 @app.route('/api/wallets', methods=['GET'])
-@login_required
+@api_auth_required
 def api_list_wallets():
     uid = current_user.model.id
     wallets = CryptoWallet.query.filter_by(user_id=uid).all()
     return jsonify({'ok': True, 'wallets': [{'chain': w.chain, 'address': w.address, 'label': w.label} for w in wallets]})
 
 @app.route('/api/wallets', methods=['POST'])
-@login_required
+@api_auth_required
 def api_add_wallet():
     uid = current_user.model.id
     body = request.get_json() or {}
@@ -1108,7 +1228,7 @@ def api_add_wallet():
     return jsonify({'ok': True, 'wallet': {'chain': chain, 'address': address, 'label': label or chain.title()}})
 
 @app.route('/api/wallets/<int:wallet_id>', methods=['DELETE'])
-@login_required
+@api_auth_required
 def api_delete_wallet(wallet_id):
     uid = current_user.model.id
     w = CryptoWallet.query.filter_by(id=wallet_id, user_id=uid).first()
@@ -1124,14 +1244,14 @@ def api_delete_wallet(wallet_id):
 
 # ── Investment accounts ────────────────────────────────────────────────────
 @app.route('/api/investments', methods=['GET'])
-@login_required
+@api_auth_required
 def api_get_investments():
     uid = current_user.model.id
     accts = InvestmentAccount.query.filter_by(user_id=uid).all()
     return jsonify({'ok': True, 'investments': [{'id': a.id, 'platform': a.platform, 'label': a.label, 'balance': a.balance} for a in accts]})
 
 @app.route('/api/investments', methods=['POST'])
-@login_required
+@api_auth_required
 def api_add_investment():
     uid = current_user.model.id
     data = request.get_json(silent=True) or {}
@@ -1150,7 +1270,7 @@ def api_add_investment():
     return jsonify({'ok': True, 'id': acct.id})
 
 @app.route('/api/investments/<int:acct_id>', methods=['DELETE'])
-@login_required
+@api_auth_required
 def api_delete_investment(acct_id):
     uid = current_user.model.id
     a = InvestmentAccount.query.filter_by(id=acct_id, user_id=uid).first()
@@ -1162,7 +1282,7 @@ def api_delete_investment(acct_id):
 
 # ── Delete account ──────────────────────────────────────────────────────────
 @app.route('/api/auth/delete', methods=['POST'])
-@login_required
+@api_auth_required
 def api_delete_account():
     """Permanently delete the user's account and all associated data."""
     data = request.get_json(silent=True) or {}
@@ -1187,7 +1307,7 @@ def api_delete_account():
     return jsonify({'ok': True})
 
 @app.route('/api/plaid/link_token', methods=['POST'])
-@login_required
+@api_auth_required
 def plaid_link_token():
     import requests as req
     uid = current_user.model.id
@@ -1216,7 +1336,7 @@ def plaid_link_token():
         return jsonify({'ok': False, 'error': str(e)}), 500
 
 @app.route('/api/plaid/exchange', methods=['POST'])
-@login_required
+@api_auth_required
 def plaid_exchange():
     import requests as req
     uid = current_user.model.id
@@ -1278,7 +1398,7 @@ def plaid_exchange():
         return jsonify({'ok': False, 'error': str(e)}), 500
 
 @app.route('/api/wise/test', methods=['POST'])
-@login_required
+@api_auth_required
 def api_wise_test():
     import requests as req
     uid = current_user.model.id
