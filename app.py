@@ -61,6 +61,8 @@ def csrf_required(f):
     from functools import wraps
     @wraps(f)
     def decorated(*args, **kwargs):
+        if request.method == 'GET':
+            return f(*args, **kwargs)
         if request.path.startswith('/api/'):
             return f(*args, **kwargs)
         if request.is_json or request.content_type and 'application/json' in request.content_type:
