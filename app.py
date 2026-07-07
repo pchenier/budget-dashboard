@@ -624,6 +624,7 @@ a{color:#4ade80;text-decoration:none;font-size:0.85rem}
   </a>
   <div class="divider">or</div>
   <form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <label>Email</label>
     <input type="email" name="email" placeholder="you@example.com" required>
     <label>Password</label>
@@ -718,12 +719,13 @@ a{color:#4ade80;text-decoration:none}
     <p class="sub">Your finances, finally clear.</p>
     {% if error %}<div class="error">{{ error }}</div>{% endif %}
     <form method="POST" id="reg-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <label>Name</label>
       <input type="text" name="name" placeholder="How should we call you?" required>
       <label>Email</label>
       <input type="email" name="email" placeholder="you@example.com" required>
       <label>Password</label>
-      <input type="password" name="password" placeholder="At least 6 characters" required>
+      <input type="password" name="password" placeholder="At least 8 characters" required>
       <button type="submit" class="btn">Sign up</button>
     </form>
     <div class="divider">or</div>
@@ -966,17 +968,17 @@ def register():
         password = request.form.get('password', '')
         name = request.form.get('name', '').strip()
         if not email or not password:
-            return render_template_string(REGISTER_HTML, error='Email and password are required.', step='0')
+            return render_template_string(REGISTER_HTML, error='Email and password are required.', step='0', csrf_token=generate_csrf_token())
         if not re.match(r'^[^@\s]+@[^@\s]+\.[^@\s]+$', email):
-            return render_template_string(REGISTER_HTML, error='Please enter a valid email address.', step='0')
+            return render_template_string(REGISTER_HTML, error='Please enter a valid email address.', step='0', csrf_token=generate_csrf_token())
         if len(password) < 8:
-            return render_template_string(REGISTER_HTML, error='Password must be at least 8 characters.', step='0')
+            return render_template_string(REGISTER_HTML, error='Password must be at least 8 characters.', step='0', csrf_token=generate_csrf_token())
         # Rate limit: max 3 registrations per IP per hour
         ip = request.remote_addr or '0'
         if _check_register_rate_limit(ip):
-            return render_template_string(REGISTER_HTML, error='Too many registration attempts. Please try again later.', step='0')
+            return render_template_string(REGISTER_HTML, error='Too many registration attempts. Please try again later.', step='0', csrf_token=generate_csrf_token())
         if UserModel.query.filter_by(email=email).first():
-            return render_template_string(REGISTER_HTML, error='An account with that email already exists.', step='0')
+            return render_template_string(REGISTER_HTML, error='An account with that email already exists.', step='0', csrf_token=generate_csrf_token())
         _record_register_attempt(ip)
         user = UserModel(email=email, name=name)
         user.set_password(password)
@@ -987,7 +989,7 @@ def register():
         generate_csrf_token()  # Ensure CSRF token exists for the session
         login_user(flask_user, remember=True)
         return redirect(url_for('index'))
-    return render_template_string(REGISTER_HTML, error='', step='0')
+    return render_template_string(REGISTER_HTML, error='', step='0', csrf_token=generate_csrf_token())
 
 @app.route('/login', methods=['GET', 'POST'])
 @csrf_required
@@ -997,7 +999,7 @@ def login():
         password = request.form.get('password', '')
         user = UserModel.query.filter_by(email=email).first()
         if not user or not user.check_password(password):
-            return render_template_string(LOGIN_HTML, error='Invalid email or password.')
+            return render_template_string(LOGIN_HTML, error='Invalid email or password.', csrf_token=generate_csrf_token())
         session.permanent = True
         generate_csrf_token()  # Generate CSRF token for the session
         login_user(FlaskUser(user), remember=True)
@@ -1009,7 +1011,7 @@ def login():
         error = 'Google sign-in failed. Please try again.'
     elif err_param == 'no_google_data':
         error = 'Could not get your info from Google. Please try again.'
-    return render_template_string(LOGIN_HTML, error=error)
+    return render_template_string(LOGIN_HTML, error=error, csrf_token=generate_csrf_token())
 
 @app.route('/logout', methods=['GET', 'POST'])
 @login_required
