@@ -3766,8 +3766,8 @@ function pgSettings(){
     row('Currency','Display currency','<span class="badge b-gray">CAD $</span>'),
   ].join(''))}
   ${section('Connections',[
-    connRow('Plaid','Bank & credit card data','plaid','/setup'),
-    connRow('Wise','International transfers','wise','/setup'),
+    row('Plaid','Bank & credit card data',`<a href="javascript:void(0)" onclick="openPlaidLink()" style="text-decoration:none">${badge(cn.plaid)}</a>`),
+    row('Wise','International transfers',`<a href="javascript:void(0)" onclick="openInvestmentModal('Wise')" style="text-decoration:none">${badge(cn.wise)}</a>`),
     connRow('Crypto Wallets','Solana, Ethereum, Bitcoin wallets','crypto','javascript:void(0)'),
   ].join(''))}
   ${section('Notifications',[
@@ -3789,9 +3789,17 @@ function pgSettings(){
   ].join(''))}`;
 }
 
+// ═══════════════════════════ CSRF HELPER ═══════════════════════════
+function csrfHeaders(extra){
+  const h = extra || {};
+  const t = document.querySelector('meta[name=csrf-token]');
+  if(t) h['X-CSRF-Token'] = t.content;
+  return h;
+}
+
 // ═══════════════════════════ LOGOUT ═══════════════════════════
 function doLogout(){
-  fetch('/api/auth/logout',{method:'POST',credentials:'include'}).then(()=>{
+  fetch('/api/auth/logout',{method:'POST',headers:csrfHeaders(),credentials:'include'}).then(()=>{
     window.location.href='/login';
   }).catch(()=>{
     window.location.href='/login';
@@ -3837,7 +3845,7 @@ function confirmDeleteAccount(){
   fetch('/api/auth/delete',{
     method:'POST',
     credentials:'include',
-    headers:{'Content-Type':'application/json'},
+    headers:csrfHeaders({'Content-Type':'application/json'}),
     body:JSON.stringify({confirmation:inp.value.trim()})
   }).then(r=>{
     if(!r.ok) return r.json().then(d=>{throw new Error(d.error||'Server error');}).catch(()=>{throw new Error('Server error ('+r.status+')');});
@@ -3861,7 +3869,7 @@ function confirmDeleteAccount(){
 
 function replayOnboarding(){
   localStorage.removeItem(ONBOARDED_KEY);
-  fetch('/api/onboarding/reset',{method:'POST',credentials:'include'}).then(()=>{
+  fetch('/api/onboarding/reset',{method:'POST',headers:csrfHeaders(),credentials:'include'}).then(()=>{
     location.reload();
   }).catch(()=>{
     location.reload();
@@ -3877,7 +3885,7 @@ function doRefresh(){
     btn.querySelector('svg').style.animation='spin 1s linear infinite';
   }
   if(dot) dot.style.background='var(--yellow)';
-  fetch('/api/refresh',{method:'POST'})
+  fetch('/api/refresh',{method:'POST',headers:csrfHeaders()})
     .then(r=>r.json())
     .then(()=>{
       pollRefresh();
@@ -4120,7 +4128,7 @@ function addAccCrypto(){
         <select id="cw-chain" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-family:var(--font);font-size:13px;outline:none">
           <option value="solana">Solana</option>
           <option value="ethereum">Ethereum</option>
-          <option value="dollar-sign">Bitcoin</option>
+          <option value="bitcoin">Bitcoin</option>
         </select>
       </div>
       <div style="text-align:left;margin-bottom:14px">
@@ -4151,7 +4159,7 @@ async function submitWallet(){
   if(!address){ msg.style.color='var(--red)'; msg.textContent='Please enter a wallet address.'; return; }
   btn.disabled = true; btn.textContent = 'Adding...';
   try {
-    const res = await fetch('/api/wallets', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({chain, address, label: label||chain.charAt(0).toUpperCase()+chain.slice(1)+' Wallet'})});
+    const res = await fetch('/api/wallets', {method:'POST', headers:csrfHeaders({'Content-Type':'application/json'}), body:JSON.stringify({chain, address, label: label||chain.charAt(0).toUpperCase()+chain.slice(1)+' Wallet'})});
     const data = await res.json();
     if(data.ok){
       msg.style.color='var(--green)'; msg.textContent='Wallet added! Refreshing...';
@@ -4163,6 +4171,14 @@ async function submitWallet(){
   } catch(e){
     msg.style.color='var(--red)'; msg.textContent='Network error.';
     btn.disabled=false; btn.textContent='Add Wallet';
+  }
+}
+
+function openInvestmentModal(platform){
+  addAccInvestment();
+  if(platform){
+    const sel = document.getElementById('inv-platform');
+    if(sel) sel.value = platform;
   }
 }
 
@@ -4215,7 +4231,7 @@ async function submitInvestment(){
   const btn = document.getElementById('inv-submit');
   btn.disabled = true; btn.textContent = 'Adding...';
   try {
-    const res = await fetch('/api/investments', {method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include', body:JSON.stringify({platform, label:label||platform, balance:parseFloat(balance)||0})});
+    const res = await fetch('/api/investments', {method:'POST', headers:csrfHeaders({'Content-Type':'application/json'}), credentials:'include', body:JSON.stringify({platform, label:label||platform, balance:parseFloat(balance)||0})});
     const data = await res.json();
     if(data.ok){
       msg.style.color='var(--green)'; msg.textContent='Account added! Refreshing...';
@@ -4234,7 +4250,7 @@ async function submitInvestment(){
 async function openPlaidLink() {
   try {
     // Get link token from backend
-    const res = await fetch('/api/plaid/link_token', {method:'POST'});
+    const res = await fetch('/api/plaid/link_token', {method:'POST',headers:csrfHeaders()});
     const data = await res.json();
     if (!data.ok) { alert('Plaid error: ' + data.error); return; }
 
@@ -4244,7 +4260,7 @@ async function openPlaidLink() {
       onSuccess: async (public_token, metadata) => {
         const r = await fetch('/api/plaid/exchange', {
           method: 'POST',
-          headers: {'Content-Type':'application/json'},
+          headers: csrfHeaders({'Content-Type':'application/json'}),
           body: JSON.stringify({public_token})
         });
         const d = await r.json();
@@ -4464,12 +4480,12 @@ function showOnboarding(){
     // Save to server
     const payload = {};
     if(nameInput && nameInput.value) payload.name = nameInput.value;
-    if(payload.name) fetch('/api/profile',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),credentials:'include'}).catch(()=>{});
+    if(payload.name) fetch('/api/profile',{method:'POST',headers:csrfHeaders({'Content-Type':'application/json'}),body:JSON.stringify(payload),credentials:'include'}).catch(()=>{});
   }
 
   function finish(){
     localStorage.setItem(ONBOARDED_KEY,'1');
-    fetch('/api/onboarding/complete',{method:'POST',credentials:'include'}).catch(()=>{});
+    fetch('/api/onboarding/complete',{method:'POST',headers:csrfHeaders(),credentials:'include'}).catch(()=>{});
     const o = document.getElementById('onboard-overlay');
     if(o){ o.style.opacity='0'; o.style.transition='opacity .2s'; setTimeout(()=>o.remove(),200); }
     navigate('dashboard');

@@ -11,3 +11,4 @@ imports/
 *.csv
 .vercel*.bak
 app.py.bak*
+fiscit.db

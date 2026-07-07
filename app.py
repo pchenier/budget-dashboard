@@ -10,7 +10,7 @@ On first run with no saved config → redirects to /setup.
 After setup, config is saved to saved_config.json — never asks again on restart.
 """
 
-import os, json, threading, uuid
+import os, json, re, threading, uuid
 from flask import Flask, request, session, redirect, url_for, render_template_string, jsonify, send_from_directory, flash
 from datetime import datetime, timedelta, timezone
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
@@ -48,6 +48,49 @@ def handle_preflight():
 # ── JWT auth for mobile API ──────────────────────────────────────────────────
 JWT_SECRET = os.getenv("JWT_SECRET", os.getenv("SECRET_KEY", "vault-local-secret-do-not-deploy"))
 JWT_EXPIRY_DAYS = 30
+
+# ── CSRF protection ──────────────────────────────────────────────────────────
+def generate_csrf_token():
+    """Generate a CSRF token and store it in the session."""
+    if 'csrf_token' not in session:
+        session['csrf_token'] = uuid.uuid4().hex
+    return session['csrf_token']
+
+def csrf_required(f):
+    """Decorator: check CSRF token on state-changing POST routes (not /api/ which uses JWT/Bearer)."""
+    from functools import wraps
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if request.path.startswith('/api/'):
+            return f(*args, **kwargs)
+        if request.is_json or request.content_type and 'application/json' in request.content_type:
+            token = request.headers.get('X-CSRF-Token', '')
+        else:
+            token = request.form.get('csrf_token', '')
+        if token != session.get('csrf_token'):
+            return jsonify({'error': 'CSRF token missing or invalid'}), 403
+        return f(*args, **kwargs)
+    return decorated
+
+# ── Rate limiting for registration ────────────────────────────────────────────
+_register_attempts = {}  # {ip: [(timestamp, ), ...]}
+
+def _check_register_rate_limit(ip):
+    """Return True if the IP is rate-limited (more than 3 in the last hour)."""
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(hours=1)
+    # Clean old entries
+    for k in list(_register_attempts.keys()):
+        _register_attempts[k] = [t for t in _register_attempts[k] if t > cutoff]
+        if not _register_attempts[k]:
+            del _register_attempts[k]
+    attempts = _register_attempts.get(ip, [])
+    return len(attempts) >= 3
+
+def _record_register_attempt(ip):
+    """Record a registration attempt from this IP."""
+    now = datetime.now(timezone.utc)
+    _register_attempts.setdefault(ip, []).append(now)
 
 def make_jwt(user_id, email):
     return pyjwt.encode({
@@ -347,6 +390,14 @@ def build_vault_html(data, user=None):
     html = html.replace(
         '</header>',
         f'<!-- vault-injected --></header>',
+        1
+    )
+
+    # Inject CSRF token meta tag into <head>
+    csrf_token = generate_csrf_token()
+    html = html.replace(
+        '<meta name="viewport" content="width=device-width, initial-scale=1.0">',
+        f'<meta name="viewport" content="width=device-width, initial-scale=1.0">\n<meta name="csrf-token" content="{csrf_token}">',
         1
     )
 
@@ -905,6 +956,7 @@ showStep(3);
 </html>"""
 
 @app.route('/register', methods=['GET', 'POST'])
+@csrf_required
 def register():
     # If already logged in, go to dashboard
     if current_user.is_authenticated:
@@ -915,21 +967,30 @@ def register():
         name = request.form.get('name', '').strip()
         if not email or not password:
             return render_template_string(REGISTER_HTML, error='Email and password are required.', step='0')
-        if len(password) < 6:
-            return render_template_string(REGISTER_HTML, error='Password must be at least 6 characters.', step='0')
+        if not re.match(r'^[^@\s]+@[^@\s]+\.[^@\s]+$', email):
+            return render_template_string(REGISTER_HTML, error='Please enter a valid email address.', step='0')
+        if len(password) < 8:
+            return render_template_string(REGISTER_HTML, error='Password must be at least 8 characters.', step='0')
+        # Rate limit: max 3 registrations per IP per hour
+        ip = request.remote_addr or '0'
+        if _check_register_rate_limit(ip):
+            return render_template_string(REGISTER_HTML, error='Too many registration attempts. Please try again later.', step='0')
         if UserModel.query.filter_by(email=email).first():
             return render_template_string(REGISTER_HTML, error='An account with that email already exists.', step='0')
+        _record_register_attempt(ip)
         user = UserModel(email=email, name=name)
         user.set_password(password)
         db.session.add(user)
         db.session.commit()
         flask_user = FlaskUser(user)
         session.permanent = True
+        generate_csrf_token()  # Ensure CSRF token exists for the session
         login_user(flask_user, remember=True)
         return redirect(url_for('index'))
     return render_template_string(REGISTER_HTML, error='', step='0')
 
 @app.route('/login', methods=['GET', 'POST'])
+@csrf_required
 def login():
     if request.method == 'POST':
         email = request.form.get('email', '').strip().lower()
@@ -938,6 +999,7 @@ def login():
         if not user or not user.check_password(password):
             return render_template_string(LOGIN_HTML, error='Invalid email or password.')
         session.permanent = True
+        generate_csrf_token()  # Generate CSRF token for the session
         login_user(FlaskUser(user), remember=True)
         return redirect(url_for('index'))
     # Show error from Google OAuth redirect if any
@@ -949,11 +1011,18 @@ def login():
         error = 'Could not get your info from Google. Please try again.'
     return render_template_string(LOGIN_HTML, error=error)
 
-@app.route('/logout')
+@app.route('/logout', methods=['GET', 'POST'])
 @login_required
 def logout():
     logout_user()
     return redirect(url_for('login'))
+
+@app.route('/api/auth/logout', methods=['POST'])
+def api_logout():
+    """Logout endpoint for frontend JavaScript — clears session."""
+    logout_user()
+    session.clear()
+    return jsonify({'ok': True})
 
 # ── JWT auth endpoints for mobile app ────────────────────────────────────────
 @app.route('/api/auth/login', methods=['POST'])
@@ -985,10 +1054,17 @@ def api_auth_register():
     name = (data.get('name') or '').strip()
     if not email or not password:
         return jsonify({'error': 'Email and password required'}), 400
+    if not re.match(r'^[^@\s]+@[^@\s]+\.[^@\s]+$', email):
+        return jsonify({'error': 'Please enter a valid email address'}), 400
     if len(password) < 8:
         return jsonify({'error': 'Password must be at least 8 characters'}), 400
+    # Rate limit: max 3 registrations per IP per hour
+    ip = request.remote_addr or '0'
+    if _check_register_rate_limit(ip):
+        return jsonify({'error': 'Too many registration attempts. Please try again later.'}), 429
     if UserModel.query.filter_by(email=email).first():
         return jsonify({'error': 'An account with that email already exists'}), 409
+    _record_register_attempt(ip)
     user = UserModel(email=email, name=name or email.split('@')[0])
     user.set_password(password)
     db.session.add(user)
@@ -1021,7 +1097,7 @@ def sso():
     if not token:
         return redirect(url_for('login'))
     try:
-        payload = pyjwt.decode(token, os.getenv('JWT_SECRET', ''), algorithms=['HS256'])
+        payload = pyjwt.decode(token, JWT_SECRET, algorithms=['HS256'])
         user_id = payload.get('sub')
         if not user_id:
             return redirect(url_for('login'))
@@ -1106,11 +1182,21 @@ def google_callback():
 
     userinfo = token.get('userinfo') or google.userinfo()
     if not userinfo:
-        # Fallback: parse id_token manually
-        from authlib.jose import jwt as jose_jwt
+        # Fallback: verify the id_token properly using Google's verification
         id_token_raw = token.get('id_token')
         if id_token_raw:
-            userinfo = jose_jwt.decode(id_token_raw, claims_options={'iss': {'values': ['https://accounts.google.com', 'accounts.google.com']}})
+            try:
+                import google.auth.transport.requests as google_transport
+                from google.oauth2 import id_token as google_id_token
+                google_client_id = os.getenv('GOOGLE_CLIENT_ID', '')
+                userinfo = google_id_token.verify_oauth2_token(
+                    id_token_raw,
+                    google_transport.Request(),
+                    google_client_id,
+                )
+            except Exception:
+                # If verification fails, redirect with error
+                return redirect(url_for('login', error='google_failed'))
 
     google_id = userinfo.get('sub')
     email = (userinfo.get('email') or '').strip().lower()
@@ -1359,7 +1445,8 @@ def api_delete_account():
     if confirmation.strip().lower() != email.strip().lower():
         return jsonify({'ok': False, 'error': 'Confirmation does not match email.'}), 400
 
-    # Delete related data
+    # Logout first, then delete related data
+    logout_user()
     CryptoWallet.query.filter_by(user_id=uid).delete()
     InvestmentAccount.query.filter_by(user_id=uid).delete()
     PlaidConnection.query.filter_by(user_id=uid).delete()
@@ -1369,7 +1456,6 @@ def api_delete_account():
     # Delete user
     UserModel.query.filter_by(id=uid).delete()
     db.session.commit()
-    logout_user()
     return jsonify({'ok': True})
 
 @app.route('/api/plaid/link_token', methods=['POST'])
@@ -1466,6 +1552,9 @@ def plaid_exchange():
 @app.route('/api/wise/test', methods=['POST'])
 @api_auth_required
 def api_wise_test():
+    """Test Wise API token — validates AND saves the connection on success.
+    This is the intended UX: user enters their Wise token, we validate it and
+    save it in one step so they don't have to submit twice."""
     import requests as req
     uid = current_user.model.id
     body = request.get_json() or {}
