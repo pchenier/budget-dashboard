@@ -248,8 +248,9 @@ def pull_all(config):
             result = future.result()
             if result:
                 balances.update(result)
-        except Exception:
-            pass
+                print(f"  Plaid balances: merged {len(result)} accounts")
+        except Exception as e:
+            print(f"  Plaid balances error: {e}")
 
     # If Plaid failed, fall back to previous accounts
     if not balances and _prev_plaid_accounts:
@@ -280,8 +281,9 @@ def pull_all(config):
             result = future.result()
             if result:
                 raw_txns.extend(result)
-        except Exception:
-            pass
+                print(f"  Plaid txns: got {len(result)} transactions")
+        except Exception as e:
+            print(f"  Plaid txns error: {e}")
 
     # Collect crypto balances
     crypto_balances = []
@@ -290,8 +292,9 @@ def pull_all(config):
             result = future.result()
             if result:
                 crypto_balances.append(result)
-        except Exception:
-            pass
+                print(f"  Crypto: got {result[2]} balance")
+        except Exception as e:
+            print(f"  Crypto error: {e}")
 
     status_cb("Processing transactions...")
     txns = gen.process_transactions(raw_txns, wise_txns=wise_txns)
@@ -299,6 +302,7 @@ def pull_all(config):
     # ─────────────────────────────────────────────────────────────────────────
     # Build accounts list
     # ─────────────────────────────────────────────────────────────────────────
+    print(f"  Building accounts from {len(balances)} Plaid balances + {len(wise_bal or {})} Wise + {len(crypto_balances)} crypto")
     accounts = []
     for aid, acc in balances.items():
         bal = acc["current"]
