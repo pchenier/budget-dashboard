@@ -128,6 +128,7 @@ def pull_all(config):
     def _fetch_plaid_balances(token):
         """Thread-safe: pass token directly to plaid_post instead of mutating global."""
         if not gen.PLAID_CLIENT or not gen.PLAID_SECRET:
+            print(f"  Plaid: skipped balances (no client/secret)")
             return {}
         try:
             data = gen.plaid_post("/accounts/balance/get", {"access_token": token})
@@ -136,9 +137,9 @@ def pull_all(config):
                 aid = acc["account_id"]
                 result[aid] = {
                     "name":    acc["name"],
-                    "current": acc["balances"]["current"] or 0,
+                    "current": acc["balances"].get("current") or 0,
                     "type":    acc["type"],
-                    "subtype": acc["subtype"],
+                    "subtype": acc.get("subtype", ""),
                 }
             print(f"  Plaid: {len(result)} accounts (token {token[:8]}...)")
             return result
