@@ -19,6 +19,38 @@ import jwt as pyjwt
 from pathlib import Path
 from models import db, User as UserModel, PlaidConnection, WiseConnection, CryptoWallet, InvestmentAccount
 
+# Normalize French categories to English (matches generate_data.py CATEGORY_ALIASES)
+CATEGORY_ALIASES = {
+    "Épicerie":         "Groceries",
+    "Bouffe/Resto":     "Food/Dining",
+    "Gaz":              "Gas",
+    "Essence":          "Gas",
+    "Transport":        "Transport",
+    "Shopping":          "Shopping",
+    "Business/Tech":    "Business/Tech",
+    "Gym":              "Gym",
+    "Santé":            "Health",
+    "Télécom":          "Phone/Internet",
+    "Divertissement":   "Entertainment",
+    "Abonnements":      "Subscriptions",
+    "Logement":         "Housing",
+    "Utilities":        "Utilities",
+    "Cash/Virements":   "Cash/Transfers",
+    "Investissements":  "Investments",
+    "Revenu":           "Income",
+    "Autre":            "Other",
+    "Moto":             "Auto",
+    "Auto":             "Auto",
+    "Épargne":          "Savings",
+}
+CATEGORY_ICONS = {
+    "Groceries": "🛒", "Food/Dining": "🍽️", "Gas": "⛽", "Transport": "🚇",
+    "Shopping": "🛍️", "Gym": "💪", "Health": "💊", "Phone/Internet": "📱",
+    "Entertainment": "🎬", "Subscriptions": "📺", "Housing": "🏠", "Utilities": "⚡",
+    "Cash/Transfers": "💸", "Investments": "📈", "Income": "💼", "Other": "📂",
+    "Business/Tech": "💻", "Auto": "🚗", "Moto": "🏍️", "Savings": "🏦",
+}
+
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "vault-local-secret-do-not-deploy")
 
@@ -462,9 +494,9 @@ def _build_real_data_js(data, user=None):
             "amt":      round(display_amt, 2),
             "date":     t["date"],               # human-readable "Jun 08"
             "date_iso": t.get("date_iso") or t["date"],  # ISO YYYY-MM-DD from generate_data
-            "cat":      t["category"],
+            "cat":      CATEGORY_ALIASES.get(t["category"], t["category"]),
             "acc":      acc_name_map.get(t["account"], t["account"]),
-            "ico":      t.get("ico", "folder"),
+            "ico":      CATEGORY_ICONS.get(CATEGORY_ALIASES.get(t["category"], t["category"]), t.get("ico", "folder")),
         })
 
     # Budget: already matches mock format (cat, spent, limit, ico)

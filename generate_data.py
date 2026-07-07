@@ -32,6 +32,31 @@ CATEGORY_ICONS = {
     "Other":            "📂",
 }
 
+# Normalize French categories from generate.py to English
+CATEGORY_ALIASES = {
+    "Épicerie":         "Groceries",
+    "Bouffe/Resto":     "Food/Dining",
+    "Gaz":              "Gas",
+    "Essence":          "Gas",
+    "Transport":        "Transport",
+    "Shopping":          "Shopping",
+    "Business/Tech":    "Business/Tech",
+    "Gym":              "Gym",
+    "Santé":            "Health",
+    "Télécom":          "Phone/Internet",
+    "Divertissement":   "Entertainment",
+    "Abonnements":      "Subscriptions",
+    "Logement":         "Housing",
+    "Utilities":        "Utilities",
+    "Cash/Virements":   "Cash/Transfers",
+    "Investissements":  "Investments",
+    "Revenu":           "Income",
+    "Autre":            "Other",
+    "Moto":             "Auto",
+    "Auto":             "Auto",
+    "Épargne":          "Savings",
+}
+
 ACCOUNT_TYPE_LABELS = {
     "depository": "Chequing / Savings",
     "credit":     "Credit Card",
@@ -268,15 +293,16 @@ def pull_all(config):
     serialized_txns = []
     for t in txns:
         dt = t["date"] if isinstance(t["date"], datetime) else datetime.strptime(t["date"], "%Y-%m-%d")
+        cat = CATEGORY_ALIASES.get(t["category"], t["category"])
         serialized_txns.append({
             "date":     dt.strftime("%b %d"),
             "date_iso": dt.strftime("%Y-%m-%d"),
             "name":     t["name"],
             "amount":   round(t["amount"], 2),
-            "category": t["category"],
+            "category": cat,
             "account":  t["account"],
             "id":       t.get("id", ""),
-            "ico":      CATEGORY_ICONS.get(t["category"], "📂"),
+            "ico":      CATEGORY_ICONS.get(cat, "📂"),
         })
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -288,11 +314,12 @@ def pull_all(config):
 
     for t in txns:
         dt = t["date"] if isinstance(t["date"], datetime) else datetime.strptime(t["date"], "%Y-%m-%d")
+        cat = CATEGORY_ALIASES.get(t["category"], t["category"])
         if dt.month == current_month and dt.year == current_year:
             amt = t["amount"]
             if amt < 0:  # spending (Plaid: positive = debit, but we flip in process_transactions... check)
                 monthly_spending += abs(amt)
-                category_spending[t["category"]] += abs(amt)
+                category_spending[cat] += abs(amt)
             else:
                 monthly_income += abs(amt)
 
@@ -300,11 +327,12 @@ def pull_all(config):
     if monthly_income < 1 and monthly_spending < 1:
         for t in txns:
             dt = t["date"] if isinstance(t["date"], datetime) else datetime.strptime(t["date"], "%Y-%m-%d")
+            cat = CATEGORY_ALIASES.get(t["category"], t["category"])
             if dt.month == current_month and dt.year == current_year:
                 amt = t["amount"]
                 if amt > 0:  # Plaid: positive = money out
                     monthly_spending += amt
-                    category_spending[t["category"]] += amt
+                    category_spending[cat] += amt
                 else:
                     monthly_income += abs(amt)
 
