@@ -7,6 +7,7 @@ Used by app.py to feed real data into Vault UI.
 import os, sys, json, requests
 from datetime import datetime, date
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 # ── Import generate.py functions ──────────────────────────────────────────────
@@ -99,7 +100,7 @@ def pull_all(config):
         wallets = [{"chain": "solana", "address": config["phantom_wallet"].strip(), "label": "Phantom"}]
         config["wallets"] = wallets
 
-    # ── Load previous Plaid accounts BEFORE any API calls (fallback if Plaid fails) ──
+    # ── Load previous Plaid accounts (fallback if Plaid fails) ──
     _prev_plaid_accounts = {}
     try:
         import json as _json
@@ -119,38 +120,62 @@ def pull_all(config):
     except Exception as _e:
         print(f"  Plaid: prev cache load failed: {_e}")
 
-    # ── Plaid balances (multiple banks) ──────────────────────────────────────────
-    status_cb("Plaid: balances...")
-    balances = {}
-    for token in plaid_tokens:
-        gen.PLAID_TOKEN = token
+    # ── Parallel data fetching ────────────────────────────────────────────────
+    # All network calls are independent (except Wise txns which need balance_ids).
+    # Fetch Plaid balances, Plaid transactions, Wise balances, and crypto in parallel.
+    status_cb("Loading data...")
+
+    def _fetch_plaid_balances(token):
+        """Thread-safe: pass token directly to plaid_post instead of mutating global."""
+        if not gen.PLAID_CLIENT or not gen.PLAID_SECRET:
+            return {}
         try:
-            bank_bal = gen.get_plaid_balances()
-            if bank_bal:
-                balances.update(bank_bal)
+            data = gen.plaid_post("/accounts/balance/get", {"access_token": token})
+            result = {}
+            for acc in data.get("accounts", []):
+                aid = acc["account_id"]
+                result[aid] = {
+                    "name":    acc["name"],
+                    "current": acc["balances"]["current"] or 0,
+                    "type":    acc["type"],
+                    "subtype": acc["subtype"],
+                }
+            print(f"  Plaid: {len(result)} accounts (token {token[:8]}...)")
+            return result
         except Exception as e:
             print(f"  Plaid token {token[:8]}...: error → {e}")
+            return {}
 
-    # If Plaid failed, fall back to previous accounts
-    if not balances and _prev_plaid_accounts:
-        print("  Plaid: using cached accounts from previous sync")
-        balances = _prev_plaid_accounts
+    def _fetch_plaid_txns(token):
+        """Thread-safe: pass token directly to plaid_post."""
+        if not gen.PLAID_CLIENT or not gen.PLAID_SECRET:
+            return []
+        try:
+            all_txns, offset = [], 0
+            while True:
+                data = gen.plaid_post("/transactions/get", {
+                    "access_token": token,
+                    "start_date":   gen.START_DATE,
+                    "end_date":     gen.END_DATE,
+                    "options": {"count": 500, "offset": offset},
+                })
+                batch = data["transactions"]
+                all_txns.extend(batch)
+                if len(all_txns) >= data["total_transactions"] or not batch:
+                    break
+                offset += len(batch)
+            print(f"  Plaid: {len(all_txns)} transactions (token {token[:8]}...)")
+            return all_txns
+        except Exception as e:
+            print(f"  Plaid token {token[:8]}... txns error → {e}")
+            return []
 
-    # ── Wise ───────────────────────────────────────────────────────────────────
-    status_cb("Wise: balances...")
-    wise_bal, wise_balance_ids = gen.get_wise_balances()
-
-    status_cb("Wise: transactions...")
-    wise_txns = gen.get_wise_transactions(wise_balance_ids)
-
-    # ── Crypto wallets (multi-chain) ──────────────────────────────────────────
-    crypto_balances = []  # list of (chain, address, label, native_bal, native_sym, usd_val)
-    for w in wallets:
+    def _fetch_crypto_wallet(w):
         chain   = w.get("chain", "solana").lower()
         address = w.get("address", "").strip()
         label   = w.get("label", chain.title())
         if not address:
-            continue
+            return None
         try:
             if chain == "solana":
                 status_cb(f"Crypto: {label} (SOL)...")
@@ -162,14 +187,12 @@ def pull_all(config):
                 r.raise_for_status()
                 lamports = r.json().get("result", {}).get("value", 0)
                 native_bal = lamports / 1e9
-                # Get SOL price
                 p = requests.get(
                     "https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd",
                     timeout=10,
                 )
                 price = p.json().get("solana", {}).get("usd", 0) if p.ok else 0
-                usd_val = native_bal * price
-                crypto_balances.append(("solana", address, label, native_bal, "SOL", usd_val))
+                return ("solana", address, label, native_bal, "SOL", native_bal * price)
 
             elif chain == "ethereum":
                 status_cb(f"Crypto: {label} (ETH)...")
@@ -185,8 +208,7 @@ def pull_all(config):
                     timeout=10,
                 )
                 price = p.json().get("ethereum", {}).get("usd", 0) if p.ok else 0
-                usd_val = native_bal * price
-                crypto_balances.append(("ethereum", address, label, native_bal, "ETH", usd_val))
+                return ("ethereum", address, label, native_bal, "ETH", native_bal * price)
 
             elif chain == "bitcoin":
                 status_cb(f"Crypto: {label} (BTC)...")
@@ -202,23 +224,74 @@ def pull_all(config):
                     timeout=10,
                 )
                 price = p.json().get("bitcoin", {}).get("usd", 0) if p.ok else 0
-                usd_val = native_bal * price
-                crypto_balances.append(("bitcoin", address, label, native_bal, "BTC", usd_val))
-
+                return ("bitcoin", address, label, native_bal, "BTC", native_bal * price)
         except Exception as e:
             print(f"  Crypto {label} ({chain}): error → {e}")
+        return None
 
-    # ── Plaid transactions (multiple banks) ──────────────────────────────────────
+    # Launch all independent network calls in parallel
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        # Submit Plaid balance tasks
+        plaid_bal_futures = {pool.submit(_fetch_plaid_balances, t): t for t in plaid_tokens}
+        # Submit Plaid transaction tasks
+        plaid_txn_futures = {pool.submit(_fetch_plaid_txns, t): t for t in plaid_tokens}
+        # Submit Wise balance task
+        wise_bal_future = pool.submit(gen.get_wise_balances)
+        # Submit crypto wallet tasks
+        crypto_futures = {pool.submit(_fetch_crypto_wallet, w): w for w in wallets if w.get("address", "").strip()}
+
+    # Collect Plaid balances
+    status_cb("Plaid: balances...")
+    balances = {}
+    for future in as_completed(plaid_bal_futures):
+        try:
+            result = future.result()
+            if result:
+                balances.update(result)
+        except Exception:
+            pass
+
+    # If Plaid failed, fall back to previous accounts
+    if not balances and _prev_plaid_accounts:
+        print("  Plaid: using cached accounts from previous sync")
+        balances = _prev_plaid_accounts
+
+    # Collect Wise balances (need balance_ids for Wise transactions)
+    status_cb("Wise: balances...")
+    try:
+        wise_bal, wise_balance_ids = wise_bal_future.result()
+    except Exception as e:
+        print(f"  Wise: error → {e}")
+        wise_bal, wise_balance_ids = {}, {}
+
+    # Fetch Wise transactions (depends on balance_ids from above)
+    status_cb("Wise: transactions...")
+    try:
+        wise_txns = gen.get_wise_transactions(wise_balance_ids)
+    except Exception as e:
+        print(f"  Wise: txns error → {e}")
+        wise_txns = []
+
+    # Collect Plaid transactions
     status_cb("Plaid: transactions...")
     raw_txns = []
-    for token in plaid_tokens:
-        gen.PLAID_TOKEN = token
+    for future in as_completed(plaid_txn_futures):
         try:
-            bank_txns = gen.get_plaid_transactions()
-            if bank_txns:
-                raw_txns.extend(bank_txns)
-        except Exception as e:
-            print(f"  Plaid token {token[:8]}... txns error → {e}")
+            result = future.result()
+            if result:
+                raw_txns.extend(result)
+        except Exception:
+            pass
+
+    # Collect crypto balances
+    crypto_balances = []
+    for future in as_completed(crypto_futures):
+        try:
+            result = future.result()
+            if result:
+                crypto_balances.append(result)
+        except Exception:
+            pass
 
     status_cb("Processing transactions...")
     txns = gen.process_transactions(raw_txns, wise_txns=wise_txns)
