@@ -102,6 +102,7 @@ def pull_all(config):
 
     # ── Load previous Plaid accounts (fallback if Plaid fails) ──
     _prev_plaid_accounts = {}
+    # First: try data_cache.json
     try:
         import json as _json
         from pathlib import Path as _Path
@@ -109,16 +110,30 @@ def pull_all(config):
         if _cache_file.exists():
             _cached = _json.loads(_cache_file.read_text())
             for a in _cached.get("accounts", []):
-                if not a["id"].startswith("wise_") and not a["id"].startswith("sol_"):
+                if not a["id"].startswith("wise_") and not a["id"].startswith("sol_") and not a["id"].startswith("crypto_"):
                     _prev_plaid_accounts[a["id"]] = {
                         "name":    a["name"],
-                        "current": a["balance"],
-                        "type":    a["type"].lower().replace("chequing / savings", "depository").replace("credit card", "credit"),
+                        "current": a.get("balance", 0),
+                        "type":    a.get("type", "depository").lower().replace("chequing / savings", "depository").replace("credit card", "credit"),
                         "subtype": a.get("subtype", ""),
                         "_from_cache": True,
                     }
     except Exception as _e:
         print(f"  Plaid: prev cache load failed: {_e}")
+    # Second: use _prev_accounts from config (passed by app.py from previous state)
+    _prev_from_state = config.get("_prev_accounts", [])
+    for a in _prev_from_state:
+        if not isinstance(a, dict):
+            continue
+        aid = a.get("id", "")
+        if aid and not aid.startswith("wise_") and not aid.startswith("sol_") and not aid.startswith("crypto_"):
+            _prev_plaid_accounts[aid] = {
+                "name":    a.get("name", ""),
+                "current": a.get("bal", a.get("balance", 0)),
+                "type":    a.get("type", "depository").lower().replace("chequing / savings", "depository").replace("credit card", "credit"),
+                "subtype": a.get("subtype", ""),
+                "_from_cache": True,
+            }
 
     # ── Parallel data fetching ────────────────────────────────────────────────
     # All network calls are independent (except Wise txns which need balance_ids).
@@ -310,6 +325,7 @@ def pull_all(config):
         # credit cards: Plaid reports available as positive, owe = negative UX
         if acc["type"] == "credit":
             bal = -abs(bal)
+        is_cached = acc.get("_from_cache", False)
         accounts.append({
             "id":      aid,
             "name":    acc["name"],
@@ -317,7 +333,7 @@ def pull_all(config):
             "balance": round(bal, 2),
             "type":    ACCOUNT_TYPE_LABELS.get(acc["type"], acc["type"]),
             "subtype": acc.get("subtype", ""),
-            "sync":    "just now",
+            "sync":    "cached" if is_cached else "just now",
         })
 
     # Add Wise accounts

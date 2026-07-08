@@ -292,6 +292,11 @@ def fetch_data(user_id, config):
             state["error"]  = ""
 
         import generate_data
+        # Pass previous Plaid accounts as fallback in case Plaid API fails
+        prev_accounts = []
+        if state.get("data") and isinstance(state["data"], dict):
+            prev_accounts = state["data"].get("accounts", [])
+        config["_prev_accounts"] = prev_accounts
         data = generate_data.pull_all(config)
 
         with _user_state_lock:
