@@ -1595,6 +1595,7 @@ function renderTxnList(txns){
   }).join('');
   const el = document.getElementById('txn-list');
   if(el) el.innerHTML = rows || '<div style="padding:24px;text-align:center;color:var(--text3)">No transactions found</div>';
+  feather.replace({width:14,height:14});
 }
 
 let _txnDateFilter = '';
