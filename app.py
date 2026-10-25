@@ -1509,6 +1509,24 @@ def api_delete_investment(acct_id):
     db.session.commit()
     return jsonify({'ok': True})
 
+def _plaid_remove_items(tokens):
+    """Call Plaid /item/remove for each access token; failures are logged, not raised."""
+    import requests as req
+    cid, secret = os.getenv('PLAID_CLIENT_ID'), os.getenv('PLAID_SECRET')
+    if not (cid and secret and tokens):
+        return
+    env = os.getenv('PLAID_ENV', 'production')
+    base = ('https://production.plaid.com' if env == 'production'
+            else 'https://development.plaid.com' if env == 'development'
+            else 'https://sandbox.plaid.com')
+    for t in tokens:
+        try:
+            r = req.post(f'{base}/item/remove', json={'client_id': cid, 'secret': secret, 'access_token': t}, timeout=10)
+            if r.status_code != 200:
+                app.logger.warning('Plaid item/remove returned %s', r.status_code)
+        except Exception as e:
+            app.logger.warning('Plaid item/remove failed: %s', type(e).__name__)
+
 # ── Delete account ──────────────────────────────────────────────────────────
 @app.route('/api/auth/delete', methods=['POST'])
 @api_auth_required
@@ -1522,18 +1540,56 @@ def api_delete_account():
     if confirmation.strip().lower() != email.strip().lower():
         return jsonify({'ok': False, 'error': 'Confirmation does not match email.'}), 400
 
-    # Logout first, then delete related data
+    # Revoke bank access at Plaid first (best effort): deleting rows alone
+    # would leave the items live on Plaid's side.
+    tokens = [c.access_token for c in PlaidConnection.query.filter_by(user_id=uid).all()]
+    try:
+        row = db.session.execute(db.text('SELECT plaid_token FROM vault_credentials WHERE user_id = :uid'), {'uid': uid}).first()
+        if row and row[0]:
+            tokens.append(row[0])
+    except Exception:
+        db.session.rollback()
+    _plaid_remove_items(set(t for t in tokens if t))
+
+    try:
+        CryptoWallet.query.filter_by(user_id=uid).delete()
+        InvestmentAccount.query.filter_by(user_id=uid).delete()
+        PlaidConnection.query.filter_by(user_id=uid).delete()
+        WiseConnection.query.filter_by(user_id=uid).delete()
+        if db.engine.dialect.name == 'postgresql':
+            _delete_postgres_user_rows(uid)
+        UserModel.query.filter_by(id=uid).delete()
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error('Account deletion failed for user %s: %s', uid, e)
+        return jsonify({'ok': False, 'error': 'We could not delete your account. Please try again or contact support.'}), 500
+
+    # Only log out once the data is actually gone
     logout_user()
-    CryptoWallet.query.filter_by(user_id=uid).delete()
-    InvestmentAccount.query.filter_by(user_id=uid).delete()
-    PlaidConnection.query.filter_by(user_id=uid).delete()
-    WiseConnection.query.filter_by(user_id=uid).delete()
-    db.session.execute(db.text('DELETE FROM email_verifications WHERE user_id = :uid'), {'uid': uid})
-    db.session.execute(db.text('DELETE FROM vault_credentials WHERE user_id = :uid'), {'uid': uid})
-    # Delete user
-    UserModel.query.filter_by(id=uid).delete()
-    db.session.commit()
+    session.clear()
     return jsonify({'ok': True})
+
+
+def _delete_postgres_user_rows(uid):
+    """Rows in fiscit.com's tables, plus any table with a foreign key to users."""
+    for table in ('email_verifications', 'vault_credentials'):
+        if db.session.execute(db.text('SELECT to_regclass(:t)'), {'t': table}).scalar():
+            db.session.execute(db.text(f'DELETE FROM {table} WHERE user_id = :uid'), {'uid': uid})
+    # Table/column names come from the catalog, never from user input
+    fks = db.session.execute(db.text("""
+            SELECT DISTINCT kcu.table_name, kcu.column_name
+            FROM information_schema.table_constraints tc
+            JOIN information_schema.key_column_usage kcu
+              ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema
+            JOIN information_schema.constraint_column_usage ccu
+              ON ccu.constraint_name = tc.constraint_name AND ccu.table_schema = tc.table_schema
+            WHERE tc.constraint_type = 'FOREIGN KEY' AND ccu.table_name = 'users' AND tc.table_schema = 'public'
+        """)).fetchall()
+    for table, column in fks:
+        if table in ('email_verifications', 'vault_credentials', 'users'):
+            continue
+        db.session.execute(db.text(f'DELETE FROM "{table}" WHERE "{column}" = :uid'), {'uid': uid})
 
 @app.route('/api/plaid/link_token', methods=['POST'])
 @api_auth_required

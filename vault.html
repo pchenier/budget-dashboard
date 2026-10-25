@@ -4,13 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Fiscit</title>
+<script>try{var a=localStorage.getItem('fiscit_accent'),s=localStorage.getItem('fiscit_surface');if(a)document.documentElement.dataset.accent=a;if(s)document.documentElement.dataset.surface=s;}catch(e){}</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="/static/feather.min.js"></script>
 <script src="/static/tour-demo.js?v=4" defer></script>
-<script src="/static/tour.js?v=5" defer></script>
+<script src="/static/tour.js?v=6" defer></script>
 <script src="/static/motion.js?v=1" defer></script>
 <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
 <style>
@@ -296,10 +297,10 @@ button{font-family:var(--font)}
 .cal-cell:hover{background:var(--bg4);transform:translateY(-1px)}
 .cal-cell.today{
   background:var(--bg4);color:var(--text);
-  box-shadow:0 0 0 1px var(--green),0 0 12px 1px rgba(184,245,102,.25);
+  box-shadow:0 0 0 1px var(--green),0 0 12px 1px rgba(var(--lime-rgb),.25);
   z-index:1
 }
-.cal-cell.today:hover{box-shadow:0 0 0 1px var(--green),0 0 18px 2px rgba(184,245,102,.35)}
+.cal-cell.today:hover{box-shadow:0 0 0 1px var(--green),0 0 18px 2px rgba(var(--lime-rgb),.35)}
 .cal-cell.has-event::after{content:'';position:absolute;bottom:4px;width:4px;height:4px;border-radius:50%;background:var(--green)}
 .cal-cell.empty{background:transparent;cursor:default}
 .cal-day-hdr{font-size:10px;font-weight:700;color:var(--text3);text-align:center;padding:6px 0;letter-spacing:.5px;text-transform:uppercase}
@@ -312,7 +313,7 @@ button{font-family:var(--font)}
 .cal-day-view-grid{display:grid;grid-template-columns:56px 1fr;position:relative}
 .cal-time-col{font-size:10px;color:var(--text4);text-align:right;padding-right:8px;line-height:48px;height:48px;user-select:none}
 .cal-day-col{border-left:1px solid var(--border);position:relative;min-height:48px}
-.cal-day-col.today-col{background:rgba(184,245,102,.03)}
+.cal-day-col.today-col{background:rgba(var(--lime-rgb),.03)}
 .cal-day-hdr-cell{display:flex;align-items:center;justify-content:center;gap:4px;padding:8px 0;font-size:12px;font-weight:500;color:var(--text2)}
 .cal-day-hdr-cell.today-col{color:var(--text)}
 .cal-date-num{width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:50%}
@@ -399,8 +400,8 @@ button{font-family:var(--font)}
 }
 /* Top bar "Tour" button */
 .tour-pill{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px;margin-right:2px;border-radius:8px;
-  border:1px solid rgba(184,245,102,.3);background:rgba(184,245,102,.08);color:var(--green);font:600 12px var(--font);cursor:pointer;transition:background .15s,border-color .15s}
-.tour-pill:hover{background:rgba(184,245,102,.15);border-color:rgba(184,245,102,.5)}
+  border:1px solid rgba(var(--lime-rgb),.3);background:rgba(var(--lime-rgb),.08);color:var(--green);font:600 12px var(--font);cursor:pointer;transition:background .15s,border-color .15s}
+.tour-pill:hover{background:rgba(var(--lime-rgb),.15);border-color:rgba(var(--lime-rgb),.5)}
 .tour-pill svg{width:14px;height:14px}
 /* Mobile bottom tabs + "More" sheet */
 .mtabs,.mmore{display:none}
@@ -428,7 +429,7 @@ button{font-family:var(--font)}
 }
 @media (prefers-reduced-motion: reduce){.mmore-sheet,.mmore{transition:none}}
 </style>
-<link rel="stylesheet" href="/static/brand.css?v=1">
+<link rel="stylesheet" href="/static/brand.css?v=2">
 </head>
 <body>
 
@@ -1112,6 +1113,9 @@ const deltaIcon = d => d>0?'▲':d<0?'▼':'–';
 
 Chart.defaults.color='#52525b';
 Chart.defaults.font.family="'Geist',sans-serif";
+// Current color theme's accent (see static/brand.css + setAccent in Settings)
+function accent(){ return getComputedStyle(document.documentElement).getPropertyValue('--lime').trim()||'#b8f566'; }
+function accentA(a){ const rgb=getComputedStyle(document.documentElement).getPropertyValue('--lime-rgb').trim()||'184,245,102'; return 'rgba('+rgb+','+a+')'; }
 Chart.defaults.font.size=11;
 
 const chartRegistry = {};
@@ -1322,15 +1326,15 @@ function initDashCharts(){
   const nwCtx=document.getElementById('nwChart')?.getContext('2d');
   if(nwCtx){
     const grad=nwCtx.createLinearGradient(0,0,0,180);
-    grad.addColorStop(0,'rgba(184,245,102,0.15)');
-    grad.addColorStop(1,'rgba(184,245,102,0)');
+    grad.addColorStop(0,accentA(0.15));
+    grad.addColorStop(1,accentA(0));
     chartRegistry.nw=new Chart(nwCtx,{
       type:'line',
       data:{
         labels:D.monthLabels,
         datasets:[{
           data:D.netWorthHistory,
-          borderColor:'#b8f566',borderWidth:1.5,
+          borderColor:accent(),borderWidth:1.5,
           backgroundColor:grad,fill:true,
           pointRadius:0,pointHoverRadius:4,
           tension:0.4
@@ -1364,7 +1368,7 @@ function initDashCharts(){
         labels:labels,
         datasets:[{
           data:amounts,
-          backgroundColor:['#b8f566','#60a5fa','#a78bfa','#fbbf24','#f87171'],
+          backgroundColor:[accent(),'#60a5fa','#a78bfa','#fbbf24','#f87171'],
           borderWidth:0,hoverBorderWidth:0
         }]
       },
@@ -1728,24 +1732,6 @@ function pgTransactions(){
   const allCatOpts = ALL_CATS.map(c=>`<option value="${c}">${c}</option>`).join('');
 
   return`
-  <!-- Delete Account Modal -->
-  <div id="delete-modal" style="display:none;opacity:0;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:1000;align-items:center;justify-content:center;transition:opacity .15s">
-    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:28px;width:420px;max-width:95vw;text-align:center">
-      <div style="display:flex;align-items:center;justify-content:center;margin-bottom:16px">
-        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--red)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-      </div>
-      <h3 style="font-size:17px;font-weight:600;color:var(--text);margin-bottom:6px">Delete your account?</h3>
-      <p style="font-size:13px;color:var(--text3);margin-bottom:20px;line-height:1.5">This will permanently delete all your data, including transactions, connections, and settings. This action cannot be undone.</p>
-      <label id="delete-confirm-label" style="display:block;text-align:left;font-size:12px;color:var(--text3);margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em">Type your email to confirm:</label>
-      <input id="delete-confirm-input" type="email" autocomplete="off" style="width:100%;padding:10px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-sm);color:var(--text);font-family:var(--font);font-size:13px;outline:none;margin-bottom:16px" placeholder="your@email.com">
-      <div id="delete-error" style="display:none;margin-bottom:12px;padding:8px 12px;background:var(--red-bg);border:1px solid var(--red-br);border-radius:var(--r-sm);color:var(--red);font-size:12px;text-align:left"></div>
-      <div style="display:flex;gap:10px">
-        <button onclick="closeDeleteModal()" style="flex:1;padding:10px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-sm);color:var(--text2);font-family:var(--font);font-size:13px;font-weight:500;cursor:pointer">Cancel</button>
-        <button id="delete-confirm-btn" onclick="confirmDeleteAccount()" style="flex:1;padding:10px;background:var(--red-bg);border:1px solid var(--red-br);border-radius:var(--r-sm);color:var(--red);font-family:var(--font);font-size:13px;font-weight:600;cursor:pointer">Delete my account</button>
-      </div>
-    </div>
-  </div>
-
   <!-- Rules Modal -->
   <div id="rules-modal" style="display:none;opacity:0;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:999;align-items:center;justify-content:center;transition:opacity .15s">
     <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:24px;width:520px;max-width:95vw;max-height:85vh;overflow-y:auto">
@@ -2250,13 +2236,13 @@ function initSavingsChart(){
     cashflows.push(inc>0?Math.round(inc-exp):null);
   }
   const grad=ctx.createLinearGradient(0,0,0,220);
-  grad.addColorStop(0,'rgba(184,245,102,0.18)');
-  grad.addColorStop(1,'rgba(184,245,102,0)');
+  grad.addColorStop(0,accentA(0.18));
+  grad.addColorStop(1,accentA(0));
   chartRegistry.savings=new Chart(ctx,{
     type:'line',
     data:{labels,datasets:[{
       label:'Savings Rate %',data:rates,
-      borderColor:'#b8f566',borderWidth:2,backgroundColor:grad,fill:true,
+      borderColor:accent(),borderWidth:2,backgroundColor:grad,fill:true,
       pointRadius:3,pointHoverRadius:5,tension:0.4,spanGaps:true
     }]},
     options:{
@@ -3835,6 +3821,27 @@ function pgCalendar(){
 }
 
 // ═══════════════════════════ SETTINGS ═══════════════════════════
+// ── Color themes (styles in static/brand.css) ──
+const ACCENTS=[['lime','Lime','#b8f566'],['mint','Mint','#34d399'],['ocean','Ocean','#38bdf8'],['violet','Violet','#a78bfa'],['sunset','Sunset','#fb923c'],['pink','Pink','#f472b6']];
+const SURFACES=[['graphite','Graphite','#0f0f0f'],['midnight','Midnight','#0b1120'],['black','Black','#000']];
+function currentAccent(){ return document.documentElement.dataset.accent||'lime'; }
+function currentSurface(){ return document.documentElement.dataset.surface||'graphite'; }
+function accentPicker(){
+  return '<div class="swatches" role="radiogroup" aria-label="Accent color">'+ACCENTS.map(([k,n,c])=>
+    `<button class="swatch ${currentAccent()===k?'on':''}" style="--c:${c}" role="radio" aria-checked="${currentAccent()===k}" aria-label="${n}" title="${n}" onclick="setTheme('accent','${k}')"></button>`).join('')+'</div>';
+}
+function surfacePicker(){
+  return '<div class="seg" role="radiogroup" aria-label="Background">'+SURFACES.map(([k,n,c])=>
+    `<button class="${currentSurface()===k?'on':''}" role="radio" aria-checked="${currentSurface()===k}" onclick="setTheme('surface','${k}')"><span class="surface-dot" style="background:${c}"></span>${n}</button>`).join('')+'</div>';
+}
+function setTheme(kind,val){
+  const def = kind==='accent' ? 'lime' : 'graphite';
+  if(val===def) delete document.documentElement.dataset[kind]; else document.documentElement.dataset[kind]=val;
+  try{ val===def ? localStorage.removeItem('fiscit_'+kind) : localStorage.setItem('fiscit_'+kind,val); }catch(e){}
+  const active=document.querySelector('.nav-item.active');
+  navigate(active ? active.dataset.page : 'settings'); // re-render so charts pick up the new colors
+}
+
 function pgSettings(){
   const section=(title,rows)=>`
     <div class="card mb14">
@@ -3873,7 +3880,8 @@ function pgSettings(){
     row('Bill reminders','Upcoming bills 3 days before',tog(true)),
   ].join(''))}
   ${section('Appearance',[
-    row('Theme','Color scheme','<span class="badge b-gray">Dark</span>'),
+    row('Accent color','Highlights, charts and buttons',accentPicker()),
+    row('Background','Graphite, midnight blue or pure black',surfacePicker()),
     row('Compact mode','Reduce spacing for more content',tog(false)),
   ].join(''))}
   ${section('Data',[
@@ -3903,8 +3911,30 @@ function doLogout(){
   });
 }
 
+// Delete-account modal: created on demand so it works from Settings (it used to
+// live inside the Transactions page template, so Settings could never open it).
+const DELETE_MODAL_HTML = `
+  <div id="delete-modal" style="display:none;opacity:0;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:1000;align-items:center;justify-content:center;transition:opacity .15s">
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:28px;width:420px;max-width:95vw;text-align:center">
+      <div style="display:flex;align-items:center;justify-content:center;margin-bottom:16px">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--red)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      </div>
+      <h3 style="font-size:17px;font-weight:600;color:var(--text);margin-bottom:6px">Delete your account?</h3>
+      <p style="font-size:13px;color:var(--text3);margin-bottom:20px;line-height:1.5">This will permanently delete all your data, including transactions, connections, and settings. This action cannot be undone.</p>
+      <label id="delete-confirm-label" style="display:block;text-align:left;font-size:12px;color:var(--text3);margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em">Type your email to confirm:</label>
+      <input id="delete-confirm-input" type="email" autocomplete="off" style="width:100%;padding:10px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-sm);color:var(--text);font-family:var(--font);font-size:13px;outline:none;margin-bottom:16px" placeholder="your@email.com">
+      <div id="delete-error" style="display:none;margin-bottom:12px;padding:8px 12px;background:var(--red-bg);border:1px solid var(--red-br);border-radius:var(--r-sm);color:var(--red);font-size:12px;text-align:left"></div>
+      <div style="display:flex;gap:10px">
+        <button onclick="closeDeleteModal()" style="flex:1;padding:10px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-sm);color:var(--text2);font-family:var(--font);font-size:13px;font-weight:500;cursor:pointer">Cancel</button>
+        <button id="delete-confirm-btn" onclick="confirmDeleteAccount()" style="flex:1;padding:10px;background:var(--red-bg);border:1px solid var(--red-br);border-radius:var(--r-sm);color:var(--red);font-family:var(--font);font-size:13px;font-weight:600;cursor:pointer">Delete my account</button>
+      </div>
+    </div>
+  </div>
+`;
+
 function showDeleteModal(){
   const email = (D.userEmail||'').trim();
+  if(!document.getElementById('delete-modal')) document.body.insertAdjacentHTML('beforeend', DELETE_MODAL_HTML);
   const m=document.getElementById('delete-modal');
   m.style.display='flex';
   setTimeout(()=>m.style.opacity='1',10);
@@ -3949,7 +3979,9 @@ function confirmDeleteAccount(){
     return r.json();
   }).then(d=>{
     if(d.ok){
-      window.location.href='/login';
+      try{ Object.keys(localStorage).filter(k=>/^(fiscit|vault)_/.test(k)).forEach(k=>localStorage.removeItem(k)); }catch(e){}
+      // Also end the fiscit.com session, which then lands on the home page
+      window.location.href='https://fiscit.com/api/auth/logout';
     }else{
       errEl.textContent=d.error||'Delete failed. Please try again.';
       errEl.style.display='block';

@@ -16,7 +16,7 @@
 
 /* Background: faint grid fading out, plus a slow lime glow behind the top */
 body{background:var(--bg)}
-.main{position:relative;isolation:isolate}
+.main{position:relative;isolation:isolate;overflow:clip} /* the glow below must not make .main scrollable */
 .main::before{content:'';position:absolute;inset:0;z-index:-1;pointer-events:none;
   background-image:linear-gradient(rgba(255,255,255,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.03) 1px,transparent 1px);
   background-size:64px 64px;-webkit-mask-image:radial-gradient(ellipse 80% 55% at 50% 0%,#000 25%,transparent 75%);mask-image:radial-gradient(ellipse 80% 55% at 50% 0%,#000 25%,transparent 75%)}
@@ -112,3 +112,33 @@ body{background:var(--bg)}
   .metric:hover,.acc-card:hover,.insight:hover,.btn-primary:hover{transform:none}
   .nav-item::before,.pfill{transition:none}
 }
+
+/* ═══════════ Color themes (Settings → Appearance) ═══════════
+   Accent: html[data-accent]; background: html[data-surface]. Applied before
+   first paint by the inline script in vault.html's <head>. */
+html[data-accent="mint"]  {--lime:#34d399;--lime-rgb:52,211,153}
+html[data-accent="ocean"] {--lime:#38bdf8;--lime-rgb:56,189,248}
+html[data-accent="violet"]{--lime:#a78bfa;--lime-rgb:167,139,250}
+html[data-accent="sunset"]{--lime:#fb923c;--lime-rgb:251,146,60}
+html[data-accent="pink"]  {--lime:#f472b6;--lime-rgb:244,114,182}
+
+html[data-surface="midnight"]{--bg:#060912;--bg2:#0b1120;--bg3:#111a2c;--bg4:#172238;--bg5:#203049;--border:#18223a;--border2:#111a2c;--border-strong:#243250;--text2:#8b95ab;--text3:#5b6680}
+html[data-surface="midnight"] .sidebar{background:rgba(9,13,24,.85)}
+html[data-surface="midnight"] .topbar{background:rgba(6,9,18,.72)}
+html[data-surface="black"]{--bg:#000;--bg2:#070707;--bg3:#0e0e0e;--bg4:#151515;--bg5:#1f1f1f;--border:#171717;--border2:#0f0f0f;--border-strong:#232323}
+html[data-surface="black"] .sidebar{background:rgba(4,4,4,.88)}
+html[data-surface="black"] .topbar{background:rgba(0,0,0,.72)}
+html[data-surface="black"] .main::after{opacity:.6}
+
+/* Appearance pickers */
+.swatches{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.swatch{position:relative;width:28px;height:28px;border-radius:50%;border:2px solid var(--bg2);background:var(--c);cursor:pointer;
+  box-shadow:0 0 0 1px var(--border-strong);transition:transform .2s var(--ease),box-shadow .2s}
+.swatch:hover{transform:scale(1.1)}
+.swatch.on{box-shadow:0 0 0 2px var(--c),0 0 14px rgba(255,255,255,.08)}
+.swatch.on::after{content:'';position:absolute;left:50%;top:46%;width:5px;height:9px;border:solid #080808;border-width:0 2px 2px 0;transform:translate(-50%,-50%) rotate(45deg)}
+.seg{display:inline-flex;gap:2px;padding:3px;border-radius:10px;background:var(--bg3);border:1px solid var(--border)}
+.seg button{padding:6px 12px;border:none;border-radius:8px;background:none;color:var(--text2);font:500 12px var(--font);cursor:pointer;transition:background .15s,color .15s}
+.seg button.on{background:var(--bg5);color:var(--text)}
+.surface-dot{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px;border:1px solid rgba(255,255,255,.15)}
+@media(max-width:700px){.swatches{justify-content:flex-start}}
