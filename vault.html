@@ -9,7 +9,8 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="/static/feather.min.js"></script>
-<script src="/static/tour.js?v=2" defer></script>
+<script src="/static/tour-demo.js?v=4" defer></script>
+<script src="/static/tour.js?v=4" defer></script>
 <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
 <style>
 :root {
@@ -389,10 +390,42 @@ button{font-family:var(--font)}
 @media(max-width:700px){
   :root{--sidebar:0px}
   .sidebar{display:none}
-  .content{padding:20px 16px}
+  .content{padding:20px 16px calc(96px + env(safe-area-inset-bottom))}
   .topbar{padding:0 16px}
   .metrics-row{grid-template-columns:1fr 1fr}
+  #header-clock,#sync-ts{display:none}
+  .tour-pill span{display:none}
 }
+/* Top bar "Tour" button */
+.tour-pill{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px;margin-right:2px;border-radius:8px;
+  border:1px solid rgba(74,222,128,.3);background:rgba(74,222,128,.08);color:var(--green);font:600 12px var(--font);cursor:pointer;transition:background .15s,border-color .15s}
+.tour-pill:hover{background:rgba(74,222,128,.15);border-color:rgba(74,222,128,.5)}
+.tour-pill svg{width:14px;height:14px}
+/* Mobile bottom tabs + "More" sheet */
+.mtabs,.mmore{display:none}
+@media(max-width:700px){
+  .mtabs{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:900;padding:6px 6px calc(6px + env(safe-area-inset-bottom));
+    background:rgba(10,10,10,.92);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-top:1px solid var(--border)}
+  .mtab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:7px 0 5px;border:none;background:none;border-radius:10px;
+    color:var(--text3);font:500 10px var(--font);cursor:pointer;-webkit-tap-highlight-color:transparent;transition:color .15s}
+  .mtab svg{width:20px;height:20px;transition:transform .2s}
+  .mtab.active{color:var(--green)}
+  .mtab.active svg{transform:translateY(-1px)}
+  .mmore{display:block;position:fixed;inset:0;z-index:950;background:rgba(0,0,0,0);pointer-events:none;transition:background .25s}
+  .mmore.open{background:rgba(0,0,0,.6);pointer-events:auto}
+  .mmore-sheet{position:absolute;left:0;right:0;bottom:0;padding:10px 16px calc(84px + env(safe-area-inset-bottom));
+    background:var(--bg2);border-top:1px solid var(--border);border-radius:20px 20px 0 0;transform:translateY(100%);transition:transform .3s cubic-bezier(.16,1,.3,1)}
+  .mmore.open .mmore-sheet{transform:none}
+  .mmore-grip{width:36px;height:4px;border-radius:2px;background:var(--bg3);margin:0 auto 10px}
+  .mmore-label{font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);margin:12px 2px 8px}
+  .mmore-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+  .mmore-grid button,.mmore-row button{display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px 4px;border-radius:12px;
+    background:var(--bg3);border:1px solid var(--border);color:var(--text2);font:500 11px var(--font);cursor:pointer}
+  .mmore-grid button svg,.mmore-row button svg{width:18px;height:18px;color:var(--text)}
+  .mmore-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}
+  .mmore-row button{flex-direction:row;justify-content:center}
+}
+@media (prefers-reduced-motion: reduce){.mmore-sheet,.mmore{transition:none}}
 </style>
 </head>
 <body>
@@ -479,7 +512,7 @@ button{font-family:var(--font)}
       <div class="sync-dot" title="Live sync" id="sync-dot"></div>
       <span id="sync-ts" style="font-size:11px;color:var(--text3);margin-right:4px"></span>
       <span id="header-clock" style="font-size:12px;color:var(--text2);font-variant-numeric:tabular-nums;font-weight:500;margin-right:2px"></span>
-      <button class="icon-btn" title="Take the tour" onclick="window.FiscitTour&&FiscitTour.start()" id="tour-btn"><svg data-feather="help-circle"></svg></button>
+      <button class="tour-pill" title="Take the guided tour" onclick="window.FiscitTour&&FiscitTour.start()" id="tour-btn"><svg data-feather="map"></svg><span>Tour</span></button>
       <button class="icon-btn" title="Refresh data" onclick="doRefresh()" id="refresh-btn"><svg data-feather="refresh-cw"></svg></button>
       <div style="position:relative;display:inline-block">
         <button class="icon-btn" title="Notifications" onclick="toggleNotifDropdown()"><svg data-feather="bell"></svg></button>
@@ -494,6 +527,42 @@ button{font-family:var(--font)}
   <main class="content" id="content">
     <!-- rendered by JS -->
   </main>
+</div>
+
+<!-- ══════════════════════ MOBILE TABS ══════════════════════ -->
+<nav class="mtabs" aria-label="Main">
+  <button class="mtab active" data-mpage="dashboard" onclick="navigate('dashboard')"><svg data-feather="home"></svg><span>Home</span></button>
+  <button class="mtab" data-mpage="transactions" onclick="navigate('transactions')"><svg data-feather="list"></svg><span>Activity</span></button>
+  <button class="mtab" data-mpage="budget" onclick="navigate('budget')"><svg data-feather="pie-chart"></svg><span>Budget</span></button>
+  <button class="mtab" data-mpage="accounts" onclick="navigate('accounts')"><svg data-feather="credit-card"></svg><span>Accounts</span></button>
+  <button class="mtab" data-more onclick="toggleMore()" aria-haspopup="dialog" aria-controls="mmore"><svg data-feather="grid"></svg><span>More</span></button>
+</nav>
+<div class="mmore" id="mmore" onclick="if(event.target===this)toggleMore(false)">
+  <div class="mmore-sheet" role="dialog" aria-label="More pages">
+    <div class="mmore-grip"></div>
+    <div class="mmore-label">Overview</div>
+    <div class="mmore-grid">
+      <button onclick="navigate('insights')"><svg data-feather="bar-chart-2"></svg>Insights</button>
+      <button onclick="navigate('savings')"><svg data-feather="percent"></svg>Savings</button>
+      <button onclick="navigate('subscriptions')"><svg data-feather="repeat"></svg>Subs</button>
+    </div>
+    <div class="mmore-label">Money</div>
+    <div class="mmore-grid">
+      <button onclick="navigate('investments')"><svg data-feather="trending-up"></svg>Investments</button>
+      <button onclick="navigate('crypto')"><svg data-feather="hexagon"></svg>Crypto</button>
+    </div>
+    <div class="mmore-label">Life</div>
+    <div class="mmore-grid">
+      <button onclick="navigate('gym')"><svg data-feather="activity"></svg>Gym</button>
+      <button onclick="navigate('eating')"><svg data-feather="coffee"></svg>Eating</button>
+      <button onclick="navigate('habits')"><svg data-feather="circle"></svg>Habits</button>
+      <button onclick="navigate('calendar')"><svg data-feather="calendar"></svg>Calendar</button>
+    </div>
+    <div class="mmore-row">
+      <button onclick="navigate('settings')"><svg data-feather="settings"></svg>Settings</button>
+      <button onclick="toggleMore(false);FiscitTour.start()"><svg data-feather="map"></svg>Guided tour</button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -1051,6 +1120,12 @@ function navigate(page){
   document.querySelectorAll('.nav-item').forEach(el=>{
     el.classList.toggle('active',el.dataset.page===page);
   });
+  // Mobile bottom tabs: pages outside the bar light up "More"
+  const inBar=!!document.querySelector('.mtabs [data-mpage="'+page+'"]');
+  document.querySelectorAll('.mtabs .mtab').forEach(el=>{
+    el.classList.toggle('active', el.dataset.mpage===page || (el.hasAttribute('data-more') && !inBar));
+  });
+  toggleMore(false);
   const now = new Date();
   const nowStr = now.toLocaleString('en',{month:'long',year:'numeric'});
   const titles={dashboard:'Dashboard',accounts:'Accounts',transactions:'Transactions',
@@ -1074,6 +1149,12 @@ function navigate(page){
     if(page==='transactions') filterTxns();
     feather.replace({width:14,height:14});
   });
+}
+
+function toggleMore(open){
+  const m=document.getElementById('mmore');
+  if(!m) return;
+  m.classList.toggle('open', open===undefined ? !m.classList.contains('open') : open);
 }
 
 function renderPage(p){
@@ -2287,16 +2368,16 @@ function pgSubscriptions(){
 
 // ═══════════════════════════ INSIGHTS ═══════════════════════════
 function pgInsights(){
-  const insights=[
-    {ico:'plus',bg:'var(--green-bg)',title:'Net worth increased $1,890 this month',body:'Your net worth is up 2.2% from May. This is driven by investment growth of $1,200 and a positive cash flow of $2,562.',type:'positive'},
-    {ico:'coffee',bg:'var(--red-bg)',title:'Dining out is 6% over your budget',body:'You spent $265 on dining this month vs your $250 limit. You have 27 days left in June — consider cooking at home 2 more times this week.',type:'warning'},
-    {ico:'package',bg:'var(--yellow-bg)',title:'Shopping increased 34% vs last month',body:'Your shopping spending jumped from $235 to $315. Amazon and Simons account for most of the increase.',type:'warning'},
-    {ico:'dollar-sign',bg:'var(--blue-bg)',title:'You are on track to save $2,562 this month',body:'Based on your income of $6,800 and current spending of $4,238, you will save approximately $2,562 — 37.7% of income.',type:'positive'},
-    {ico:'refresh-cw',bg:'var(--bg3)',title:'Subscription cost: $89/month across 2 services',body:'Netflix ($22.99) and Spotify ($15.99) are your main subscriptions. Your subscription budget of $100 is at 89% usage.',type:'neutral'},
-    {ico:'zap',bg:'var(--bg3)',title:'Hydro-Québec was $112 — slightly above average',body:'Your electricity bill was $8 above your 3-month average. This may be due to heating. Your budget is $130 so you are still within range.',type:'neutral'},
-    {ico:'zap',bg:'var(--green-bg)',title:'Gym consistency is strong this month',body:'You have worked out 18 times in the last 30 days. Your current streak is 8 days. Keep it up.',type:'positive'},
-    {ico:'bar-chart-2',bg:'var(--blue-bg)',title:'Connect your investment accounts',body:'Link Wealthsimple, Questrade, or other platforms to see your portfolio performance.',type:'neutral'},
-  ];
+  // Example insights exist only for the guided tour; real ones are not built yet.
+  if(!window.FISCIT_TOUR_ACTIVE){
+    return`
+  <div class="card" style="text-align:center;padding:48px 24px">
+    <svg data-feather="bar-chart-2" style="width:40px;height:40px;margin:0 auto 12px;color:var(--text3)"></svg>
+    <h3 style="color:var(--text);margin-bottom:6px">Insights are coming</h3>
+    <p style="color:var(--text3);font-size:13px;max-width:340px;margin:0 auto">Once you have a couple of months of transactions, Fiscit will point out what changed in your spending and where to look.</p>
+  </div>`;
+  }
+  const insights=window.FISCIT_DEMO_INSIGHTS||[];
 
   const cards=insights.map(i=>`
     <div class="insight" style="${i.type==='positive'?'border-color:var(--green-br)':i.type==='warning'?'border-color:var(--red-br)':''}">

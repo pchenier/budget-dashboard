@@ -333,6 +333,10 @@ with app.app_context():
             db.session.execute(text('ALTER TABLE users ADD COLUMN google_id VARCHAR(255) UNIQUE'))
             db.session.commit()
             print("  Migrated: added users.google_id")
+        if 'tour_seen' not in existing_cols:
+            db.session.execute(text('ALTER TABLE users ADD COLUMN tour_seen BOOLEAN NOT NULL DEFAULT FALSE'))
+            db.session.commit()
+            print("  Migrated: added users.tour_seen")
         if 'email_confirmed' not in existing_cols:
             db.session.execute(text("ALTER TABLE users ADD COLUMN email_confirmed BOOLEAN NOT NULL DEFAULT TRUE"))
             db.session.commit()
@@ -1347,6 +1351,14 @@ def api_onboarding_reset():
     db.session.commit()
     return jsonify({'ok': True})
 
+@app.route('/api/tour/seen', methods=['POST'])
+@api_auth_required
+def api_tour_seen():
+    """Remember that the guided tour was offered (taken or skipped)."""
+    current_user.model.tour_seen = True
+    db.session.commit()
+    return jsonify({'ok': True})
+
 @app.route('/api/status')
 @api_auth_required
 def api_status():
@@ -1378,6 +1390,7 @@ def api_data():
             'userName': current_user.model.name or '',
             'userEmail': current_user.model.email or '',
             'onboarded': current_user.model.onboarded,
+            'tourSeen': current_user.model.tour_seen,
         })
     # Normalize field names to match vault.html mock format
     result = _normalize_api_data(data)
@@ -1385,6 +1398,7 @@ def api_data():
     result['userName'] = current_user.model.name or ''
     result['userEmail'] = current_user.model.email or ''
     result['onboarded'] = current_user.model.onboarded
+    result['tourSeen'] = current_user.model.tour_seen
     return jsonify(result)
 
 @app.route('/api/refresh', methods=['POST'])

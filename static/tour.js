@@ -4,13 +4,18 @@
   const DONE_KEY = 'fiscit_tour_v1';
   const MOBILE_MAX = 700;
 
-  const nav = (page) => `.nav-item[data-page="${page}"]`;
-  const group = (page) => () => document.querySelector(nav(page))?.closest('.nav-group');
+  // On mobile the sidebar is hidden: point at the bottom tab instead, or at
+  // "More" for pages that live in the More sheet.
+  const mobileTab = (page) =>
+    document.querySelector(`.mtabs [data-mpage="${page}"]`) || document.querySelector('.mtabs [data-more]');
+  const nav = (page) => () => (isMobile() ? mobileTab(page) : document.querySelector(`.nav-item[data-page="${page}"]`));
+  const group = (page) => () =>
+    isMobile() ? mobileTab(page) : document.querySelector(`.nav-item[data-page="${page}"]`)?.closest('.nav-group');
 
   const STEPS = [
     {
-      title: 'Welcome to Fiscit 👋',
-      body: 'A one-minute tour of every tab. Use the arrow keys or the buttons below — you can leave anytime with Esc.',
+      title: 'This is example data',
+      body: 'During the tour every page is filled with a sample account so you can see how it looks. Your real numbers come back as soon as the tour ends.',
       page: 'dashboard',
     },
     {
@@ -61,7 +66,7 @@
     {
       target: ['#sync-dot', '#sync-ts', '#refresh-btn'], page: 'dashboard',
       title: 'Sync status',
-      body: 'The green dot means your data is live. Hit refresh to pull the latest from your banks right now — and the ? button replays this tour anytime.',
+      body: 'The green dot means your data is live. Hit refresh to pull the latest from your banks right now — and the Tour button replays this walkthrough anytime.',
     },
     {
       target: '.icon-btn[title="Search transactions"]',
@@ -82,14 +87,43 @@
   ];
 
   let i = 0;
-  let root, spot, card, onKey, onResize, raf;
+  let root, spot, card, badge, onKey, onResize, raf;
+  let realData = null;
+  let realConnected = false;
 
-  const isMobile = () => window.innerWidth <= MOBILE_MAX;
+  function isMobile() { return window.innerWidth <= MOBILE_MAX; }
   const reduced = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   function hasConnections() {
     const c = (window.D && D.connections) || {};
     return !!(c.plaid || c.wise || (D.wallets || []).length || (D.accounts || []).length);
+  }
+
+  // ── Example data: swapped into D for the tour only, then restored ──
+  function useDemoData() {
+    if (realData || typeof window.buildFiscitDemo !== 'function') return;
+    realConnected = hasConnections();
+    realData = JSON.parse(JSON.stringify(D));
+    const demo = window.buildFiscitDemo();
+    demo.userName = realData.userName;
+    demo.userEmail = realData.userEmail;
+    Object.keys(D).forEach((k) => delete D[k]);
+    Object.assign(D, demo);
+    window.FISCIT_TOUR_ACTIVE = true;
+  }
+
+  function restoreRealData() {
+    window.FISCIT_TOUR_ACTIVE = false;
+    if (!realData) return;
+    Object.keys(D).forEach((k) => delete D[k]);
+    Object.assign(D, realData);
+    realData = null;
+  }
+
+  function markSeen() {
+    try { localStorage.setItem(DONE_KEY, '1'); } catch (e) {}
+    const headers = typeof csrfHeaders === 'function' ? csrfHeaders() : {};
+    fetch('/api/tour/seen', { method: 'POST', headers, credentials: 'include' }).catch(() => {});
   }
 
   function resolveTargets(step) {
@@ -148,10 +182,32 @@
 #tour-card button:focus{outline:none}
 #tour-card button:focus-visible{outline:2px solid rgba(255,255,255,.55);outline-offset:2px}
 #tour-card .t-keys{font-size:11px;color:var(--text3)}
-#tour-card.t-sheet{left:12px!important;right:12px;bottom:12px;top:auto!important;width:auto;max-width:none}
+#tour-card.t-sheet{left:12px!important;right:12px;bottom:calc(84px + env(safe-area-inset-bottom));top:auto!important;width:auto;max-width:none}
 #tour-card.t-center{left:50%!important;top:50%!important;transform:translate(-50%,-50%)}
 #tour-card.t-center.t-enter{transform:translate(-50%,-48%) scale(.98)}
-@media (prefers-reduced-motion: reduce){#tour-spot,#tour-card,#tour-card .t-fill{transition:none}#tour-spot::after{animation:none}}
+#tour-badge{position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:10001;pointer-events:none;
+  background:rgba(250,204,21,.12);color:#facc15;border:1px solid rgba(250,204,21,.35);border-radius:999px;
+  padding:4px 12px;font:600 11px var(--font);letter-spacing:.06em;text-transform:uppercase;backdrop-filter:blur(8px)}
+#tour-prompt{position:fixed;inset:0;z-index:10002;display:flex;align-items:center;justify-content:center;padding:16px;
+  background:rgba(0,0,0,.78);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);animation:tpIn .25s ease}
+#tour-prompt.tp-out{opacity:0;transition:opacity .18s}
+#tour-prompt .tp-card{width:100%;max-width:420px;background:var(--bg2);border:1px solid rgba(255,255,255,.1);border-radius:18px;
+  padding:32px 28px 22px;text-align:center;font-family:var(--font);color:var(--text);box-shadow:0 30px 80px rgba(0,0,0,.6);animation:tpCard .4s cubic-bezier(.16,1,.3,1)}
+#tour-prompt .tp-ico{width:56px;height:56px;margin:0 auto 16px;border-radius:16px;display:flex;align-items:center;justify-content:center;
+  background:rgba(74,222,128,.12);color:var(--green);box-shadow:0 0 0 6px rgba(74,222,128,.05)}
+#tour-prompt h2{font-size:20px;font-weight:600;margin:0 0 8px;letter-spacing:-.01em}
+#tour-prompt p{font-size:13px;line-height:1.6;color:var(--text2);margin:0 0 22px}
+#tour-prompt .tp-actions{display:flex;gap:10px;flex-wrap:wrap-reverse}
+#tour-prompt .tp-btn{flex:1 1 150px;font-family:var(--font);font-size:13px;border-radius:10px;padding:11px 14px;cursor:pointer;border:1px solid var(--border)}
+#tour-prompt .tp-skip{background:none;color:var(--text2)}
+#tour-prompt .tp-skip:hover{color:var(--text);border-color:rgba(255,255,255,.18)}
+#tour-prompt .tp-go{background:var(--green);border-color:var(--green);color:#000;font-weight:600}
+#tour-prompt .tp-btn:focus{outline:none}
+#tour-prompt .tp-btn:focus-visible{outline:2px solid rgba(255,255,255,.55);outline-offset:2px}
+#tour-prompt .tp-hint{margin-top:14px;font-size:11px;color:var(--text3)}
+@keyframes tpIn{from{opacity:0}to{opacity:1}}
+@keyframes tpCard{from{opacity:0;transform:translateY(10px) scale(.97)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion: reduce){#tour-spot,#tour-card,#tour-card .t-fill{transition:none}#tour-spot::after,#tour-prompt,#tour-prompt .tp-card{animation:none}}
 @media (max-width:${MOBILE_MAX}px){#tour-card .t-keys{display:none}}`;
     document.head.appendChild(css);
   }
@@ -179,13 +235,13 @@
   function cardHTML(step) {
     const total = STEPS.length;
     if (step.final) {
-      const connected = hasConnections();
+      const connected = realConnected;
       return `
         <div class="t-top"><span class="t-count">DONE</span><button class="t-x" aria-label="Close tour">×</button></div>
         <h3 id="tour-title">You're all set 🎉</h3>
         <p id="tour-body">${connected
-          ? 'Your accounts are connected — Fiscit keeps everything in sync from here. Replay this tour anytime from the ? button at the top.'
-          : 'Next step: connect your bank so these pages fill up with your real numbers. It takes about a minute.'}</p>
+          ? 'Your accounts are connected — your real numbers are back on screen. Replay this tour anytime with the Tour button at the top.'
+          : 'Next step: connect your bank so these pages fill up with your real numbers. It takes about a minute. You can replay this tour anytime with the Tour button at the top.'}</p>
         <div class="t-bar"><div class="t-fill" style="width:100%"></div></div>
         <div class="t-actions">
           ${connected ? '<span></span>' : '<button class="t-btn t-ghost" data-act="end">Later</button>'}
@@ -291,29 +347,80 @@
   function back() { if (i > 0) { i--; show(); } }
 
   function end() {
-    try { localStorage.setItem(DONE_KEY, '1'); } catch (e) {}
+    markSeen();
     document.removeEventListener('keydown', onKey, true);
     window.removeEventListener('resize', onResize);
-    if (!root) return;
-    const r = root;
-    root = null;
-    r.style.transition = 'opacity .2s';
-    r.style.opacity = '0';
-    setTimeout(() => r.remove(), 200);
+    restoreRealData();
+    if (typeof navigate === 'function') navigate('dashboard');
+    [root, badge].forEach((el) => {
+      if (!el) return;
+      el.style.transition = 'opacity .2s';
+      el.style.opacity = '0';
+      setTimeout(() => el.remove(), 200);
+    });
+    root = badge = null;
+  }
+
+  function showBadge() {
+    badge = document.createElement('div');
+    badge.id = 'tour-badge';
+    badge.textContent = 'Example data · Tour';
+    document.body.appendChild(badge);
   }
 
   function start() {
     if (root) return;
+    document.getElementById('tour-prompt')?.remove();
     i = 0;
+    useDemoData();
     build();
+    showBadge();
+    if (typeof navigate === 'function') navigate(STEPS[0].page); // re-render with example data
     show();
   }
 
-  function maybeStart() {
-    let done = false;
-    try { done = localStorage.getItem(DONE_KEY) === '1'; } catch (e) {}
-    if (!done && !document.getElementById('onboard-overlay')) setTimeout(start, 600);
+  // First visit: offer the tour; skipping goes straight to the dashboard.
+  function offer() {
+    if (document.getElementById('tour-prompt') || root) return;
+    injectStyles();
+    const p = document.createElement('div');
+    p.id = 'tour-prompt';
+    p.innerHTML = `
+      <div class="tp-card" role="dialog" aria-modal="true" aria-labelledby="tp-title">
+        <div class="tp-ico">${typeof ico === 'function' ? ico('map', 26) : ''}</div>
+        <h2 id="tp-title">Take the guided tour?</h2>
+        <p>One minute, every tab explained — shown with example data so you can see what Fiscit does before your accounts fill in.</p>
+        <div class="tp-actions">
+          <button class="tp-btn tp-skip" data-act="skip">Skip for now</button>
+          <button class="tp-btn tp-go" data-act="go">Take the tour</button>
+        </div>
+        <div class="tp-hint">You can replay it anytime with the Tour button at the top.</div>
+      </div>`;
+    document.body.appendChild(p);
+    if (window.feather) feather.replace({ width: 26, height: 26 });
+    const close = (go) => {
+      document.removeEventListener('keydown', key, true);
+      p.classList.add('tp-out');
+      setTimeout(() => p.remove(), 180);
+      if (go) start(); else markSeen();
+    };
+    const key = (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); close(false); }
+      if (e.key === 'Enter') { e.preventDefault(); close(true); }
+    };
+    document.addEventListener('keydown', key, true);
+    p.querySelector('[data-act="go"]').onclick = () => close(true);
+    p.querySelector('[data-act="skip"]').onclick = () => close(false);
+    p.querySelector('[data-act="go"]').focus();
   }
 
-  window.FiscitTour = { start, maybeStart };
+  function maybeStart() {
+    let seenHere = false;
+    try { seenHere = localStorage.getItem(DONE_KEY) === '1'; } catch (e) {}
+    // The server flag follows the user across devices; localStorage covers a failed save.
+    const seen = (window.D && D.tourSeen) || seenHere;
+    if (!seen && !document.getElementById('onboard-overlay')) setTimeout(offer, 500);
+  }
+
+  window.FiscitTour = { start, offer, maybeStart };
 })();
