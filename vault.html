@@ -1183,8 +1183,18 @@ function pgDashboard(){
   const allTxns = applyOverrides(applyRules(D.txns));
   const txns = allTxns.filter(t => !EXCLUDED_CATS.has(t.cat));
 
-  const income   = txns.filter(t=>t.amt>0).reduce((s,t)=>s+t.amt,0) || D.income;
-  const spending = txns.filter(t=>t.amt<0).reduce((s,t)=>s+Math.abs(t.amt),0) || D.spending;
+  // Monthly cards cover the current calendar month only (D.txns spans several months)
+  const now = new Date();
+  const ym = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+  const monthTxns = txns.filter(t=>{
+    const raw = t.date_iso || t.date || '';
+    if(/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0,7)===ym;
+    const d = new Date(raw);
+    return !isNaN(d) && d.getFullYear()===now.getFullYear() && d.getMonth()===now.getMonth();
+  });
+  // No transactions loaded at all → fall back to the server's current-month figures
+  const income   = allTxns.length ? monthTxns.filter(t=>t.amt>0).reduce((s,t)=>s+t.amt,0) : (D.income||0);
+  const spending = allTxns.length ? monthTxns.filter(t=>t.amt<0).reduce((s,t)=>s+Math.abs(t.amt),0) : (D.spending||0);
   const cashFlow = income - spending;
 
   const txn5 = allTxns.slice(0,5).map(t=>{
