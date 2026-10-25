@@ -9,6 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="/static/feather.min.js"></script>
+<script src="/static/tour.js?v=2" defer></script>
 <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
 <style>
 :root {
@@ -478,6 +479,7 @@ button{font-family:var(--font)}
       <div class="sync-dot" title="Live sync" id="sync-dot"></div>
       <span id="sync-ts" style="font-size:11px;color:var(--text3);margin-right:4px"></span>
       <span id="header-clock" style="font-size:12px;color:var(--text2);font-variant-numeric:tabular-nums;font-weight:500;margin-right:2px"></span>
+      <button class="icon-btn" title="Take the tour" onclick="window.FiscitTour&&FiscitTour.start()" id="tour-btn"><svg data-feather="help-circle"></svg></button>
       <button class="icon-btn" title="Refresh data" onclick="doRefresh()" id="refresh-btn"><svg data-feather="refresh-cw"></svg></button>
       <div style="position:relative;display:inline-block">
         <button class="icon-btn" title="Notifications" onclick="toggleNotifDropdown()"><svg data-feather="bell"></svg></button>
@@ -3785,6 +3787,7 @@ function pgSettings(){
     row('Export data','Download all your financial data','<button class="btn btn-ghost btn-sm"><svg data-feather="save"></svg> Export CSV</button>'),
     row('Sync now','Force refresh all accounts','<button class="btn btn-ghost btn-sm" onclick="doRefresh()"><svg data-feather="refresh-cw"></svg> Sync</button>'),
     row('Delete account','Permanently delete all data','<button class=\"btn btn-sm\" style=\"background:var(--red-bg);color:var(--red);border:1px solid var(--red-br)\" onclick=\"showDeleteModal()\">Delete</button>'),
+    row('Product tour','Step-by-step walkthrough of every tab','<button class="btn btn-ghost btn-sm" onclick="FiscitTour.start()"><svg data-feather="map"></svg> Start tour</button>'),
     row('Replay onboarding','Walk through the intro tour again','<button class="btn btn-ghost btn-sm" onclick="replayOnboarding()"><svg data-feather="play-circle"></svg> Replay</button>'),
     row('Sign out','Log out of your account','<button class="btn btn-ghost btn-sm" onclick="doLogout()"><svg data-feather="log-out" style="width:14px;height:14px;vertical-align:middle;margin-right:4px"></svg> Sign out</button>'),
   ].join(''))}`;
@@ -3870,6 +3873,7 @@ function confirmDeleteAccount(){
 
 function replayOnboarding(){
   localStorage.removeItem(ONBOARDED_KEY);
+  localStorage.removeItem('fiscit_tour_v1');
   fetch('/api/onboarding/reset',{method:'POST',headers:csrfHeaders(),credentials:'include'}).then(()=>{
     location.reload();
   }).catch(()=>{
@@ -4368,7 +4372,6 @@ function showOnboarding(){
   const STEPS = [
     {id:'welcome'},
     {id:'profile'},
-    {id:'tour'},
     {id:'done'},
   ];
 
@@ -4496,6 +4499,7 @@ function showOnboarding(){
     setInterval(updateHeaderClock,30000);
     document.addEventListener('click',closeNotifDropdown);
     loadRealData();
+    if(window.FiscitTour) FiscitTour.maybeStart();
   }
 
   nextBtn.onclick = ()=>{
@@ -4587,6 +4591,7 @@ document.addEventListener('DOMContentLoaded',()=>{
       setInterval(updateHeaderClock,30000);
       document.addEventListener('click',closeNotifDropdown);
       feather.replace({width:14,height:14});
+      if(window.FiscitTour) FiscitTour.maybeStart();
     }
   }).catch(()=>{
     // Network error — still show something
