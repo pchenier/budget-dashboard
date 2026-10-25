@@ -1139,19 +1139,29 @@ def sso():
     """Accept a JWT token from fiscit.com and create a Flask session."""
     token = request.args.get('token')
     if not token:
+        app.logger.warning('SSO rejected: no token')
         return redirect(url_for('login'))
     try:
         payload = pyjwt.decode(token, JWT_SECRET, algorithms=['HS256'])
         user_id = payload.get('sub')
         if not user_id:
+            app.logger.warning('SSO rejected: token has no sub')
             return redirect(url_for('login'))
         user = db.session.get(UserModel, int(user_id))
         if not user:
+            app.logger.warning('SSO rejected: user %s not found', user_id)
             return redirect(url_for('login'))
         session.permanent = True
         login_user(FlaskUser(user), remember=True)
         return redirect(url_for('index'))
-    except Exception:
+    except pyjwt.ExpiredSignatureError:
+        app.logger.warning('SSO rejected: token expired')
+        return redirect(url_for('login'))
+    except pyjwt.InvalidSignatureError:
+        app.logger.warning('SSO rejected: bad signature (JWT_SECRET differs between Vercel and Railway?)')
+        return redirect(url_for('login'))
+    except Exception as e:
+        app.logger.warning('SSO rejected: %s', type(e).__name__)
         return redirect(url_for('login'))
 
 # ── Google OAuth routes ──────────────────────────────────────────────────────
