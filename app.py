@@ -449,6 +449,15 @@ def build_vault_html(data, user=None):
 
     return html
 
+def _investment_js(a):
+    """Manual investment account -> the shape vault.html's Investments page renders."""
+    label = a.label or a.platform
+    return {
+        'id': a.id, 'platform': a.platform, 'label': label, 'balance': a.balance,
+        'name': a.platform if label == a.platform else f"{label} · {a.platform}",
+        'ticker': label[:4].upper(), 'val': a.balance, 'pct': 0, 'color': '#3b82f6',
+    }
+
 def _build_real_data_js(data, user=None):
     """Convert Python data dict to JS const D = {...} that matches vault.html mock field names."""
     raw_accounts = data.get("accounts", [])
@@ -568,7 +577,7 @@ def _build_real_data_js(data, user=None):
   wallets: {json.dumps(wallets_list)},
 
   // Investment accounts (manual + future integrations)
-  investments: {json.dumps([{'id': a.id, 'platform': a.platform, 'label': a.label, 'balance': a.balance, 'ticker': a.platform[:4].upper(), 'val': a.balance, 'color': '#3b82f6'} for a in InvestmentAccount.query.filter_by(user_id=user.id).all()])},
+  investments: {json.dumps([_investment_js(a) for a in InvestmentAccount.query.filter_by(user_id=user.id).all()])},
   investHistory: [],
   crypto: [],
   habits: [],
