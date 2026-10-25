@@ -95,7 +95,7 @@
   const reduced = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   function hasConnections() {
-    const c = (window.D && D.connections) || {};
+    const c = (typeof D !== 'undefined' && D.connections) || {};
     return !!(c.plaid || c.wise || (D.wallets || []).length || (D.accounts || []).length);
   }
 
@@ -151,7 +151,7 @@
 #tour-root{position:fixed;inset:0;z-index:10000;pointer-events:none}
 #tour-root .t-block{position:fixed;inset:0;pointer-events:auto}
 #tour-spot{position:fixed;border-radius:10px;pointer-events:none;
-  box-shadow:0 0 0 9999px rgba(0,0,0,.72),0 0 0 2px var(--green),0 0 24px 4px rgba(74,222,128,.35);
+  box-shadow:0 0 0 9999px rgba(0,0,0,.72),0 0 0 2px var(--green),0 0 24px 4px rgba(184,245,102,.35);
   transition:top .45s cubic-bezier(.16,1,.3,1),left .45s cubic-bezier(.16,1,.3,1),width .45s cubic-bezier(.16,1,.3,1),height .45s cubic-bezier(.16,1,.3,1),opacity .25s}
 #tour-spot::after{content:'';position:absolute;inset:-6px;border-radius:14px;border:2px solid var(--green);opacity:0;animation:tourPulse 1.8s ease-out infinite}
 @keyframes tourPulse{0%{opacity:.7;transform:scale(.96)}100%{opacity:0;transform:scale(1.12)}}
@@ -194,7 +194,7 @@
 #tour-prompt .tp-card{width:100%;max-width:420px;background:var(--bg2);border:1px solid rgba(255,255,255,.1);border-radius:18px;
   padding:32px 28px 22px;text-align:center;font-family:var(--font);color:var(--text);box-shadow:0 30px 80px rgba(0,0,0,.6);animation:tpCard .4s cubic-bezier(.16,1,.3,1)}
 #tour-prompt .tp-ico{width:56px;height:56px;margin:0 auto 16px;border-radius:16px;display:flex;align-items:center;justify-content:center;
-  background:rgba(74,222,128,.12);color:var(--green);box-shadow:0 0 0 6px rgba(74,222,128,.05)}
+  background:rgba(184,245,102,.12);color:var(--green);box-shadow:0 0 0 6px rgba(184,245,102,.05)}
 #tour-prompt h2{font-size:20px;font-weight:600;margin:0 0 8px;letter-spacing:-.01em}
 #tour-prompt p{font-size:13px;line-height:1.6;color:var(--text2);margin:0 0 22px}
 #tour-prompt .tp-actions{display:flex;gap:10px;flex-wrap:wrap-reverse}
@@ -418,7 +418,7 @@
     let seenHere = false;
     try { seenHere = localStorage.getItem(DONE_KEY) === '1'; } catch (e) {}
     // The server flag follows the user across devices; localStorage covers a failed save.
-    const seen = (window.D && D.tourSeen) || seenHere;
+    const seen = (typeof D !== 'undefined' && D.tourSeen) || seenHere;
     if (!seen && !document.getElementById('onboard-overlay')) setTimeout(offer, 500);
   }
 

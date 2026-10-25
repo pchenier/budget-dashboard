@@ -6,11 +6,12 @@
 <title>Fiscit</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="/static/feather.min.js"></script>
 <script src="/static/tour-demo.js?v=4" defer></script>
-<script src="/static/tour.js?v=4" defer></script>
+<script src="/static/tour.js?v=5" defer></script>
+<script src="/static/motion.js?v=1" defer></script>
 <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
 <style>
 :root {
@@ -25,9 +26,9 @@
   --text2:    #a1a1aa;
   --text3:    #52525b;
   --text4:    #3f3f46;
-  --green:    #4ade80;
-  --green-bg: rgba(74,222,128,0.08);
-  --green-br: rgba(74,222,128,0.14);
+  --green:    #b8f566;
+  --green-bg: rgba(184,245,102,0.08);
+  --green-br: rgba(184,245,102,0.14);
   --red:      #f87171;
   --red-bg:   rgba(248,113,113,0.08);
   --red-br:   rgba(248,113,113,0.14);
@@ -295,10 +296,10 @@ button{font-family:var(--font)}
 .cal-cell:hover{background:var(--bg4);transform:translateY(-1px)}
 .cal-cell.today{
   background:var(--bg4);color:var(--text);
-  box-shadow:0 0 0 1px var(--green),0 0 12px 1px rgba(74,222,128,.25);
+  box-shadow:0 0 0 1px var(--green),0 0 12px 1px rgba(184,245,102,.25);
   z-index:1
 }
-.cal-cell.today:hover{box-shadow:0 0 0 1px var(--green),0 0 18px 2px rgba(74,222,128,.35)}
+.cal-cell.today:hover{box-shadow:0 0 0 1px var(--green),0 0 18px 2px rgba(184,245,102,.35)}
 .cal-cell.has-event::after{content:'';position:absolute;bottom:4px;width:4px;height:4px;border-radius:50%;background:var(--green)}
 .cal-cell.empty{background:transparent;cursor:default}
 .cal-day-hdr{font-size:10px;font-weight:700;color:var(--text3);text-align:center;padding:6px 0;letter-spacing:.5px;text-transform:uppercase}
@@ -311,7 +312,7 @@ button{font-family:var(--font)}
 .cal-day-view-grid{display:grid;grid-template-columns:56px 1fr;position:relative}
 .cal-time-col{font-size:10px;color:var(--text4);text-align:right;padding-right:8px;line-height:48px;height:48px;user-select:none}
 .cal-day-col{border-left:1px solid var(--border);position:relative;min-height:48px}
-.cal-day-col.today-col{background:rgba(74,222,128,.03)}
+.cal-day-col.today-col{background:rgba(184,245,102,.03)}
 .cal-day-hdr-cell{display:flex;align-items:center;justify-content:center;gap:4px;padding:8px 0;font-size:12px;font-weight:500;color:var(--text2)}
 .cal-day-hdr-cell.today-col{color:var(--text)}
 .cal-date-num{width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:50%}
@@ -398,8 +399,8 @@ button{font-family:var(--font)}
 }
 /* Top bar "Tour" button */
 .tour-pill{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px;margin-right:2px;border-radius:8px;
-  border:1px solid rgba(74,222,128,.3);background:rgba(74,222,128,.08);color:var(--green);font:600 12px var(--font);cursor:pointer;transition:background .15s,border-color .15s}
-.tour-pill:hover{background:rgba(74,222,128,.15);border-color:rgba(74,222,128,.5)}
+  border:1px solid rgba(184,245,102,.3);background:rgba(184,245,102,.08);color:var(--green);font:600 12px var(--font);cursor:pointer;transition:background .15s,border-color .15s}
+.tour-pill:hover{background:rgba(184,245,102,.15);border-color:rgba(184,245,102,.5)}
 .tour-pill svg{width:14px;height:14px}
 /* Mobile bottom tabs + "More" sheet */
 .mtabs,.mmore{display:none}
@@ -427,6 +428,7 @@ button{font-family:var(--font)}
 }
 @media (prefers-reduced-motion: reduce){.mmore-sheet,.mmore{transition:none}}
 </style>
+<link rel="stylesheet" href="/static/brand.css?v=1">
 </head>
 <body>
 
@@ -1109,7 +1111,7 @@ const deltaClass = d => d>0?'up':d<0?'down':'flat';
 const deltaIcon = d => d>0?'▲':d<0?'▼':'–';
 
 Chart.defaults.color='#52525b';
-Chart.defaults.font.family="'Inter',sans-serif";
+Chart.defaults.font.family="'Geist',sans-serif";
 Chart.defaults.font.size=11;
 
 const chartRegistry = {};
@@ -1320,15 +1322,15 @@ function initDashCharts(){
   const nwCtx=document.getElementById('nwChart')?.getContext('2d');
   if(nwCtx){
     const grad=nwCtx.createLinearGradient(0,0,0,180);
-    grad.addColorStop(0,'rgba(74,222,128,0.15)');
-    grad.addColorStop(1,'rgba(74,222,128,0)');
+    grad.addColorStop(0,'rgba(184,245,102,0.15)');
+    grad.addColorStop(1,'rgba(184,245,102,0)');
     chartRegistry.nw=new Chart(nwCtx,{
       type:'line',
       data:{
         labels:D.monthLabels,
         datasets:[{
           data:D.netWorthHistory,
-          borderColor:'#4ade80',borderWidth:1.5,
+          borderColor:'#b8f566',borderWidth:1.5,
           backgroundColor:grad,fill:true,
           pointRadius:0,pointHoverRadius:4,
           tension:0.4
@@ -1362,7 +1364,7 @@ function initDashCharts(){
         labels:labels,
         datasets:[{
           data:amounts,
-          backgroundColor:['#4ade80','#60a5fa','#a78bfa','#fbbf24','#f87171'],
+          backgroundColor:['#b8f566','#60a5fa','#a78bfa','#fbbf24','#f87171'],
           borderWidth:0,hoverBorderWidth:0
         }]
       },
@@ -2248,13 +2250,13 @@ function initSavingsChart(){
     cashflows.push(inc>0?Math.round(inc-exp):null);
   }
   const grad=ctx.createLinearGradient(0,0,0,220);
-  grad.addColorStop(0,'rgba(74,222,128,0.18)');
-  grad.addColorStop(1,'rgba(74,222,128,0)');
+  grad.addColorStop(0,'rgba(184,245,102,0.18)');
+  grad.addColorStop(1,'rgba(184,245,102,0)');
   chartRegistry.savings=new Chart(ctx,{
     type:'line',
     data:{labels,datasets:[{
       label:'Savings Rate %',data:rates,
-      borderColor:'#4ade80',borderWidth:2,backgroundColor:grad,fill:true,
+      borderColor:'#b8f566',borderWidth:2,backgroundColor:grad,fill:true,
       pointRadius:3,pointHoverRadius:5,tension:0.4,spanGaps:true
     }]},
     options:{
@@ -3420,7 +3422,7 @@ function _calBuildEvents(year, month){
     (h.log||[]).forEach(iso=>{
       const d=new Date(iso+'T00:00');
       if(d.getMonth()!==month||d.getFullYear()!==year) return;
-      add(d.getDate(),'habit','circle',h.name,'var(--green2,#4ade80)','');
+      add(d.getDate(),'habit','circle',h.name,'var(--green2,#b8f566)','');
     });
   });
   // Custom events (birthdays, rdv, events, reminders, travel)
@@ -3804,7 +3806,7 @@ function pgCalendar(){
       <div style="display:flex;gap:12px;flex-wrap:wrap">
         <div style="display:flex;align-items:center;gap:5px"><div style="width:7px;height:7px;border-radius:50%;background:var(--accent)"></div><span style="font-size:10px;color:var(--text3)">Gym</span></div>
         <div style="display:flex;align-items:center;gap:5px"><div style="width:7px;height:7px;border-radius:50%;background:var(--yellow)"></div><span style="font-size:10px;color:var(--text3)">Meals</span></div>
-        <div style="display:flex;align-items:center;gap:5px"><div style="width:7px;height:7px;border-radius:50%;background:#4ade80"></div><span style="font-size:10px;color:var(--text3)">Habits</span></div>
+        <div style="display:flex;align-items:center;gap:5px"><div style="width:7px;height:7px;border-radius:50%;background:#b8f566"></div><span style="font-size:10px;color:var(--text3)">Habits</span></div>
         <div style="display:flex;align-items:center;gap:5px"><div style="width:7px;height:7px;border-radius:50%;background:var(--red)"></div><span style="font-size:10px;color:var(--text3)">Depenses</span></div>
         ${Object.entries(CAL_EV_TYPES).map(([,t])=>`
         <div style="display:flex;align-items:center;gap:5px"><div style="width:7px;height:7px;border-radius:50%;background:${t.color}"></div><span style="font-size:10px;color:var(--text3)">${ico(t.icon,12)} ${t.label}</span></div>`).join('')}
