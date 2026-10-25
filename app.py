@@ -162,10 +162,13 @@ def api_auth_required(f):
         return jsonify({'error': 'Authentication required'}), 401
     return decorated
 
-# Handle DATABASE_URL: Railway gives postgres:// but SQLAlchemy needs postgresql://
+# Handle DATABASE_URL: Railway gives postgres:// — pin the psycopg2 driver explicitly,
+# since SQLAlchemy 2.1+ defaults bare postgresql:// to psycopg (v3), which isn't installed.
 _database_url = os.getenv('DATABASE_URL', 'sqlite:///fiscit.db')
-if _database_url.startswith('postgres://'):
-    _database_url = _database_url.replace('postgres://', 'postgresql://', 1)
+for _prefix in ('postgres://', 'postgresql://'):
+    if _database_url.startswith(_prefix):
+        _database_url = 'postgresql+psycopg2://' + _database_url[len(_prefix):]
+        break
 
 app.config['SQLALCHEMY_DATABASE_URI'] = _database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
