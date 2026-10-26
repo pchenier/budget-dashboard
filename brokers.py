@@ -327,6 +327,48 @@ def snaptrade_portal_url(creds, redirect_url):
     return url
 
 
+def _code(cur):
+    """Currency as SnapTrade sends it: 'CAD', or {'code': 'CAD', ...}."""
+    if isinstance(cur, dict):
+        return cur.get('code') or ''
+    return cur or ''
+
+
+def _num(v):
+    try:
+        return float(v)  # positions/all sends decimals as strings
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _snap_positions(account_id, q):
+    """GET /accounts/{id}/positions/all ({results: [...]}, instrument.*).
+    The older /positions (and /holdings) answer 410 Gone for newer SnapTrade
+    customers; it is only tried if positions/all doesn't exist."""
+    try:
+        data = _snap('GET', f'/accounts/{account_id}/positions/all', query=q) or {}
+        rows = data.get('results', []) if isinstance(data, dict) else data
+        out = []
+        for p in rows or []:
+            inst = p.get('instrument') or {}
+            cur = _code(p.get('currency')) or _code(inst.get('currency')) or 'CAD'
+            qty, price = _num(p.get('units')), _num(p.get('price'))
+            out.append({'symbol': inst.get('symbol') or inst.get('raw_symbol') or '', 'description': inst.get('description') or '',
+                        'quantity': qty, 'price': price, 'value_cad': round(_to_cad(qty * price, cur), 2), 'currency': cur})
+        return out
+    except BrokerError as e:
+        if '(404)' not in str(e):
+            raise
+    out = []
+    for p in _snap('GET', f'/accounts/{account_id}/positions', query=q) or []:
+        sym = ((p.get('symbol') or {}).get('symbol') or {})
+        cur = _code(sym.get('currency')) or _code(p.get('currency')) or 'CAD'
+        qty, price = _num(p.get('units')), _num(p.get('price'))
+        out.append({'symbol': sym.get('symbol', ''), 'description': sym.get('description', ''),
+                    'quantity': qty, 'price': price, 'value_cad': round(_to_cad(qty * price, cur), 2), 'currency': cur})
+    return out
+
+
 def snaptrade_sync(creds, persist=None):
     q = {'userId': creds['user_id'], 'userSecret': creds['user_secret']}
     out = []
@@ -342,19 +384,14 @@ def snaptrade_sync(creds, persist=None):
         total = ((acc.get('balance') or {}).get('total') or {})
         positions, cash_cad, notes = [], 0.0, []
         try:
-            for p in _snap('GET', f"/accounts/{acc['id']}/positions", query=q) or []:
-                sym = ((p.get('symbol') or {}).get('symbol') or {})
-                cur = ((sym.get('currency') or {}).get('code')) or ((p.get('currency') or {}).get('code')) or 'CAD'
-                qty, price = float(p.get('units') or 0), float(p.get('price') or 0)
-                positions.append({'symbol': sym.get('symbol', ''), 'description': sym.get('description', ''),
-                                  'quantity': qty, 'price': price, 'value_cad': round(_to_cad(qty * price, cur), 2), 'currency': cur})
+            positions = _snap_positions(acc['id'], q)
         except BrokerError as e:
             notes.append(f'positions: {e}')
         try:
             balances = _snap('GET', f"/accounts/{acc['id']}/balances", query=q) or []
             for b in balances:
-                cash_cad += _to_cad(b.get('cash'), (b.get('currency') or {}).get('code'))
-            notes.append(f"balances in {sorted({(b.get('currency') or {}).get('code') or '?' for b in balances}) or 'none'}")
+                cash_cad += _to_cad(_num(b.get('cash')), _code(b.get('currency')))
+            notes.append(f"balances in {sorted({_code(b.get('currency')) or '?' for b in balances}) or 'none'}")
         except BrokerError as e:
             notes.append(f'balances: {e}')
         # Prefer SnapTrade's account total; otherwise positions + cash
