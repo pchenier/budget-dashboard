@@ -869,8 +869,24 @@ def _sync_broker(conn):
 def _sync_user_brokers(user_id, force=False):
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     for conn in BrokerConnection.query.filter_by(user_id=user_id).all():
-        if force or not conn.last_synced or now - _naive(conn.last_synced) > _BROKER_MIN_INTERVAL:
+        empty = conn.status == 'error' or not json.loads(conn.cache or '[]')
+        interval = timedelta(minutes=1) if empty else _BROKER_MIN_INTERVAL  # retry empty/failed links quickly
+        if force or not conn.last_synced or now - _naive(conn.last_synced) > interval:
             _sync_broker(conn)
+
+def _retry_broker_later(conn_id, delays=(15, 45, 120)):
+    """SnapTrade imports accounts a little after the user links a broker: retry in the background."""
+    def run():
+        for d in delays:
+            time.sleep(d)
+            with app.app_context():
+                conn = db.session.get(BrokerConnection, conn_id)
+                if not conn:
+                    return
+                if conn.status == 'ok' and json.loads(conn.cache or '[]'):
+                    return
+                _sync_broker(conn)
+    threading.Thread(target=run, daemon=True).start()
 
 def _broker_keepalive():
     """Questrade refresh tokens die if unused for a few days: refresh them even when
@@ -2075,6 +2091,8 @@ def snaptrade_done():
         conn.status = 'ok'
         db.session.commit()
         _sync_broker(conn)
+        if conn.status != 'ok' or not json.loads(conn.cache or '[]'):
+            _retry_broker_later(conn.id)
     return redirect(url_for('index', view='investments'))
 
 @app.route('/api/brokers/<int:conn_id>/sync', methods=['POST'])
@@ -2086,6 +2104,8 @@ def api_broker_sync(conn_id):
     if conn.status == 'pending':
         conn.status = 'ok'
     _sync_broker(conn)
+    if conn.status != 'ok':
+        _retry_broker_later(conn.id, delays=(30, 90))
     return jsonify({'ok': conn.status == 'ok', 'error': conn.last_error})
 
 @app.route('/api/brokers/<int:conn_id>', methods=['DELETE'])

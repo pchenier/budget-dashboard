@@ -330,7 +330,14 @@ def snaptrade_portal_url(creds, redirect_url):
 def snaptrade_sync(creds, persist=None):
     q = {'userId': creds['user_id'], 'userSecret': creds['user_secret']}
     out = []
-    for acc in _snap('GET', '/accounts', query=q) or []:
+    accounts = _snap('GET', '/accounts', query=q) or []
+    if not accounts:
+        # Accounts are imported asynchronously after the user links a broker
+        links = _snap('GET', '/authorizations', query=q) or []
+        if links:
+            raise BrokerError('SnapTrade is still importing your accounts from your broker. Fiscit will retry automatically, or click Sync in a minute.')
+        raise BrokerError('No brokerage is linked in SnapTrade yet. Use "Connect a brokerage" and finish signing in to your broker.')
+    for acc in accounts:
         total = ((acc.get('balance') or {}).get('total') or {})
         positions = []
         try:
