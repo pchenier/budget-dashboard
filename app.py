@@ -1655,6 +1655,20 @@ def _delete_postgres_user_rows(uid):
             continue
         db.session.execute(db.text(f'DELETE FROM "{table}" WHERE "{column}" = :uid'), {'uid': uid})
 
+PLAID_COUNTRY_CODES = [c.strip().upper() for c in os.getenv('PLAID_COUNTRY_CODES', 'CA').split(',') if c.strip()]
+
+def _plaid_failure(endpoint, r):
+    """Log Plaid's own error (code/type/message, never secrets) and give the user
+    Plaid's display message when it has one."""
+    try:
+        err = r.json()
+    except Exception:
+        err = {}
+    app.logger.error('Plaid %s %s: %s/%s %s (request_id=%s)', endpoint, r.status_code,
+                     err.get('error_type'), err.get('error_code'), err.get('error_message'), err.get('request_id'))
+    msg = err.get('display_message') or 'Plaid could not start the bank connection. Please try again later.'
+    return jsonify({'ok': False, 'error': msg, 'code': err.get('error_code')}), 502
+
 @app.route('/api/plaid/link_token', methods=['POST'])
 @api_auth_required
 def plaid_link_token():
@@ -1673,17 +1687,19 @@ def plaid_link_token():
             'client_id': plaid_client,
             'secret':    plaid_secret,
             'client_name': 'Fiscit',
-            'country_codes': ['CA', 'US'],
+            # Only countries enabled on our Plaid production account (CA today; US
+            # needs separate approval and makes the whole request fail with 400).
+            'country_codes': PLAID_COUNTRY_CODES,
             'language': 'en',
             'user': {'client_user_id': str(uid)},
             'products': ['transactions'],
         }, timeout=15)
-        r.raise_for_status()
-        data = r.json()
-        return jsonify({'ok': True, 'link_token': data['link_token']})
+        if r.status_code != 200:
+            return _plaid_failure('link/token/create', r)
+        return jsonify({'ok': True, 'link_token': r.json()['link_token']})
     except Exception as e:
-        app.logger.error('Request failed: %s', e)
-        return jsonify({'ok': False, 'error': 'Something went wrong. Please try again.'}), 500
+        app.logger.error('Plaid link/token/create failed: %s', type(e).__name__)
+        return jsonify({'ok': False, 'error': 'Could not reach Plaid. Please try again.'}), 502
 
 @app.route('/api/plaid/exchange', methods=['POST'])
 @api_auth_required
@@ -1708,7 +1724,8 @@ def plaid_exchange():
             'secret':       plaid_secret,
             'public_token': public_token,
         }, timeout=15)
-        r.raise_for_status()
+        if r.status_code != 200:
+            return _plaid_failure('item/public_token/exchange', r)
         data = r.json()
         access_token = data['access_token']
         # Save to DB for this user (support multiple banks)
@@ -1730,7 +1747,7 @@ def plaid_exchange():
                         'client_id': plaid_client,
                         'secret':    plaid_secret,
                         'institution_id': inst_id,
-                        'country_codes': ['CA', 'US'],
+                        'country_codes': PLAID_COUNTRY_CODES,
                     }, timeout=10)
                     if inr.ok:
                         institution = inr.json().get('institution', {}).get('name', inst_id)
