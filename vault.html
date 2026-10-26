@@ -429,7 +429,7 @@ button{font-family:var(--font)}
 }
 @media (prefers-reduced-motion: reduce){.mmore-sheet,.mmore{transition:none}}
 </style>
-<link rel="stylesheet" href="/static/brand.css?v=5">
+<link rel="stylesheet" href="/static/brand.css?v=6">
 </head>
 <body>
 
@@ -1399,12 +1399,20 @@ function initDashCharts(){
 }
 
 // ═══════════════════════════ ACCOUNTS ═══════════════════════════
+// Bank/platform logo with the colored initials as fallback (no logo, or it fails to load)
+function instLogo(logo, text, color, cls){
+  const fallback = `<span>${text||'?'}</span>`;
+  return logo
+    ? `<div class="${cls} has-logo" style="color:${color};background:${color}15"><img src="${logo}" alt="" loading="lazy" onerror="this.parentNode.classList.remove('has-logo');this.remove()">${fallback}</div>`
+    : `<div class="${cls}" style="color:${color};background:${color}15">${fallback}</div>`;
+}
+
 function pgAccounts(){
   const total=D.accounts.filter(a=>a.type!=='Credit Card').reduce((s,a)=>s+(typeof a.bal==='number'?a.bal:0),0);
   const cards=D.accounts.map(a=>`
     <div class="acc-card">
       <div class="acc-top">
-        <div class="acc-logo" style="background:${a.color}20;color:${a.color}">${a.init}</div>
+        ${instLogo(a.logo, a.init, a.color, 'acc-logo')}
         <div>
           <div class="acc-title">${a.name}</div>
           <div class="acc-sub">${a.inst}</div>
@@ -2444,7 +2452,7 @@ function pgInvestments(){
       : `${inv.platform||''}${inv.label?' · '+inv.label:''}${inv.updated?' · updated '+fmtDate(inv.updated):''}`;
     return `
     <div class="inv-row">
-      <div class="ticker-box" style="color:${inv.color};background:${inv.color}15">${inv.ticker}</div>
+      ${instLogo(inv.logo, inv.ticker, inv.color, 'ticker-box')}
       <div style="flex:1;min-width:0">
         <div style="font-size:13px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${inv.name}</div>
         <div style="font-size:11px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${meta}</div>

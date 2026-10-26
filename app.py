@@ -17,7 +17,7 @@ from flask_login import LoginManager, UserMixin, login_user, login_required, log
 from authlib.integrations.flask_client import OAuth
 import jwt as pyjwt
 from pathlib import Path
-from models import db, User as UserModel, PlaidConnection, WiseConnection, CryptoWallet, InvestmentAccount, InvestmentSnapshot, UsedSsoToken
+from models import db, User as UserModel, PlaidConnection, WiseConnection, CryptoWallet, InvestmentAccount, InvestmentSnapshot, UsedSsoToken, InstitutionLogo
 
 # Normalize French categories to English (matches generate_data.py CATEGORY_ALIASES)
 CATEGORY_ALIASES = {
@@ -435,6 +435,15 @@ def fetch_data(user_id, config):
         config["_prev_accounts"] = prev_accounts
         data = generate_data.pull_all(config)
 
+        # Bank / platform logos for the Accounts and Investments pages
+        try:
+            with app.app_context():
+                names = [a.get('inst') or a.get('name') for a in data.get('accounts', [])]
+                names += [i.platform for i in InvestmentAccount.query.filter_by(user_id=user_id).all()]
+                _ensure_logos(names)
+        except Exception as e:
+            app.logger.warning('logo refresh skipped: %s', type(e).__name__)
+
         with _user_state_lock:
             state["data"]      = data
             state["status"]    = "ready"
@@ -509,6 +518,7 @@ def _normalize_api_data(data):
     # Normalize accounts
     raw_accs = data.get("accounts", [])
     norm_accs = []
+    logos = _logo_urls([a.get("inst", a.get("institution", a.get("name", ""))) for a in raw_accs])
     for a in raw_accs:
         color = TYPE_COLORS.get(a.get("type", ""), "#71717a")
         init = (a.get("name") or "?")[0].upper()
@@ -523,6 +533,7 @@ def _normalize_api_data(data):
             "color": a.get("color", color),
             "init":  a.get("init", init),
             "ico":   a.get("ico", ""),
+            "logo":  logos.get(a.get("inst", a.get("institution", a.get("name", ""))), ""),
         })
     out["accounts"] = norm_accs
     # Normalize transactions
@@ -582,6 +593,143 @@ def build_vault_html(data, user=None):
 
     return html
 
+# ── Institution logos ─────────────────────────────────────────────────────────
+# Official logos come from Plaid's institution metadata. Platforms Plaid doesn't
+# list (brokers, Wise…) fall back to the icon published on their official site,
+# from this fixed list. Everything is fetched server-side and cached, so the
+# browser never contacts third parties.
+_KNOWN_DOMAINS = {
+    'questrade': 'questrade.com', 'wealthsimple': 'wealthsimple.com', 'wise': 'wise.com',
+    'interactive brokers': 'interactivebrokers.ca', 'disnat': 'disnat.com',
+    'national bank direct brokerage': 'nbdb.ca', 'national bank': 'nbc.ca', 'banque nationale': 'bnc.ca',
+    'td direct investing': 'td.com', 'td ': 'td.com', 'rbc direct investing': 'rbcdirectinvesting.com', 'rbc': 'rbc.com',
+    'bmo investorline': 'bmo.com', 'bmo': 'bmo.com', 'scotia': 'scotiabank.com', 'cibc': 'cibc.com',
+    'desjardins': 'desjardins.com', 'tangerine': 'tangerine.ca', 'simplii': 'simplii.com', 'eq bank': 'eqbank.ca',
+    'koho': 'koho.ca', 'neo financial': 'neofinancial.com', 'american express': 'americanexpress.com',
+    'capital one': 'capitalone.ca', 'laurentian': 'laurentianbank.ca', 'atb': 'atb.com', 'hsbc': 'hsbc.ca',
+}
+_LOGO_MIMES = {'image/png', 'image/jpeg', 'image/x-icon', 'image/vnd.microsoft.icon', 'image/webp', 'image/gif'}
+
+def _logo_key(name):
+    return re.sub(r'[^a-z0-9]+', '-', (name or '').lower()).strip('-')[:120]
+
+def _plaid_institution(name):
+    """(logo bytes or None, primary color, website) for the best Plaid match."""
+    import requests as req, base64
+    cid, secret = os.getenv('PLAID_CLIENT_ID'), os.getenv('PLAID_SECRET')
+    if not (cid and secret):
+        return None, '', ''
+    try:
+        r = req.post(f'{_plaid_base()}/institutions/search', json={
+            'client_id': cid, 'secret': secret, 'query': name[:100],
+            'country_codes': PLAID_COUNTRY_CODES, 'options': {'include_optional_metadata': True},
+        }, timeout=8)
+        if r.status_code != 200:
+            return None, '', ''
+        insts = r.json().get('institutions', [])
+        if not insts:
+            return None, '', ''
+        best = next((i for i in insts if (i.get('name') or '').lower() == name.lower()), insts[0])
+        logo = base64.b64decode(best['logo']) if best.get('logo') else None
+        return logo, best.get('primary_color') or '', best.get('url') or ''
+    except Exception:
+        return None, '', ''
+
+def _site_icon(domain):
+    """Icon from the institution's own https site (apple-touch-icon, then favicon)."""
+    import requests as req
+    from urllib.parse import urlparse
+    from urllib.parse import urljoin
+    host = urlparse(domain if '://' in domain else 'https://' + domain).hostname or ''
+    if not re.fullmatch(r'[a-z0-9.-]+\.[a-z]{2,}', host or ''):
+        return None, ''
+    base = '.'.join(host.split('.')[-2:])
+    candidates = []
+    # Icons declared in the homepage (<link rel="apple-touch-icon"|"icon">), biggest first
+    try:
+        page = req.get(f'https://{host}/', timeout=6, stream=True, headers={'User-Agent': 'Fiscit/1.0 (logo fetch)'})
+        html_text = page.raw.read(500_000, decode_content=True).decode('utf-8', 'ignore') if page.status_code == 200 else ''
+        links = []
+        for tag in re.findall(r'<link\b[^>]*>', html_text, flags=re.I):
+            rel = (re.search(r'rel=["\']([^"\']+)', tag, re.I) or [None, ''])[1].lower()
+            href = (re.search(r'href=["\']([^"\']+)', tag, re.I) or [None, ''])[1]
+            if 'icon' not in rel or not href or href.lower().endswith('.svg'):
+                continue
+            size = max([int(x) for x in re.findall(r'(\d+)x\d+', tag)] or [180 if 'apple' in rel else 32])
+            links.append((size, urljoin(page.url, href)))
+        for _, url in sorted(links, reverse=True):
+            h = urlparse(url).hostname or ''
+            if url.startswith('https://') and (h == base or h.endswith('.' + base)):
+                candidates.append(url)
+    except Exception:
+        pass
+    candidates += [f'https://{host}/apple-touch-icon.png', f'https://{host}/favicon.ico']
+    for url in candidates[:6]:
+        try:
+            r = req.get(url, timeout=6, stream=True, headers={'User-Agent': 'Fiscit/1.0 (logo fetch)'})
+            mime = (r.headers.get('Content-Type') or '').split(';')[0].strip().lower()
+            if r.status_code != 200 or not r.url.startswith('https://') or mime not in _LOGO_MIMES:
+                continue
+            body = r.raw.read(300_000 + 1, decode_content=True)
+            if 0 < len(body) <= 300_000:
+                return body, mime
+        except Exception:
+            continue
+    return None, ''
+
+def _ensure_logos(names):
+    """Fetch and cache logos for these institution names (skips fresh entries)."""
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    for name in {n.strip() for n in names if n and n.strip()}:
+        key = _logo_key(name)
+        if not key:
+            continue
+        row = db.session.get(InstitutionLogo, key)
+        if row:
+            age = now - _naive(row.fetched_at)
+            if (row.data and age < timedelta(days=30)) or (not row.data and age < timedelta(days=7)):
+                continue
+        data, color, site = _plaid_institution(name)
+        mime = 'image/png' if data else ''
+        if not data:
+            low = name.lower()
+            domain = next((d for k, d in _KNOWN_DOMAINS.items() if k in low + ' '), '') or site
+            if domain:
+                data, mime = _site_icon(domain)
+        row = row or InstitutionLogo(key=key)
+        row.name, row.data, row.mime, row.color, row.fetched_at = name[:200], data, mime, color[:16], now
+        db.session.merge(row)
+        db.session.commit()
+
+def _ensure_logos_async(names):
+    def run():
+        with app.app_context():
+            try:
+                _ensure_logos(names)
+            except Exception as e:
+                db.session.rollback()
+                app.logger.warning('logo fetch failed: %s', type(e).__name__)
+    threading.Thread(target=run, daemon=True).start()
+
+def _logo_urls(names):
+    """{name: '/logo/<key>'} for names that have a cached logo (no network)."""
+    keys = {_logo_key(n): n for n in names if n}
+    if not keys:
+        return {}
+    rows = InstitutionLogo.query.filter(InstitutionLogo.key.in_(list(keys)), InstitutionLogo.data.isnot(None)).with_entities(InstitutionLogo.key).all()
+    return {keys[k]: f'/logo/{k}' for (k,) in rows}
+
+@app.route('/logo/<key>')
+@login_required
+def institution_logo(key):
+    row = db.session.get(InstitutionLogo, _logo_key(key))
+    if not row or not row.data or row.mime not in _LOGO_MIMES:
+        return '', 404
+    resp = app.response_class(row.data, mimetype=row.mime)
+    resp.headers['Cache-Control'] = 'private, max-age=86400'
+    resp.headers['Content-Security-Policy'] = "default-src 'none'; sandbox"
+    return resp
+
 def _naive(dt):
     return dt.replace(tzinfo=None) if dt and dt.tzinfo else dt
 
@@ -607,9 +755,10 @@ def _investments_payload(user_id, accounts):
     for sn in InvestmentSnapshot.query.filter_by(user_id=user_id).order_by(InvestmentSnapshot.recorded_at).all():
         snaps.setdefault(sn.account_id, []).append((_naive(sn.recorded_at), sn.balance))
     items = []
+    logos = _logo_urls([a.platform for a in manual] + [a.get('inst', '') for a in (accounts or [])])
     for a in manual:
         hist = snaps.get(a.id, [])
-        items.append(_investment_js(a, updated=hist[-1][0] if hist else None))
+        items.append({**_investment_js(a, updated=hist[-1][0] if hist else None), 'logo': logos.get(a.platform, '')})
     manual_total = round(sum(a.balance or 0 for a in manual), 2)
 
     for i, acc in enumerate(a for a in (accounts or []) if a.get('type') == 'Investment'):
@@ -619,7 +768,7 @@ def _investments_payload(user_id, accounts):
             'id': f"plaid-{acc.get('id', i)}", 'name': name, 'platform': acc.get('inst', ''),
             'label': acc.get('subtype') or 'Investment', 'ticker': (acc.get('subtype') or name)[:4].upper(),
             'val': val, 'balance': val, 'pct': 0, 'color': _PLAID_INV_COLORS[i % len(_PLAID_INV_COLORS)],
-            'source': 'plaid', 'updated': '',
+            'source': 'plaid', 'updated': '', 'logo': logos.get(acc.get('inst', ''), ''),
         })
 
     # Month-end value of manual accounts over the last 12 months (only months they existed)
@@ -695,6 +844,7 @@ def _build_real_data_js(data, user=None):
 
     # Normalize accounts to match mock field names
     accounts = []
+    logos = _logo_urls([a.get('inst', a.get('name', '')) for a in raw_accounts])
     for a in raw_accounts:
         color = TYPE_COLORS.get(a.get("type", ""), "#71717a")
         init  = (a.get("name") or "?")[0].upper()
@@ -708,6 +858,7 @@ def _build_real_data_js(data, user=None):
             "sync":  a.get("sync", "just now"),
             "color": color,
             "init":  init,
+            "logo":  logos.get(a.get("inst", a["name"]), ""),
         })
 
     # Normalize transactions to match mock field names
@@ -1690,6 +1841,7 @@ def api_add_investment():
     db.session.flush()
     db.session.add(InvestmentSnapshot(account_id=acct.id, user_id=uid, balance=balance))
     db.session.commit()
+    _ensure_logos_async([acct.platform])
     return jsonify({'ok': True, 'id': acct.id})
 
 @app.route('/api/investments/<int:acct_id>', methods=['PUT'])

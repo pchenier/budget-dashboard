@@ -93,3 +93,15 @@ class InvestmentSnapshot(db.Model):
     user_id     = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
     balance     = db.Column(db.Float, nullable=False)
     recorded_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+
+
+class InstitutionLogo(db.Model):
+    """Cached bank/platform logos, keyed by normalized institution name. data is
+    NULL when none was found (retried later)."""
+    __tablename__ = 'institution_logos'
+    key        = db.Column(db.String(120), primary_key=True)
+    name       = db.Column(db.String(200), default='')
+    mime       = db.Column(db.String(40), default='')
+    data       = db.Column(db.LargeBinary, nullable=True)
+    color      = db.Column(db.String(16), default='')
+    fetched_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
