@@ -7,8 +7,9 @@
   function greeting() {
     const h = new Date().getHours();
     const part = h < 5 ? 'Up late' : h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
-    const first = ((typeof D !== 'undefined' && D.userName) || '').trim().split(/\s+/)[0];
-    const safe = first.replace(/[<>&"']/g, '');
+    const raw = (typeof D !== 'undefined' && D.userName) || '';
+    const first = (typeof unesc === 'function' ? unesc(raw) : raw).trim().split(/\s+/)[0];
+    const safe = first.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
     const date = new Date().toLocaleDateString('en', { weekday: 'long', month: 'long', day: 'numeric' });
     const el = document.createElement('div');
     el.className = 'page-hero';

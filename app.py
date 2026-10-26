@@ -17,7 +17,7 @@ from flask_login import LoginManager, UserMixin, login_user, login_required, log
 from authlib.integrations.flask_client import OAuth
 import jwt as pyjwt
 from pathlib import Path
-from models import db, User as UserModel, PlaidConnection, WiseConnection, CryptoWallet, InvestmentAccount
+from models import db, User as UserModel, PlaidConnection, WiseConnection, CryptoWallet, InvestmentAccount, UsedSsoToken
 
 # Normalize French categories to English (matches generate_data.py CATEGORY_ALIASES)
 CATEGORY_ALIASES = {
@@ -52,24 +52,58 @@ CATEGORY_ICONS = {
 }
 
 app = Flask(__name__)
+
+# Production = running on Railway. Never fall back to the public dev secret there:
+# anyone could forge sessions and SSO tokens with it.
+IS_PROD = bool(os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RAILWAY_PROJECT_ID"))
+if IS_PROD and not (os.getenv("SECRET_KEY") and os.getenv("JWT_SECRET")):
+    raise RuntimeError("SECRET_KEY and JWT_SECRET must be set in production")
 app.secret_key = os.getenv("SECRET_KEY", "vault-local-secret-do-not-deploy")
+
+# Railway terminates TLS: trust its X-Forwarded-For/Proto so request.remote_addr is
+# the real client (rate limits) and generated URLs are https.
+from werkzeug.middleware.proxy_fix import ProxyFix
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
+
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=IS_PROD,
+    REMEMBER_COOKIE_HTTPONLY=True,
+    REMEMBER_COOKIE_SAMESITE="Lax",
+    REMEMBER_COOKIE_SECURE=IS_PROD,
+    REMEMBER_COOKIE_DURATION=timedelta(days=30),
+)
+
+_CORS_ORIGINS = {'https://fiscit.com', 'https://app.fiscit.com'}
+if not IS_PROD:
+    _CORS_ORIGINS |= {'http://localhost:3000', 'http://localhost:8081'}
 
 # ── CORS for mobile app ─────────────────────────────────────────────────────
 @app.after_request
 def add_cors_headers(response):
+    # Native mobile apps don't use CORS at all; browsers only get access from our own sites.
     origin = request.headers.get('Origin', '')
-    # Allow all origins for API routes (mobile apps don't always send Origin)
-    if request.path.startswith('/api/'):
-        if origin:
-            response.headers['Access-Control-Allow-Origin'] = origin
-        else:
-            response.headers['Access-Control-Allow-Origin'] = '*'
-        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
-        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
-    elif origin in ('https://fiscit.com', 'http://localhost:3000', 'http://localhost:8081',
-                     'https://app.fiscit.com'):
+    if origin in _CORS_ORIGINS:
         response.headers['Access-Control-Allow-Origin'] = origin
-        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        response.headers['Vary'] = 'Origin'
+        if request.path.startswith('/api/'):
+            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-CSRF-Token'
+            response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+        else:
+            response.headers['Access-Control-Allow-Credentials'] = 'true'
+    return response
+
+@app.after_request
+def add_security_headers(response):
+    h = response.headers
+    h.setdefault('X-Content-Type-Options', 'nosniff')
+    h.setdefault('X-Frame-Options', 'DENY')
+    h.setdefault('Referrer-Policy', 'strict-origin-when-cross-origin')
+    h.setdefault('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()')
+    h.setdefault('Content-Security-Policy', "frame-ancestors 'none'; base-uri 'self'; object-src 'none'")
+    if IS_PROD:
+        h.setdefault('Strict-Transport-Security', 'max-age=63072000; includeSubDomains')
     return response
 
 @app.before_request
@@ -125,6 +159,46 @@ def _record_register_attempt(ip):
     """Record a registration attempt from this IP."""
     now = datetime.now(timezone.utc)
     _register_attempts.setdefault(ip, []).append(now)
+
+_login_failures = {}  # {key: [timestamps]} — single gunicorn worker, so in-memory is shared
+_LOGIN_WINDOW = timedelta(minutes=15)
+
+def _login_blocked(email):
+    """True when this IP+email or this IP has too many recent failures."""
+    now = datetime.now(timezone.utc)
+    ip = request.remote_addr or '0'
+    for key, limit in ((f'{ip}|{email}', 8), (ip, 40)):
+        hits = [t for t in _login_failures.get(key, []) if now - t < _LOGIN_WINDOW]
+        _login_failures[key] = hits
+        if len(hits) >= limit:
+            return True
+    return False
+
+def _record_login_failure(email):
+    now = datetime.now(timezone.utc)
+    ip = request.remote_addr or '0'
+    for key in (f'{ip}|{email}', ip):
+        _login_failures.setdefault(key, []).append(now)
+
+_DUMMY_HASH = None
+def _check_login(email, password):
+    """Return the user if the password matches. Runs bcrypt even for unknown
+    emails so response time doesn't reveal which accounts exist."""
+    global _DUMMY_HASH
+    user = UserModel.query.filter_by(email=email).first()
+    if user and user.check_password(password):
+        return user
+    if not user:
+        import bcrypt
+        if _DUMMY_HASH is None:
+            _DUMMY_HASH = bcrypt.hashpw(b'fiscit-dummy', bcrypt.gensalt())
+        try:
+            bcrypt.checkpw(password.encode()[:72], _DUMMY_HASH)
+        except Exception:
+            pass
+    return None
+
+SSO_AUDIENCE = 'fiscit-sso'
 
 def make_jwt(user_id, email):
     return pyjwt.encode({
@@ -312,7 +386,7 @@ def fetch_data(user_id, config):
         import traceback
         with _user_state_lock:
             state["status"] = "error"
-            state["error"]  = str(e)
+            state["error"]  = 'Could not sync your accounts. Please try again later.'
         print(f"[error] fetch_data user {user_id}: {e}")
         traceback.print_exc()
 
@@ -458,6 +532,25 @@ def _investment_js(a):
         'ticker': label[:4].upper(), 'val': a.balance, 'pct': 0, 'color': '#3b82f6',
     }
 
+def _html_safe(obj):
+    """HTML-escape every string in a JSON-like structure. The dashboard renders
+    bank- and user-supplied text (merchant names, memos, account labels, names)
+    with innerHTML, so it must never arrive as markup."""
+    import html as _html
+    if isinstance(obj, str):
+        return _html.escape(obj, quote=True)
+    if isinstance(obj, list):
+        return [_html_safe(v) for v in obj]
+    if isinstance(obj, dict):
+        return {k: _html_safe(v) for k, v in obj.items()}
+    return obj
+
+def _js(obj):
+    """json.dumps that is safe inside an inline <script> (no </script> breakout)."""
+    return (json.dumps(_html_safe(obj), indent=2)
+            .replace('<', '\\u003c').replace('>', '\\u003e').replace('&', '\\u0026')
+            .replace('\u2028', '\\u2028').replace('\u2029', '\\u2029'))
+
 def _build_real_data_js(data, user=None):
     """Convert Python data dict to JS const D = {...} that matches vault.html mock field names."""
     raw_accounts = data.get("accounts", [])
@@ -555,29 +648,29 @@ def _build_real_data_js(data, user=None):
   income:          {income},
   spending:        {spending},
   cashFlow:        {cash_flow},
-  generated:       {json.dumps(generated)},
+  generated:       {_js(generated)},
 
   netWorthHistory: [{net_worth}],
   monthLabels:     ["Now"],
 
-  accounts: {json.dumps(accounts, indent=2)},
-  txns: {json.dumps(txns[:200], indent=2)},
-  budget: {json.dumps(budget_js, indent=2)},
-  catLabels: {json.dumps(cat_labels)},
+  accounts: {_js(accounts)},
+  txns: {_js(txns[:200])},
+  budget: {_js(budget_js)},
+  catLabels: {_js(cat_labels)},
   catAmounts: {json.dumps(cat_amounts)},
 
   // User profile
-  userName:  {json.dumps(user_name)},
-  userEmail: {json.dumps(user_email)},
+  userName:  {_js(user_name)},
+  userEmail: {_js(user_email)},
 
   // Connection status (derived from config)
-  connections: {json.dumps(connections)},
+  connections: {_js(connections)},
 
   // Wallets list (for frontend wallet management)
-  wallets: {json.dumps(wallets_list)},
+  wallets: {_js(wallets_list)},
 
   // Investment accounts (manual + future integrations)
-  investments: {json.dumps([_investment_js(a) for a in InvestmentAccount.query.filter_by(user_id=user.id).all()])},
+  investments: {_js([_investment_js(a) for a in InvestmentAccount.query.filter_by(user_id=user.id).all()])},
   investHistory: [],
   crypto: [],
   habits: [],
@@ -1015,36 +1108,11 @@ showStep(3);
 @app.route('/register', methods=['GET', 'POST'])
 @csrf_required
 def register():
-    # If already logged in, go to dashboard
+    # Accounts are created on fiscit.com, which verifies the email address.
+    # (This route used to create accounts with an unverified email.)
     if current_user.is_authenticated:
         return redirect(url_for('index'))
-    if request.method == 'POST':
-        email = request.form.get('email', '').strip().lower()
-        password = request.form.get('password', '')
-        name = request.form.get('name', '').strip()
-        if not email or not password:
-            return render_template_string(REGISTER_HTML, error='Email and password are required.', step='0', csrf_token=generate_csrf_token())
-        if not re.match(r'^[^@\s]+@[^@\s]+\.[^@\s]+$', email):
-            return render_template_string(REGISTER_HTML, error='Please enter a valid email address.', step='0', csrf_token=generate_csrf_token())
-        if len(password) < 8:
-            return render_template_string(REGISTER_HTML, error='Password must be at least 8 characters.', step='0', csrf_token=generate_csrf_token())
-        # Rate limit: max 3 registrations per IP per hour
-        ip = request.remote_addr or '0'
-        if _check_register_rate_limit(ip):
-            return render_template_string(REGISTER_HTML, error='Too many registration attempts. Please try again later.', step='0', csrf_token=generate_csrf_token())
-        if UserModel.query.filter_by(email=email).first():
-            return render_template_string(REGISTER_HTML, error='An account with that email already exists.', step='0', csrf_token=generate_csrf_token())
-        _record_register_attempt(ip)
-        user = UserModel(email=email, name=name)
-        user.set_password(password)
-        db.session.add(user)
-        db.session.commit()
-        flask_user = FlaskUser(user)
-        session.permanent = True
-        generate_csrf_token()  # Ensure CSRF token exists for the session
-        login_user(flask_user, remember=True)
-        return redirect(url_for('index'))
-    return render_template_string(REGISTER_HTML, error='', step='0', csrf_token=generate_csrf_token())
+    return redirect('https://fiscit.com/register')
 
 @app.route('/login', methods=['GET', 'POST'])
 @csrf_required
@@ -1052,9 +1120,14 @@ def login():
     if request.method == 'POST':
         email = request.form.get('email', '').strip().lower()
         password = request.form.get('password', '')
-        user = UserModel.query.filter_by(email=email).first()
-        if not user or not user.check_password(password):
+        if _login_blocked(email):
+            return render_template_string(LOGIN_HTML, error='Too many attempts. Please wait 15 minutes and try again.', csrf_token=generate_csrf_token()), 429
+        user = _check_login(email, password)
+        if not user:
+            _record_login_failure(email)
             return render_template_string(LOGIN_HTML, error='Invalid email or password.', csrf_token=generate_csrf_token())
+        if not user.email_confirmed:
+            return render_template_string(LOGIN_HTML, error='Please confirm your email first — check your inbox for the link from Fiscit.', csrf_token=generate_csrf_token())
         session.permanent = True
         generate_csrf_token()  # Generate CSRF token for the session
         login_user(FlaskUser(user), remember=True)
@@ -1090,8 +1163,11 @@ def api_auth_login():
     password = data.get('password') or ''
     if not email or not password:
         return jsonify({'error': 'Email and password required'}), 400
-    user = UserModel.query.filter_by(email=email).first()
-    if not user or not user.check_password(password):
+    if _login_blocked(email):
+        return jsonify({'error': 'Too many attempts. Please wait 15 minutes and try again.'}), 429
+    user = _check_login(email, password)
+    if not user:
+        _record_login_failure(email)
         return jsonify({'error': 'Invalid email or password'}), 401
     if not user.email_confirmed:
         return jsonify({'error': 'Please confirm your email first', 'needsVerification': True}), 403
@@ -1104,37 +1180,12 @@ def api_auth_login():
 
 @app.route('/api/auth/register', methods=['POST'])
 def api_auth_register():
-    """Register via API — returns JWT token for mobile app."""
-    data = request.get_json(silent=True) or {}
-    email = (data.get('email') or '').strip().lower()
-    password = data.get('password') or ''
-    name = (data.get('name') or '').strip()
-    if not email or not password:
-        return jsonify({'error': 'Email and password required'}), 400
-    if not re.match(r'^[^@\s]+@[^@\s]+\.[^@\s]+$', email):
-        return jsonify({'error': 'Please enter a valid email address'}), 400
-    if len(password) < 8:
-        return jsonify({'error': 'Password must be at least 8 characters'}), 400
-    # Rate limit: max 3 registrations per IP per hour
-    ip = request.remote_addr or '0'
-    if _check_register_rate_limit(ip):
-        return jsonify({'error': 'Too many registration attempts. Please try again later.'}), 429
-    if UserModel.query.filter_by(email=email).first():
-        return jsonify({'error': 'An account with that email already exists'}), 409
-    _record_register_attempt(ip)
-    user = UserModel(email=email, name=name or email.split('@')[0])
-    user.set_password(password)
-    db.session.add(user)
-    db.session.commit()
-    # Auto-confirm for mobile (no email verification flow yet)
-    user.email_confirmed = True
-    db.session.commit()
-    token = make_jwt(user.id, user.email)
+    """Sign-up happens on fiscit.com, which verifies the email address.
+    (This endpoint used to auto-confirm any email, allowing account pre-hijacking.)"""
     return jsonify({
-        'ok': True,
-        'token': token,
-        'user': {'id': user.id, 'email': user.email, 'name': user.name or '', 'onboarded': user.onboarded},
-    })
+        'error': 'Create your account at https://fiscit.com/register, then sign in here.',
+        'signupUrl': 'https://fiscit.com/register',
+    }), 403
 
 @app.route('/api/auth/me', methods=['GET'])
 @api_auth_required
@@ -1149,20 +1200,28 @@ def api_auth_me():
 # ── SSO: accept JWT from fiscit.com ──────────────────────────────────────
 @app.route('/sso')
 def sso():
-    """Accept a JWT token from fiscit.com and create a Flask session."""
+    """Accept a short-lived, single-use handoff JWT from fiscit.com and create a Flask session.
+    Only tokens minted for SSO (aud=fiscit-sso, with a jti) are accepted, so a long-lived
+    session or mobile token can't be replayed here, and each link works once."""
     token = request.args.get('token')
     if not token:
         app.logger.warning('SSO rejected: no token')
         return redirect(url_for('login'))
     try:
-        payload = pyjwt.decode(token, JWT_SECRET, algorithms=['HS256'])
-        user_id = payload.get('sub')
-        if not user_id:
-            app.logger.warning('SSO rejected: token has no sub')
+        payload = pyjwt.decode(token, JWT_SECRET, algorithms=['HS256'], audience=SSO_AUDIENCE,
+                               options={'require': ['exp', 'sub', 'jti', 'aud']})
+        jti = str(payload['jti'])[:64]
+        if db.session.get(UsedSsoToken, jti):
+            app.logger.warning('SSO rejected: token already used')
             return redirect(url_for('login'))
-        user = db.session.get(UserModel, int(user_id))
+        db.session.add(UsedSsoToken(jti=jti))
+        # Forget used tokens once they could no longer be valid anyway
+        cutoff = datetime.now(timezone.utc) - timedelta(days=1)
+        UsedSsoToken.query.filter(UsedSsoToken.used_at < cutoff).delete()
+        db.session.commit()
+        user = db.session.get(UserModel, int(payload['sub']))
         if not user:
-            app.logger.warning('SSO rejected: user %s not found', user_id)
+            app.logger.warning('SSO rejected: user %s not found', payload['sub'])
             return redirect(url_for('login'))
         session.permanent = True
         login_user(FlaskUser(user), remember=True)
@@ -1174,10 +1233,36 @@ def sso():
         app.logger.warning('SSO rejected: bad signature (JWT_SECRET differs between Vercel and Railway?)')
         return redirect(url_for('login'))
     except Exception as e:
+        db.session.rollback()
         app.logger.warning('SSO rejected: %s', type(e).__name__)
         return redirect(url_for('login'))
 
 # ── Google OAuth routes ──────────────────────────────────────────────────────
+def _google_user(google_id, email, name):
+    """Find or create the user for a verified Google identity.
+    An existing account for the same email is linked only safely:
+      - unconfirmed (someone may have pre-registered the address): Google proves
+        ownership, so drop that password and confirm the account;
+      - already bound to a different Google account: refuse."""
+    user = UserModel.query.filter_by(google_id=google_id).first()
+    if user:
+        return user
+    user = UserModel.query.filter_by(email=email).first()
+    if user:
+        if user.google_id and user.google_id != google_id:
+            return None
+        if not user.email_confirmed:
+            user.password_hash = None
+            user.email_confirmed = True
+        user.google_id = google_id
+    else:
+        user = UserModel(email=email, name=name, google_id=google_id)
+        user.password_hash = None  # Google-only account
+        user.email_confirmed = True
+        db.session.add(user)
+    db.session.commit()
+    return user
+
 @app.route('/api/auth/google', methods=['POST'])
 def api_auth_google():
     """Google OAuth for mobile — accepts an ID token from expo-auth-session."""
@@ -1207,22 +1292,12 @@ def api_auth_google():
 
     if not google_id or not email:
         return jsonify({'error': 'Missing Google account info'}), 400
+    if idinfo.get('email_verified') is not True:
+        return jsonify({'error': 'Your Google email address is not verified'}), 401
 
-    # Look up existing user by google_id or email (same logic as web callback)
-    user = UserModel.query.filter_by(google_id=google_id).first()
+    user = _google_user(google_id, email, name)
     if not user:
-        user = UserModel.query.filter_by(email=email).first()
-        if user:
-            # Existing email/password user — link their Google account
-            user.google_id = google_id
-            db.session.commit()
-        else:
-            # Brand new user via Google
-            user = UserModel(email=email, name=name, google_id=google_id)
-            user.password_hash = None  # no password for Google-only users
-            user.email_confirmed = True  # Google verified the email
-            db.session.add(user)
-            db.session.commit()
+        return jsonify({'error': 'This email is linked to a different Google account'}), 409
 
     token = make_jwt(user.id, user.email)
     return jsonify({
@@ -1269,23 +1344,12 @@ def google_callback():
     email = (userinfo.get('email') or '').strip().lower()
     name = (userinfo.get('name') or '').strip()
 
-    if not google_id or not email:
+    if not google_id or not email or userinfo.get('email_verified') is not True:
         return redirect(url_for('login', error='no_google_data'))
 
-    # Look up existing user by google_id or email
-    user = UserModel.query.filter_by(google_id=google_id).first()
+    user = _google_user(google_id, email, name)
     if not user:
-        user = UserModel.query.filter_by(email=email).first()
-        if user:
-            # Existing email/password user — link their Google account
-            user.google_id = google_id
-            db.session.commit()
-        else:
-            # Brand new user via Google
-            user = UserModel(email=email, name=name, google_id=google_id)
-            user.password_hash = None  # no password for Google-only users
-            db.session.add(user)
-            db.session.commit()
+        return redirect(url_for('login', error='google_failed'))
 
     session.permanent = True
     login_user(FlaskUser(user), remember=True)
@@ -1338,7 +1402,7 @@ def setup():
 @api_auth_required
 def api_profile():
     data = request.get_json(silent=True) or {}
-    name = data.get('name', '').strip()
+    name = str(data.get('name', '')).strip()[:100]
     if name:
         current_user.model.name = name
         db.session.commit()
@@ -1396,8 +1460,8 @@ def api_data():
             'net_worth': 0,
             'accounts': [],
             'transactions': [],
-            'userName': current_user.model.name or '',
-            'userEmail': current_user.model.email or '',
+            'userName': _html_safe(current_user.model.name or ''),
+            'userEmail': _html_safe(current_user.model.email or ''),
             'onboarded': current_user.model.onboarded,
             'tourSeen': current_user.model.tour_seen,
         })
@@ -1408,7 +1472,7 @@ def api_data():
     result['userEmail'] = current_user.model.email or ''
     result['onboarded'] = current_user.model.onboarded
     result['tourSeen'] = current_user.model.tour_seen
-    return jsonify(result)
+    return jsonify(_html_safe(result))
 
 @app.route('/api/refresh', methods=['POST'])
 @api_auth_required
@@ -1618,7 +1682,8 @@ def plaid_link_token():
         data = r.json()
         return jsonify({'ok': True, 'link_token': data['link_token']})
     except Exception as e:
-        return jsonify({'ok': False, 'error': str(e)}), 500
+        app.logger.error('Request failed: %s', e)
+        return jsonify({'ok': False, 'error': 'Something went wrong. Please try again.'}), 500
 
 @app.route('/api/plaid/exchange', methods=['POST'])
 @api_auth_required
@@ -1680,7 +1745,8 @@ def plaid_exchange():
         t.start()
         return jsonify({'ok': True, 'msg': 'Account connected! Refreshing data...'})
     except Exception as e:
-        return jsonify({'ok': False, 'error': str(e)}), 500
+        app.logger.error('Request failed: %s', e)
+        return jsonify({'ok': False, 'error': 'Something went wrong. Please try again.'}), 500
 
 @app.route('/api/wise/test', methods=['POST'])
 @api_auth_required
@@ -1720,7 +1786,8 @@ def api_wise_test():
         else:
             return jsonify({'ok': False, 'error': f'Wise API returned {r.status_code}.'}), 400
     except Exception as e:
-        return jsonify({'ok': False, 'error': str(e)}), 500
+        app.logger.error('Request failed: %s', e)
+        return jsonify({'ok': False, 'error': 'Something went wrong. Please try again.'}), 500
 
 if __name__ == '__main__':
     port  = int(os.getenv('PORT', 5050))

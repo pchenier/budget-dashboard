@@ -1115,6 +1115,9 @@ Chart.defaults.color='#52525b';
 Chart.defaults.font.family="'Geist',sans-serif";
 // Current color theme's accent (see static/brand.css + setAccent in Settings)
 // On the light background, lines use the darker ink of the accent so they stay visible on white
+// Text from the server arrives HTML-escaped (safe for innerHTML). Decode it
+// only where it is written with textContent or compared to user input.
+function unesc(s){ const t=document.createElement('textarea'); t.innerHTML=s==null?'':String(s); return t.value; }
 function accent(){ const cs=getComputedStyle(document.documentElement); return (document.documentElement.dataset.surface==='light' && cs.getPropertyValue('--ink').trim()) || cs.getPropertyValue('--lime').trim() || '#b8f566'; }
 function chartGrid(){ return document.documentElement.dataset.surface==='light' ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.04)'; }
 function chartLegend(){ return getComputedStyle(document.documentElement).getPropertyValue('--text2').trim()||'#a1a1aa'; }
@@ -3891,6 +3894,7 @@ function pgSettings(){
     row('Export data','Download all your financial data','<button class="btn btn-ghost btn-sm"><svg data-feather="save"></svg> Export CSV</button>'),
     row('Sync now','Force refresh all accounts','<button class="btn btn-ghost btn-sm" onclick="doRefresh()"><svg data-feather="refresh-cw"></svg> Sync</button>'),
     row('Delete account','Permanently delete all data','<button class=\"btn btn-sm\" style=\"background:var(--red-bg);color:var(--red);border:1px solid var(--red-br)\" onclick=\"showDeleteModal()\">Delete</button>'),
+    row('Privacy & terms','How Fiscit handles your data','<span style="display:flex;gap:8px"><a class="btn btn-ghost btn-sm" href="https://fiscit.com/privacy" target="_blank" rel="noopener">Privacy</a><a class="btn btn-ghost btn-sm" href="https://fiscit.com/terms" target="_blank" rel="noopener">Terms</a></span>'),
     row('Product tour','Step-by-step walkthrough of every tab','<button class="btn btn-ghost btn-sm" onclick="FiscitTour.start()"><svg data-feather="map"></svg> Start tour</button>'),
     row('Replay onboarding','Walk through the intro tour again','<button class="btn btn-ghost btn-sm" onclick="replayOnboarding()"><svg data-feather="play-circle"></svg> Replay</button>'),
     row('Sign out','Log out of your account','<button class="btn btn-ghost btn-sm" onclick="doLogout()"><svg data-feather="log-out" style="width:14px;height:14px;vertical-align:middle;margin-right:4px"></svg> Sign out</button>'),
@@ -3936,7 +3940,7 @@ const DELETE_MODAL_HTML = `
 `;
 
 function showDeleteModal(){
-  const email = (D.userEmail||'').trim();
+  const email = unesc(D.userEmail||'').trim();
   if(!document.getElementById('delete-modal')) document.body.insertAdjacentHTML('beforeend', DELETE_MODAL_HTML);
   const m=document.getElementById('delete-modal');
   m.style.display='flex';
@@ -3955,7 +3959,7 @@ function closeDeleteModal(){
 }
 
 function confirmDeleteAccount(){
-  const email=(D.userEmail||'').trim();
+  const email=unesc(D.userEmail||'').trim();
   const inp=document.getElementById('delete-confirm-input');
   const errEl=document.getElementById('delete-error');
   const btn=document.getElementById('delete-confirm-btn');
@@ -4667,9 +4671,9 @@ function loadRealData(){
     const av=document.getElementById('user-avatar');
     const displayName = D.userName || D.userEmail?.split('@')[0] || 'User';
     const displayEmail = D.userEmail || '';
-    if(un) un.textContent = displayName;
-    if(ue) ue.textContent = displayEmail;
-    if(av) av.textContent = displayName.slice(0,2).toUpperCase();
+    if(un) un.textContent = unesc(displayName);
+    if(ue) ue.textContent = unesc(displayEmail);
+    if(av) av.textContent = unesc(displayName).slice(0,2).toUpperCase();
     navigate('dashboard');
     updateBudgetBadge();
     feather.replace({width:14,height:14});
@@ -4694,9 +4698,9 @@ document.addEventListener('DOMContentLoaded',()=>{
       const un=document.getElementById('user-name');
       const ue=document.getElementById('user-email');
       const av=document.getElementById('user-avatar');
-      if(un) un.textContent = displayName;
-      if(ue) ue.textContent = displayEmail;
-      if(av) av.textContent = displayName.slice(0,2).toUpperCase();
+      if(un) un.textContent = unesc(displayName);
+      if(ue) ue.textContent = unesc(displayEmail);
+      if(av) av.textContent = unesc(displayName).slice(0,2).toUpperCase();
       // Update sync timestamp
       if(D.generated){
         const ts=document.getElementById('sync-ts');

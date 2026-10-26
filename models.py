@@ -76,3 +76,10 @@ class InvestmentAccount(db.Model):
     label    = db.Column(db.String(100), default='')
     balance  = db.Column(db.Float, default=0)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+
+class UsedSsoToken(db.Model):
+    """jti of SSO handoff tokens already redeemed (makes /sso links single-use)."""
+    __tablename__ = 'used_sso_tokens'
+    jti     = db.Column(db.String(64), primary_key=True)
+    used_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
