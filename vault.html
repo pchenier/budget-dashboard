@@ -3373,10 +3373,12 @@ function calSelectDay(d){
 }
 
 function _calBuildEvents(year, month){
-  const events = {}; // day -> [{type, label, color, sub}]
-  const add = (day, type, label, color, sub='') => {
+  const events = {}; // day -> [{type, icon, label, color, sub}]
+  // Every caller passes an icon; without it in the signature all fields shifted
+  // (the icon name showed as the label, the label became the color...).
+  const add = (day, type, icon, label, color, sub='') => {
     if(!events[day]) events[day]=[];
-    events[day].push({type, label, color, sub});
+    events[day].push({type, icon, label, color, sub});
   };
   // Transactions
   applyOverrides(applyRules(D.txns)).forEach(t=>{
@@ -3600,6 +3602,7 @@ function pgCalendar(){
         const _wkIco = {txn:'minus',income:'dollar-sign',gym:'zap',meal:'coffee',habit:'circle'};
         const evIco = ev.type.startsWith('custom_') ? ((CAL_EV_TYPES[ev.type.replace('custom_','')]||CAL_EV_TYPES.event).icon||'calendar') : (_wkIco[ev.type]||'folder');
         const cleanLabel = ev.label;
+        const pos = _calEvTimePosition(ev); // was missing: the week view crashed as soon as it had an event
         eventBlocks += `<div class="cal-ev-block" style="grid-column:${col};top:${pos.top+40}px;height:${pos.height-2}px;background:${ev.color}22;color:${ev.color};border-left:3px solid ${ev.color}" title="${cleanLabel}${ev.sub?' - '+ev.sub:''}">${ico(evIco,10)} ${cleanLabel.slice(0,20)}</div>`;
       });
     });
