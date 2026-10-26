@@ -304,6 +304,60 @@ def _get_state(user_id):
     return _user_states[user_id]
 
 # ── Build config dict for a user from DB ────────────────────────────────────
+def _plaid_base():
+    env = os.getenv('PLAID_ENV', 'production')
+    return ('https://production.plaid.com' if env == 'production'
+            else 'https://development.plaid.com' if env == 'development'
+            else 'https://sandbox.plaid.com')
+
+def _plaid_account_keys(access_token):
+    """Fingerprints of an Item's accounts: (mask, subtype), or (name, subtype) when
+    the bank gives no mask. Returns None if Plaid can't be reached, so we never
+    delete anything on a guess."""
+    import requests as req
+    try:
+        r = req.post(f'{_plaid_base()}/accounts/get', json={
+            'client_id': os.getenv('PLAID_CLIENT_ID'), 'secret': os.getenv('PLAID_SECRET'),
+            'access_token': access_token,
+        }, timeout=15)
+        if r.status_code != 200:
+            return None
+        return {((a.get('mask') or a.get('name') or '').strip().lower(), a.get('subtype') or '')
+                for a in r.json().get('accounts', [])}
+    except Exception:
+        return None
+
+def _dedupe_plaid_connections(uid):
+    """The same bank linked twice shows every account twice. Two connections at the
+    same institution that share at least one account are the same login: keep the
+    newest (freshest credentials), revoke the older Item at Plaid, delete its row.
+    Different logins at the same bank (no shared account) are left alone."""
+    conns = PlaidConnection.query.filter_by(user_id=uid).order_by(PlaidConnection.created_at.desc(), PlaidConnection.id.desc()).all()
+    by_inst = {}
+    for c in conns:
+        by_inst.setdefault((c.institution or '').strip().lower(), []).append(c)
+    removed = []
+    for inst, group in by_inst.items():
+        if not inst or len(group) < 2:
+            continue
+        kept = []  # (conn, account keys), newest first
+        for c in group:
+            keys = _plaid_account_keys(c.access_token)
+            if keys is None:
+                kept.append((c, set()))
+                continue
+            if any(keys & k for _, k in kept):
+                removed.append(c)
+            else:
+                kept.append((c, keys))
+    if removed:
+        _plaid_remove_items({c.access_token for c in removed})
+        for c in removed:
+            db.session.delete(c)
+        db.session.commit()
+        app.logger.info('Removed %d duplicate Plaid connection(s) for user %s', len(removed), uid)
+    return len(removed)
+
 def build_user_config(user):
     """Build the config dict for generate_data.pull_all() from DB records."""
     cfg = {
@@ -317,7 +371,12 @@ def build_user_config(user):
         'start_date': '2025-01-01',
         'wallets': [],
     }
-    # Plaid connections (user can have multiple banks)
+    # Plaid connections (user can have multiple banks). Drop a re-linked duplicate first.
+    try:
+        _dedupe_plaid_connections(user.model.id)
+    except Exception as e:
+        db.session.rollback()
+        app.logger.warning('Plaid dedupe skipped: %s', type(e).__name__)
     plaid_conns = PlaidConnection.query.filter_by(user_id=user.model.id).all()
     if plaid_conns:
         cfg['plaid_tokens'] = [pc.access_token for pc in plaid_conns]
