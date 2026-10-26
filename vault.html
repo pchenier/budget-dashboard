@@ -429,7 +429,7 @@ button{font-family:var(--font)}
 }
 @media (prefers-reduced-motion: reduce){.mmore-sheet,.mmore{transition:none}}
 </style>
-<link rel="stylesheet" href="/static/brand.css?v=3">
+<link rel="stylesheet" href="/static/brand.css?v=4">
 </head>
 <body>
 
@@ -3325,7 +3325,7 @@ function deleteCalEv(id){
 let _calYear = new Date().getFullYear();
 let _calMonth = new Date().getMonth();
 let _calSelDay = null;
-let _calView = 'week';
+let _calView = 'month'; // the whole month opens by default
 let _calDayDate = new Date();
 _calDayDate.setHours(0,0,0,0);
 let _calWeekStart = (function(){
@@ -3359,16 +3359,14 @@ function calSelectDay(d){
   const titleEl = document.getElementById('cal-day-title');
   if(titleEl){
     const monthName = new Date(_calYear,_calMonth,1).toLocaleString('en',{month:'long'});
-    titleEl.textContent = _calSelDay ? _calSelDay+' '+monthName : 'Day Detail';
+    titleEl.textContent = _calSelDay ? _calSelDay+' '+monthName : 'Day detail';
   }
   // update add button
   const addBtn = document.getElementById('cal-day-add');
   if(addBtn) addBtn.style.display = _calSelDay ? '' : 'none';
   // highlight selected cell
   document.querySelectorAll('.cal-cell').forEach(c=>{
-    const cd = parseInt(c.dataset.day);
-    c.style.outline = (cd===_calSelDay) ? '2px solid var(--accent)' : '';
-    c.style.zIndex  = (cd===_calSelDay) ? '1' : '';
+    c.classList.toggle('selected', parseInt(c.dataset.day)===_calSelDay);
   });
 }
 
@@ -3461,12 +3459,12 @@ function _calBuildDayPanel(day, year, month){
     </div>`;
   }).join('');
 
-  const empty = !evs.length ? `<div style="padding:12px 0;text-align:center;color:var(--text3);font-size:12px">Nothing logged on ${day} ${new Date(year,month,day).toLocaleString('en',{month:'short'})}</div>` : '';
+  const empty = !evs.length ? `<div style="padding:12px 0;text-align:center;color:var(--text3);font-size:12px">No events on ${day} ${new Date(year,month,day).toLocaleString('en',{month:'short'})}</div>` : '';
 
   const txnBtn = txnCount>0 ? `
     <button onclick="goToTxnDate('${isoDate}')"
       style="width:100%;margin-top:10px;padding:8px 12px;background:var(--bg4);border:1px solid var(--border);border-radius:var(--r-sm);color:var(--text2);font-family:var(--font);font-size:12px;cursor:pointer;text-align:left;display:flex;align-items:center;justify-content:space-between">
-      <span style="display:inline-flex;align-items:center;gap:4px"><svg data-feather="minus" style="width:14px;height:14px"></svg> Transactions le ${day} ${new Date(year,month,day).toLocaleString('en',{month:'short'})}</span>
+      <span style="display:inline-flex;align-items:center;gap:4px"><svg data-feather="minus" style="width:14px;height:14px"></svg> Transactions on ${day} ${new Date(year,month,day).toLocaleString('en',{month:'short'})}</span>
       <span style="color:var(--text3)">${txnCount} →</span>
     </button>` : '';
 
@@ -3534,8 +3532,8 @@ function pgCalendar(){
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
         <div>
-          <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px">Titre</div>
-          <input id="cev-title" type="text" placeholder="ex: Fete de Marie..." style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-sm);padding:7px 10px;color:var(--text);font-family:var(--font);font-size:13px;outline:none">
+          <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px">Title</div>
+          <input id="cev-title" type="text" placeholder="e.g. Marie's birthday" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-sm);padding:7px 10px;color:var(--text);font-family:var(--font);font-size:13px;outline:none">
         </div>
         <div>
           <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px">Date</div>
@@ -3545,10 +3543,10 @@ function pgCalendar(){
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
         <div>
           <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px">Notes</div>
-          <input id="cev-notes" type="text" placeholder="Optionnel..." style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-sm);padding:7px 10px;color:var(--text);font-family:var(--font);font-size:13px;outline:none">
+          <input id="cev-notes" type="text" placeholder="Optional" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-sm);padding:7px 10px;color:var(--text);font-family:var(--font);font-size:13px;outline:none">
         </div>
         <div>
-          <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px">Recurrence</div>
+          <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px">Repeats</div>
           <select id="cev-repeat" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-sm);padding:7px 10px;color:var(--text);font-family:var(--font);font-size:12px;outline:none">
             <option value="none">Once</option>
             <option value="yearly">Every year</option>
@@ -3744,6 +3742,8 @@ function pgCalendar(){
 
   const dayLabels=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
   const headers=dayLabels.map(d=>`<div class="cal-day-hdr">${d}</div>`).join('');
+  const amountOf = e => parseFloat(String(e.sub||'').replace(/[^0-9.]/g,''))||0;
+  const totalCells = Math.ceil((offset+daysInMonth)/7)*7;
   let cells='';
   for(let i=0;i<offset;i++) cells+=`<div class="cal-cell empty"></div>`;
   for(let d=1;d<=daysInMonth;d++){
@@ -3752,25 +3752,31 @@ function pgCalendar(){
     const dayEvs = events[d]||[];
 
     const customEvs = dayEvs.filter(e=>e.type.startsWith('custom_'));
-    const bgEvs     = dayEvs.filter(e=>!e.type.startsWith('custom_'));
+    const otherEvs  = dayEvs.filter(e=>!e.type.startsWith('custom_') && e.type!=='txn' && e.type!=='income');
+    const spent  = dayEvs.filter(e=>e.type==='txn').reduce((t,e)=>t+amountOf(e),0);
+    const earned = dayEvs.filter(e=>e.type==='income').reduce((t,e)=>t+amountOf(e),0);
+    const nTxn = dayEvs.filter(e=>e.type==='txn'||e.type==='income').length;
 
     const chips = customEvs.slice(0,2).map(e=>{
       const tpl = CAL_EV_TYPES[e.type.replace('custom_','')]||CAL_EV_TYPES.event;
-      return `<span class="cal-ev-chip" style="background:${e.color}22;color:${e.color};border:1px solid ${e.color}55">${ico(tpl.icon||'calendar',10)} ${e.label.slice(0,13)}</span>`;
-    }).join('');
+      return `<span class="cal-ev-chip" style="background:${e.color}22;color:${e.color};border:1px solid ${e.color}55">${ico(tpl.icon||'calendar',10)} ${e.label.slice(0,18)}</span>`;
+    }).join('') + (customEvs.length>2 ? `<span class="cal-more">+${customEvs.length-2} more</span>` : '');
 
     const typesSeen=new Set();
-    const dots = bgEvs.filter(e=>{ if(typesSeen.has(e.type)) return false; typesSeen.add(e.type); return true; })
-      .slice(0,4).map(e=>`<div style="width:4px;height:4px;border-radius:50%;background:${e.color};flex-shrink:0"></div>`).join('');
+    const dots = otherEvs.filter(e=>{ if(typesSeen.has(e.type)) return false; typesSeen.add(e.type); return true; })
+      .slice(0,4).map(e=>`<div style="width:5px;height:5px;border-radius:50%;background:${e.color};flex-shrink:0"></div>`).join('');
 
-    cells+=`<div class="cal-cell ${isToday?'today':''}" data-day="${d}"
-      onclick="calSelectDay(${d})"
-      style="cursor:pointer;outline:${isSelected?'2px solid var(--accent)':'none'};z-index:${isSelected?1:0}">
-      <span style="font-size:10px;font-weight:${isToday?'700':'500'};color:${isToday?'var(--text)':'var(--text3)'};line-height:1;margin-bottom:2px">${d}</span>
+    cells+=`<div class="cal-cell ${isToday?'today':''} ${isSelected?'selected':''}" data-day="${d}"
+      onclick="calSelectDay(${d})" title="${nTxn?nTxn+' transaction'+(nTxn>1?'s':''):''}">
+      <span class="cal-num">${d}</span>
+      ${earned?`<span class="cal-amt in">+${fmt(earned,0)}</span>`:''}
+      ${spent?`<span class="cal-amt out">−${fmt(spent,0)}</span>`:''}
       ${chips}
       ${dots?`<div class="cal-dot-row">${dots}</div>`:''}
     </div>`;
   }
+  for(let i=offset+daysInMonth;i<totalCells;i++) cells+=`<div class="cal-cell empty"></div>`;
+  const weekRows = totalCells/7;
 
   // Upcoming — custom events only (next 30 days)
   const upcoming=[];
@@ -3782,35 +3788,35 @@ function pgCalendar(){
   }
 
   return modal + `
-  <div style="display:grid;grid-template-columns:1fr 260px;gap:14px;align-items:start">
-    <div class="card">
+  <div class="cal-layout">
+    <div class="card cal-month">
       <div class="sec-hdr mb12">
         <div style="display:flex;align-items:center;gap:10px">
-          <button onclick="calNav(-1)" style="background:var(--bg4);border:1px solid var(--border);border-radius:6px;color:var(--text3);cursor:pointer;font-size:14px;padding:3px 10px;font-family:var(--font)">${ico('skip-back',14)}</button>
-          <span class="sec-title">${monthName} ${year}</span>
-          <button onclick="calNav(1)" style="background:var(--bg4);border:1px solid var(--border);border-radius:6px;color:var(--text3);cursor:pointer;font-size:14px;padding:3px 10px;font-family:var(--font)">${ico('skip-forward',14)}</button>
+          <button onclick="calNav(-1)" class="cal-nav" aria-label="Previous month">${ico('chevron-left',14)}</button>
+          <span class="sec-title" style="min-width:120px;text-align:center">${monthName} ${year}</span>
+          <button onclick="calNav(1)" class="cal-nav" aria-label="Next month">${ico('chevron-right',14)}</button>
         </div>
-        <div style="display:flex;align-items:center;gap:8px">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end">
           <button onclick="_calYear=new Date().getFullYear();_calMonth=new Date().getMonth();navigate('calendar')" class="btn btn-ghost btn-sm">Today</button>
           <button onclick="openCalEvModal(${todayD>0?todayD:1})" class="btn btn-primary btn-sm">${ico('plus',12)} Add</button>
           ${viewPills}
         </div>
       </div>
-      <div class="cal-grid mb6">${headers}</div>
-      <div class="cal-grid mb12">${cells}</div>
-      <div style="display:flex;gap:12px;flex-wrap:wrap">
-        <div style="display:flex;align-items:center;gap:5px"><div style="width:7px;height:7px;border-radius:50%;background:var(--accent)"></div><span style="font-size:10px;color:var(--text3)">Gym</span></div>
-        <div style="display:flex;align-items:center;gap:5px"><div style="width:7px;height:7px;border-radius:50%;background:var(--yellow)"></div><span style="font-size:10px;color:var(--text3)">Meals</span></div>
-        <div style="display:flex;align-items:center;gap:5px"><div style="width:7px;height:7px;border-radius:50%;background:#b8f566"></div><span style="font-size:10px;color:var(--text3)">Habits</span></div>
-        <div style="display:flex;align-items:center;gap:5px"><div style="width:7px;height:7px;border-radius:50%;background:var(--red)"></div><span style="font-size:10px;color:var(--text3)">Depenses</span></div>
-        ${Object.entries(CAL_EV_TYPES).map(([,t])=>`
-        <div style="display:flex;align-items:center;gap:5px"><div style="width:7px;height:7px;border-radius:50%;background:${t.color}"></div><span style="font-size:10px;color:var(--text3)">${ico(t.icon,12)} ${t.label}</span></div>`).join('')}
+      <div class="cal-grid cal-month-hdr">${headers}</div>
+      <div class="cal-grid cal-month-grid" style="grid-template-rows:repeat(${weekRows},minmax(0,1fr))">${cells}</div>
+      <div class="cal-legend">
+        <span><i style="background:var(--green)"></i>Income</span>
+        <span><i style="background:var(--red)"></i>Spending</span>
+        <span><i style="background:var(--accent)"></i>Gym</span>
+        <span><i style="background:var(--yellow)"></i>Meals</span>
+        <span><i style="background:var(--lime)"></i>Habits</span>
+        ${Object.entries(CAL_EV_TYPES).map(([,t])=>`<span><i style="background:${t.color}"></i>${t.label}</span>`).join('')}
       </div>
     </div>
-    <div style="display:flex;flex-direction:column;gap:12px">
+    <div class="cal-side">
       <div class="card">
         <div class="sec-hdr mb8">
-          <span class="sec-title" id="cal-day-title">${_calSelDay ? _calSelDay+' '+monthName : 'Day Detail'}</span>
+          <span class="sec-title" id="cal-day-title">${_calSelDay ? _calSelDay+' '+monthName : 'Day detail'}</span>
           <button id="cal-day-add" onclick="openCalEvModal(${_calSelDay||1})" class="btn btn-ghost btn-sm" style="font-size:10px;${_calSelDay?'':'display:none'}">${ico('plus',12)} Add</button>
         </div>
         <div id="cal-day-panel">${_calBuildDayPanel(_calSelDay, year, month)}</div>
@@ -3823,7 +3829,7 @@ function pgCalendar(){
             <div style="flex:1;font-size:12px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${e.label}</div>
             <div style="font-size:10px;color:var(--text3);flex-shrink:0">${e.date}</div>
           </div>`).join('')
-        :'<div style="padding:12px 0;text-align:center;color:var(--text3);font-size:12px">Rien a venir</div>'}
+        :'<div style="padding:12px 0;text-align:center;color:var(--text3);font-size:12px">Nothing coming up in the next 30 days</div>'}
       </div>
     </div>
   </div>`;
