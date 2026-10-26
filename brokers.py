@@ -337,9 +337,10 @@ def snaptrade_sync(creds, persist=None):
         if links:
             raise BrokerError('SnapTrade is still importing your accounts from your broker. Fiscit will retry automatically, or click Sync in a minute.')
         raise BrokerError('No brokerage is linked in SnapTrade yet. Use "Connect a brokerage" and finish signing in to your broker.')
+    diag = []
     for acc in accounts:
         total = ((acc.get('balance') or {}).get('total') or {})
-        positions = []
+        positions, cash_cad, notes = [], 0.0, []
         try:
             for p in _snap('GET', f"/accounts/{acc['id']}/positions", query=q) or []:
                 sym = ((p.get('symbol') or {}).get('symbol') or {})
@@ -347,15 +348,34 @@ def snaptrade_sync(creds, persist=None):
                 qty, price = float(p.get('units') or 0), float(p.get('price') or 0)
                 positions.append({'symbol': sym.get('symbol', ''), 'description': sym.get('description', ''),
                                   'quantity': qty, 'price': price, 'value_cad': round(_to_cad(qty * price, cur), 2), 'currency': cur})
-        except BrokerError:
-            pass
+        except BrokerError as e:
+            notes.append(f'positions: {e}')
+        try:
+            balances = _snap('GET', f"/accounts/{acc['id']}/balances", query=q) or []
+            for b in balances:
+                cash_cad += _to_cad(b.get('cash'), (b.get('currency') or {}).get('code'))
+            notes.append(f"balances in {sorted({(b.get('currency') or {}).get('code') or '?' for b in balances}) or 'none'}")
+        except BrokerError as e:
+            notes.append(f'balances: {e}')
+        # Prefer SnapTrade's account total; otherwise positions + cash
+        if total.get('amount') is not None:
+            balance = _to_cad(total.get('amount'), total.get('currency'))
+        else:
+            balance = sum(p['value_cad'] for p in positions) + cash_cad
+        diag.append(f"account total={'yes' if total.get('amount') is not None else 'no'}, "
+                    f"{len(positions)} position(s), " + '; '.join(notes))
         out.append({
             'key': f"snap-{acc.get('id')}", 'name': acc.get('name') or acc.get('number') or 'Account',
             'institution': acc.get('institution_name') or '', 'type': (acc.get('meta') or {}).get('type', '') or '',
             'currency': total.get('currency') or 'CAD',
-            'balance_cad': round(_to_cad(total.get('amount'), total.get('currency')), 2), 'positions': positions,
+            'balance_cad': round(balance, 2), 'positions': positions,
         })
+    global last_diag
+    last_diag = ' | '.join(diag)  # structure only, no amounts — logged by the app
     return creds, out
+
+
+last_diag = ''
 
 
 def snaptrade_delete_user(creds):

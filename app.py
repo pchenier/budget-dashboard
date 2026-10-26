@@ -855,6 +855,8 @@ def _sync_broker(conn):
         _record_broker_sync(conn, creds, accounts)
         app.logger.warning('Broker sync %s (connection %s): ok, %d account(s), %d position(s)', conn.provider, conn.id,
                            len(accounts), sum(len(a.get('positions', [])) for a in accounts))
+        if conn.provider == 'snaptrade' and brokers.last_diag:
+            app.logger.warning('SnapTrade detail (connection %s): %s', conn.id, brokers.last_diag[:400])
     except brokers.BrokerError as e:
         db.session.rollback()
         conn.status, conn.last_error = 'error', str(e)[:300]
