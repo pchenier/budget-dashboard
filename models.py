@@ -83,3 +83,13 @@ class UsedSsoToken(db.Model):
     __tablename__ = 'used_sso_tokens'
     jti     = db.Column(db.String(64), primary_key=True)
     used_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
+
+
+class InvestmentSnapshot(db.Model):
+    """Every balance a manual investment account has had, for the value-over-time chart."""
+    __tablename__ = 'investment_snapshots'
+    id          = db.Column(db.Integer, primary_key=True)
+    account_id  = db.Column(db.Integer, db.ForeignKey('investment_accounts.id'), nullable=False, index=True)
+    user_id     = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
+    balance     = db.Column(db.Float, nullable=False)
+    recorded_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)

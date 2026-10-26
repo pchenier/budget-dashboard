@@ -86,11 +86,12 @@ window.buildFiscitDemo = function () {
     ],
     catLabels, catAmounts: catLabels.map((c) => Math.round(cats[c])),
     investments: [
-      { name: 'Vanguard All-Equity ETF', ticker: 'VEQT', val: 38450, pct: 1.4, color: '#3b82f6', shares: 912, price: 42.16 },
-      { name: 'iShares S&P/TSX 60', ticker: 'XIU', val: 14230, pct: 0.6, color: '#22c55e', shares: 402, price: 35.4 },
-      { name: 'Shopify Inc.', ticker: 'SHOP', val: 9200.12, pct: -2.1, color: '#a78bfa', shares: 68, price: 135.3 },
+      { name: 'TFSA · Questrade', platform: 'Questrade', label: 'TFSA', ticker: 'TFSA', val: 38450, color: '#3b82f6', source: 'demo' },
+      { name: 'RRSP · Wealthsimple', platform: 'Wealthsimple', label: 'RRSP', ticker: 'RRSP', val: 14230, color: '#22c55e', source: 'demo' },
+      { name: 'Brokerage', platform: 'Desjardins', label: 'Non-registered', ticker: 'BROK', val: 9200.12, color: '#a78bfa', source: 'plaid' },
     ],
-    investHistory,
+    investHistory: investHistory.slice(-6),
+    investHistoryLabels: monthLabels.slice(-6),
     crypto: [
       { coin: 'SOL', name: 'Solana', amt: 14.2, price: 236.5, val: 3358.3, pct: 3.2, color: '#a78bfa' },
       { coin: 'BTC', name: 'Bitcoin', amt: 0.0062, price: 137400, val: 851.88, pct: -0.8, color: '#f59e0b' },

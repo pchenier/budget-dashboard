@@ -10,7 +10,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="/static/feather.min.js"></script>
-<script src="/static/tour-demo.js?v=4" defer></script>
+<script src="/static/tour-demo.js?v=5" defer></script>
 <script src="/static/tour.js?v=7" defer></script>
 <script src="/static/motion.js?v=1" defer></script>
 <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
@@ -429,7 +429,7 @@ button{font-family:var(--font)}
 }
 @media (prefers-reduced-motion: reduce){.mmore-sheet,.mmore{transition:none}}
 </style>
-<link rel="stylesheet" href="/static/brand.css?v=4">
+<link rel="stylesheet" href="/static/brand.css?v=5">
 </head>
 <body>
 
@@ -2418,38 +2418,87 @@ function pgInsights(){
 
 // ═══════════════════════════ INVESTMENTS ═══════════════════════════
 function pgInvestments(){
-  if(!D.investments || D.investments.length === 0){
+  const invs = D.investments || [];
+  if(!invs.length){
     return`
     <div class="card" style="text-align:center;padding:48px 24px">
-      <svg data-feather="bar-chart-2" style="width:32px;height:32px;opacity:.15;margin-bottom:16px"></svg>
-      <div style="font-size:14px;font-weight:500;color:var(--text2);margin-bottom:8px">No investment data</div>
-      <div style="font-size:12px;color:var(--text4)">Connect an investment platform to see your portfolio</div>
+      <svg data-feather="trending-up" style="width:32px;height:32px;opacity:.25;margin-bottom:16px"></svg>
+      <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:6px">No investment accounts yet</div>
+      <div style="font-size:12.5px;color:var(--text3);max-width:360px;margin:0 auto 18px">Add your TFSA, RRSP or brokerage accounts with today's balance. Update them whenever you like — Fiscit keeps the history and counts them in your net worth.</div>
+      <button class="btn btn-primary btn-sm" onclick="addAccInvestment()"><svg data-feather="plus"></svg> Add investment account</button>
     </div>`;
   }
 
-  const totalVal=D.investments.reduce((s,i)=>s+i.val,0);
-  const rows=D.investments.map(inv=>`
+  const manual = invs.filter(i=>i.source!=='plaid');
+  const linked = invs.filter(i=>i.source==='plaid');
+  const sum = arr => arr.reduce((t,i)=>t+(i.val||0),0);
+  const totalVal = sum(invs);
+  const hist = D.investHistory || [];
+  const change = hist.length>1 ? hist[hist.length-1]-hist[0] : 0;
+  const fmtDate = iso => iso ? new Date(iso+'T12:00:00').toLocaleDateString('en',{month:'short',day:'numeric',year:'numeric'}) : '';
+
+  const rows = invs.map(inv=>{
+    const isManual = inv.source==='manual';
+    const meta = inv.source==='plaid'
+      ? `${inv.platform} · synced from your bank`
+      : `${inv.platform||''}${inv.label?' · '+inv.label:''}${inv.updated?' · updated '+fmtDate(inv.updated):''}`;
+    return `
     <div class="inv-row">
       <div class="ticker-box" style="color:${inv.color};background:${inv.color}15">${inv.ticker}</div>
       <div style="flex:1;min-width:0">
-        <div style="font-size:13px;font-weight:500;color:var(--text)">${inv.name}</div>
-        <div style="font-size:11px;color:var(--text3)">${inv.shares?inv.shares+' shares @ '+fmt(inv.price,2):''}</div>
+        <div style="font-size:13px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${inv.name}</div>
+        <div style="font-size:11px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${meta}</div>
       </div>
       <div style="text-align:right;flex-shrink:0">
-        <div style="font-size:13px;font-weight:500;color:var(--text);font-variant-numeric:tabular-nums">${fmt(inv.val,0)}</div>
-        <div style="font-size:11px" class="${deltaClass(inv.pct)}">${fmtPct(inv.pct)}</div>
+        <div style="font-size:13.5px;font-weight:600;color:var(--text);font-variant-numeric:tabular-nums">${fmt(inv.val,2)}</div>
+        <div style="font-size:11px;color:var(--text3)">${totalVal?((inv.val/totalVal)*100).toFixed(1)+'% of portfolio':''}</div>
       </div>
-    </div>`).join('');
+      ${isManual ? `<div class="inv-actions">
+        <button class="btn btn-ghost btn-sm" onclick="editInvestment(${inv.id})" title="Update balance"><svg data-feather="edit-2"></svg><span>Update</span></button>
+        <button class="icon-btn" onclick="deleteInvestment(${inv.id})" title="Delete account" aria-label="Delete account"><svg data-feather="trash-2"></svg></button>
+      </div>` : inv.source==='plaid' ? `<div class="inv-actions"><span class="badge b-blue">Bank</span></div>` : ''}
+    </div>`;}).join('');
 
   return`
   <div class="metrics-row mb20">
     <div class="metric">
-      <div class="metric-label">Total Portfolio</div>
+      <div class="metric-label">Total portfolio</div>
       <div class="metric-val">${fmt(totalVal,0)}</div>
+      <div class="metric-delta flat">Included in net worth</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Tracked manually</div>
+      <div class="metric-val">${fmt(sum(manual),0)}</div>
+      <div class="metric-delta flat">${manual.length} account${manual.length!==1?'s':''}</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Synced from banks</div>
+      <div class="metric-val">${fmt(sum(linked),0)}</div>
+      <div class="metric-delta flat">${linked.length} account${linked.length!==1?'s':''}</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Change</div>
+      <div class="metric-val" style="color:${change>0?'var(--green)':change<0?'var(--red)':'var(--text)'}">${hist.length>1?(change>=0?'+':'')+fmt(change,0):'—'}</div>
+      <div class="metric-delta flat">${hist.length>1?'Manual accounts, since '+(D.investHistoryLabels||[])[0]:'Update balances to build history'}</div>
+    </div>
+  </div>
+  <div class="g2-1 mb20">
+    <div class="card">
+      <div class="sec-hdr"><span class="sec-title">Portfolio value</span><span style="font-size:11px;color:var(--text3)">Manually tracked accounts</span></div>
+      ${hist.length>1
+        ? '<div class="chart-wrap" style="height:220px"><canvas id="invChart"></canvas></div>'
+        : `<div style="height:220px;display:grid;place-items:center;text-align:center;color:var(--text3);font-size:12.5px;padding:0 24px">The chart fills in as you update your balances over the months.<br>Use <b style="color:var(--text2)">Update</b> on an account whenever you check it.</div>`}
+    </div>
+    <div class="card">
+      <div class="sec-hdr"><span class="sec-title">Allocation</span></div>
+      <div class="chart-wrap" style="height:220px"><canvas id="allocChart"></canvas></div>
     </div>
   </div>
   <div class="card">
-    <div class="sec-hdr"><span class="sec-title">Holdings</span></div>
+    <div class="sec-hdr">
+      <span class="sec-title">Accounts</span>
+      <button class="btn btn-primary btn-sm" onclick="addAccInvestment()"><svg data-feather="plus"></svg> Add account</button>
+    </div>
     ${rows}
   </div>`;
 }
@@ -2457,23 +2506,88 @@ function pgInvestments(){
 function initInvCharts(){
   const ctx=document.getElementById('invChart')?.getContext('2d');
   if(ctx){
-    const g=ctx.createLinearGradient(0,0,0,200);
-    g.addColorStop(0,'rgba(96,165,250,0.15)');
-    g.addColorStop(1,'rgba(96,165,250,0)');
+    const g=ctx.createLinearGradient(0,0,0,220);
+    g.addColorStop(0,accentA(0.18));
+    g.addColorStop(1,accentA(0));
     chartRegistry.inv=new Chart(ctx,{
       type:'line',
-      data:{labels:D.monthLabels,datasets:[{data:D.investHistory,borderColor:'#60a5fa',borderWidth:1.5,backgroundColor:g,fill:true,pointRadius:0,tension:0.4}]},
-      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{backgroundColor:'#1e1e1e',borderColor:'rgba(255,255,255,0.07)',borderWidth:1,padding:10,bodyColor:'#f4f4f5',callbacks:{label:ctx=>' '+fmt(ctx.parsed.y,0)}}},scales:{x:{grid:{display:false},border:{display:false},ticks:{color:'#52525b',font:{size:10}}},y:{grid:{color:chartGrid()},border:{display:false},ticks:{color:'#52525b',font:{size:10},callback:v=>fmt(v,0)}}}}
+      data:{labels:D.investHistoryLabels||[],datasets:[{data:D.investHistory,borderColor:accent(),borderWidth:2,backgroundColor:g,fill:true,pointRadius:3,pointBackgroundColor:accent(),tension:0.35}]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{backgroundColor:'#1e1e1e',borderColor:'rgba(255,255,255,0.07)',borderWidth:1,padding:10,titleColor:'#a1a1aa',bodyColor:'#f4f4f5',callbacks:{label:c=>' '+fmt(c.parsed.y,0)}}},
+        scales:{x:{grid:{display:false},border:{display:false},ticks:{color:'#52525b',font:{size:10}}},y:{grid:{color:chartGrid()},border:{display:false},ticks:{color:'#52525b',font:{size:10},callback:v=>fmt(v,0)}}}}
     });
   }
   const ctx2=document.getElementById('allocChart')?.getContext('2d');
   if(ctx2){
+    const invs=D.investments||[];
     chartRegistry.alloc=new Chart(ctx2,{
       type:'doughnut',
-      data:{labels:D.investments.map(i=>i.ticker),datasets:[{data:D.investments.map(i=>i.val),backgroundColor:D.investments.map(i=>i.color),borderWidth:0}]},
-      options:{responsive:true,maintainAspectRatio:false,cutout:'68%',plugins:{legend:{position:'right',labels:{boxWidth:8,boxHeight:8,padding:10,color:chartLegend(),font:{size:10},usePointStyle:true}},tooltip:{backgroundColor:'#1e1e1e',borderColor:'rgba(255,255,255,0.07)',borderWidth:1,padding:10,bodyColor:'#f4f4f5',callbacks:{label:ctx=>' '+fmt(ctx.parsed,0)}}}}
+      data:{labels:invs.map(i=>unesc(i.name)),datasets:[{data:invs.map(i=>i.val),backgroundColor:invs.map((i,n)=>n===0?accent():i.color),borderWidth:0}]},
+      options:{responsive:true,maintainAspectRatio:false,cutout:'68%',plugins:{legend:{position:'bottom',labels:{boxWidth:8,boxHeight:8,padding:10,color:chartLegend(),font:{size:10},usePointStyle:true}},tooltip:{backgroundColor:'#1e1e1e',borderColor:'rgba(255,255,255,0.07)',borderWidth:1,padding:10,bodyColor:'#f4f4f5',callbacks:{label:c=>' '+fmt(c.parsed,0)}}}}
     });
   }
+}
+
+// ── Manual investment accounts: update balance / delete ──
+async function _reloadInvestments(){
+  const r = await fetch('/api/data',{credentials:'include'});
+  if(r.ok){ const d=await r.json(); Object.keys(d).forEach(k=>{ if(d[k]!==undefined) D[k]=d[k]; }); }
+  navigate('investments');
+}
+
+function editInvestment(id){
+  const inv = (D.investments||[]).find(i=>i.id===id);
+  if(!inv) return;
+  document.getElementById('inv-edit')?.remove();
+  const o = document.createElement('div');
+  o.id = 'inv-edit';
+  o.className = 'inv-edit';
+  o.innerHTML = `
+    <form class="inv-edit-card" role="dialog" aria-modal="true" aria-labelledby="inv-edit-title">
+      <h3 id="inv-edit-title">Update balance</h3>
+      <p>${inv.name}</p>
+      <label>Current value (CAD)
+        <input id="inv-edit-bal" type="text" inputmode="decimal" autocomplete="off" value="${(inv.val||0).toFixed(2)}">
+      </label>
+      <label>Account name
+        <input id="inv-edit-label" type="text" maxlength="100" value="${inv.label}">
+      </label>
+      <div id="inv-edit-err" class="inv-edit-err" role="alert"></div>
+      <div class="inv-edit-actions">
+        <button type="button" class="btn btn-ghost" onclick="document.getElementById('inv-edit').remove()">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="inv-edit-save">Save</button>
+      </div>
+    </form>`;
+  document.body.appendChild(o);
+  o.addEventListener('click', e=>{ if(e.target===o) o.remove(); });
+  o.addEventListener('keydown', e=>{ if(e.key==='Escape') o.remove(); });
+  const input = document.getElementById('inv-edit-bal');
+  input.focus(); input.select();
+  o.querySelector('form').onsubmit = async e=>{
+    e.preventDefault();
+    // Accepts 12,345.67 and French 12 345,67
+    let raw = input.value.replace(/[\s$ ]/g,'');
+    raw = (/,\d{1,2}$/.test(raw) && !raw.includes('.')) ? raw.replace(/\./g,'').replace(',','.') : raw.replace(/,/g,'');
+    const balance = parseFloat(raw);
+    const err = document.getElementById('inv-edit-err');
+    if(!isFinite(balance) || balance < 0){ err.textContent='Enter a valid amount.'; return; }
+    const btn = document.getElementById('inv-edit-save');
+    btn.disabled = true; btn.textContent = 'Saving…';
+    try{
+      const r = await fetch('/api/investments/'+id,{method:'PUT',credentials:'include',headers:csrfHeaders({'Content-Type':'application/json'}),
+        body:JSON.stringify({balance, label:document.getElementById('inv-edit-label').value})});
+      const d = await r.json();
+      if(!d.ok) throw new Error(d.error||'Could not save.');
+      o.remove();
+      await _reloadInvestments();
+    }catch(ex){ err.textContent = ex.message || 'Could not save.'; btn.disabled=false; btn.textContent='Save'; }
+  };
+}
+
+async function deleteInvestment(id){
+  const inv = (D.investments||[]).find(i=>i.id===id);
+  if(!inv || !confirm('Delete "'+unesc(inv.name)+'" and its history? This cannot be undone.')) return;
+  const r = await fetch('/api/investments/'+id,{method:'DELETE',credentials:'include',headers:csrfHeaders()});
+  if(r.ok) await _reloadInvestments(); else alert('Could not delete this account.');
 }
 
 // ═══════════════════════════ CRYPTO ═══════════════════════════

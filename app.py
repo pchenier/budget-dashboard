@@ -17,7 +17,7 @@ from flask_login import LoginManager, UserMixin, login_user, login_required, log
 from authlib.integrations.flask_client import OAuth
 import jwt as pyjwt
 from pathlib import Path
-from models import db, User as UserModel, PlaidConnection, WiseConnection, CryptoWallet, InvestmentAccount, UsedSsoToken
+from models import db, User as UserModel, PlaidConnection, WiseConnection, CryptoWallet, InvestmentAccount, InvestmentSnapshot, UsedSsoToken
 
 # Normalize French categories to English (matches generate_data.py CATEGORY_ALIASES)
 CATEGORY_ALIASES = {
@@ -582,14 +582,67 @@ def build_vault_html(data, user=None):
 
     return html
 
-def _investment_js(a):
+def _naive(dt):
+    return dt.replace(tzinfo=None) if dt and dt.tzinfo else dt
+
+def _investment_js(a, updated=None):
     """Manual investment account -> the shape vault.html's Investments page renders."""
     label = a.label or a.platform
     return {
         'id': a.id, 'platform': a.platform, 'label': label, 'balance': a.balance,
         'name': a.platform if label == a.platform else f"{label} · {a.platform}",
         'ticker': label[:4].upper(), 'val': a.balance, 'pct': 0, 'color': '#3b82f6',
+        'source': 'manual', 'updated': (updated or a.created_at).strftime('%Y-%m-%d') if (updated or a.created_at) else '',
     }
+
+_PLAID_INV_COLORS = ['#a78bfa', '#22d3ee', '#f472b6', '#fb923c', '#34d399']
+
+def _investments_payload(user_id, accounts):
+    """Everything the Investments page and net worth need.
+    - manual accounts (entered by the user; NOT in the bank-sync net worth -> add them)
+    - Plaid accounts of type Investment (already counted in net worth; shown read-only)
+    - monthly value history of manual accounts, from their balance snapshots"""
+    manual = InvestmentAccount.query.filter_by(user_id=user_id).order_by(InvestmentAccount.id).all()
+    snaps = {}
+    for sn in InvestmentSnapshot.query.filter_by(user_id=user_id).order_by(InvestmentSnapshot.recorded_at).all():
+        snaps.setdefault(sn.account_id, []).append((_naive(sn.recorded_at), sn.balance))
+    items = []
+    for a in manual:
+        hist = snaps.get(a.id, [])
+        items.append(_investment_js(a, updated=hist[-1][0] if hist else None))
+    manual_total = round(sum(a.balance or 0 for a in manual), 2)
+
+    for i, acc in enumerate(a for a in (accounts or []) if a.get('type') == 'Investment'):
+        name = acc.get('name') or 'Investment account'
+        val = acc.get('balance', acc.get('bal', 0)) or 0
+        items.append({
+            'id': f"plaid-{acc.get('id', i)}", 'name': name, 'platform': acc.get('inst', ''),
+            'label': acc.get('subtype') or 'Investment', 'ticker': (acc.get('subtype') or name)[:4].upper(),
+            'val': val, 'balance': val, 'pct': 0, 'color': _PLAID_INV_COLORS[i % len(_PLAID_INV_COLORS)],
+            'source': 'plaid', 'updated': '',
+        })
+
+    # Month-end value of manual accounts over the last 12 months (only months they existed)
+    now = datetime.now()
+    labels, values = [], []
+    for back in range(11, -1, -1):
+        y, mth = now.year, now.month - back
+        while mth <= 0:
+            mth += 12
+            y -= 1
+        month_end = datetime(y + (mth == 12), (mth % 12) + 1, 1) - timedelta(seconds=1)
+        total, seen = 0.0, False
+        for a in manual:
+            hist = snaps.get(a.id) or [(_naive(a.created_at) or now, a.balance or 0)]
+            known = [b for t, b in hist if t <= month_end]
+            if known:
+                total += known[-1]
+                seen = True
+        if seen:
+            labels.append(datetime(y, mth, 1).strftime('%b'))
+            values.append(round(total, 2))
+    return {'investments': items, 'manualTotal': manual_total,
+            'investHistory': values, 'investHistoryLabels': labels}
 
 def _html_safe(obj):
     """HTML-escape every string in a JSON-like structure. The dashboard renders
@@ -616,7 +669,9 @@ def _build_real_data_js(data, user=None):
     raw_txns     = data.get("transactions", [])
     budget       = data.get("budget", [])
     cat_spend    = data.get("categorySpending", [])
-    net_worth    = data.get("netWorth", 0)
+    inv = _investments_payload(user.id, raw_accounts) if user else {'investments': [], 'manualTotal': 0, 'investHistory': [], 'investHistoryLabels': []}
+    # Manually tracked investments aren't part of the bank sync: add them to net worth
+    net_worth    = round((data.get("netWorth", 0) or 0) + inv['manualTotal'], 2)
     income       = data.get("monthlyIncome", 0)
     spending     = data.get("monthlySpending", 0)
     cash_flow    = data.get("cashFlow", 0)
@@ -702,7 +757,7 @@ def _build_real_data_js(data, user=None):
     return f"""const D = {{
   // ── Real data injected by Vault/Flask ({generated}) ──
   netWorth:        {net_worth},
-  totalAssets:     {data.get("totalAssets", 0)},
+  totalAssets:     {round((data.get("totalAssets", 0) or 0) + inv['manualTotal'], 2)},
   totalDebt:       {total_debt},
   income:          {income},
   spending:        {spending},
@@ -729,8 +784,9 @@ def _build_real_data_js(data, user=None):
   wallets: {_js(wallets_list)},
 
   // Investment accounts (manual + future integrations)
-  investments: {_js([_investment_js(a) for a in InvestmentAccount.query.filter_by(user_id=user.id).all()])},
-  investHistory: [],
+  investments: {_js(inv['investments'])},
+  investHistory: {json.dumps(inv['investHistory'])},
+  investHistoryLabels: {_js(inv['investHistoryLabels'])},
   crypto: [],
   habits: [],
   gym: [],
@@ -1507,6 +1563,11 @@ def api_status():
             'onboarded': current_user.model.onboarded,
         })
 
+def _api_investments(uid, accounts):
+    p = _investments_payload(uid, accounts)
+    return {'investments': p['investments'], 'investHistory': p['investHistory'],
+            'investHistoryLabels': p['investHistoryLabels'], 'manualTotal': p['manualTotal']}
+
 @app.route('/api/data')
 @api_auth_required
 def api_data():
@@ -1523,6 +1584,8 @@ def api_data():
             'userEmail': _html_safe(current_user.model.email or ''),
             'onboarded': current_user.model.onboarded,
             'tourSeen': current_user.model.tour_seen,
+            **_html_safe(_api_investments(uid, [])),
+            'netWorth': _api_investments(uid, [])['manualTotal'],
         })
     # Normalize field names to match vault.html mock format
     result = _normalize_api_data(data)
@@ -1531,6 +1594,10 @@ def api_data():
     result['userEmail'] = current_user.model.email or ''
     result['onboarded'] = current_user.model.onboarded
     result['tourSeen'] = current_user.model.tour_seen
+    inv = _api_investments(uid, data.get('accounts', []))
+    result.update(inv)
+    result['netWorth'] = round((data.get('netWorth', 0) or 0) + inv['manualTotal'], 2)
+    result['totalAssets'] = round((data.get('totalAssets', 0) or 0) + inv['manualTotal'], 2)
     return jsonify(_html_safe(result))
 
 @app.route('/api/refresh', methods=['POST'])
@@ -1616,10 +1683,41 @@ def api_add_investment():
         balance = float(balance)
     except (TypeError, ValueError):
         balance = 0
-    acct = InvestmentAccount(user_id=uid, platform=platform, label=label or platform, balance=balance)
+    if not (0 <= balance < 1e12):
+        return jsonify({'ok': False, 'error': 'Enter a valid balance.'}), 400
+    acct = InvestmentAccount(user_id=uid, platform=platform[:100], label=(label or platform)[:100], balance=balance)
     db.session.add(acct)
+    db.session.flush()
+    db.session.add(InvestmentSnapshot(account_id=acct.id, user_id=uid, balance=balance))
     db.session.commit()
     return jsonify({'ok': True, 'id': acct.id})
+
+@app.route('/api/investments/<int:acct_id>', methods=['PUT'])
+@api_auth_required
+def api_update_investment(acct_id):
+    """Update a manual account's balance (and optionally its label); keeps history."""
+    uid = current_user.model.id
+    a = InvestmentAccount.query.filter_by(id=acct_id, user_id=uid).first()
+    if not a:
+        return jsonify({'ok': False, 'error': 'Not found.'}), 404
+    data = request.get_json(silent=True) or {}
+    try:
+        balance = float(data.get('balance'))
+    except (TypeError, ValueError):
+        return jsonify({'ok': False, 'error': 'Enter a valid balance.'}), 400
+    if not (0 <= balance < 1e12):
+        return jsonify({'ok': False, 'error': 'Enter a valid balance.'}), 400
+    label = str(data.get('label') or '').strip()[:100]
+    # First edit of an account created before history existed: keep its original value
+    if not InvestmentSnapshot.query.filter_by(account_id=a.id).first():
+        db.session.add(InvestmentSnapshot(account_id=a.id, user_id=uid, balance=a.balance or 0,
+                                          recorded_at=a.created_at or datetime.now(timezone.utc)))
+    a.balance = balance
+    if label:
+        a.label = label
+    db.session.add(InvestmentSnapshot(account_id=a.id, user_id=uid, balance=balance))
+    db.session.commit()
+    return jsonify({'ok': True})
 
 @app.route('/api/investments/<int:acct_id>', methods=['DELETE'])
 @api_auth_required
@@ -1628,6 +1726,7 @@ def api_delete_investment(acct_id):
     a = InvestmentAccount.query.filter_by(id=acct_id, user_id=uid).first()
     if not a:
         return jsonify({'ok': False, 'error': 'Not found.'}), 404
+    InvestmentSnapshot.query.filter_by(account_id=a.id).delete()
     db.session.delete(a)
     db.session.commit()
     return jsonify({'ok': True})
@@ -1676,6 +1775,7 @@ def api_delete_account():
 
     try:
         CryptoWallet.query.filter_by(user_id=uid).delete()
+        InvestmentSnapshot.query.filter_by(user_id=uid).delete()
         InvestmentAccount.query.filter_by(user_id=uid).delete()
         PlaidConnection.query.filter_by(user_id=uid).delete()
         WiseConnection.query.filter_by(user_id=uid).delete()
