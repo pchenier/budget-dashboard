@@ -157,11 +157,11 @@
 @keyframes tourPulse{0%{opacity:.7;transform:scale(.96)}100%{opacity:0;transform:scale(1.12)}}
 #tour-spot.t-none{width:0!important;height:0!important;left:50%!important;top:50%!important}
 #tour-spot.t-none::after{display:none}
-#tour-card{position:fixed;pointer-events:auto;width:340px;max-width:calc(100vw - 32px);background:var(--bg2);border:1px solid rgba(255,255,255,.1);
+#tour-card{position:fixed;pointer-events:auto;width:340px;max-width:calc(100vw - 32px);background:var(--bg2);border:1px solid var(--border-strong,rgba(255,255,255,.1));
   border-radius:16px;padding:20px 20px 16px;box-shadow:0 24px 60px rgba(0,0,0,.55);font-family:var(--font);color:var(--text);
   transition:top .45s cubic-bezier(.16,1,.3,1),left .45s cubic-bezier(.16,1,.3,1),opacity .2s,transform .2s}
 #tour-card.t-enter{opacity:0;transform:translateY(6px) scale(.98)}
-#tour-card .t-arrow{position:absolute;width:12px;height:12px;background:var(--bg2);border:1px solid rgba(255,255,255,.1);transform:rotate(45deg)}
+#tour-card .t-arrow{position:absolute;width:12px;height:12px;background:var(--bg2);border:1px solid var(--border-strong,rgba(255,255,255,.1));transform:rotate(45deg)}
 #tour-card .t-arrow.left{left:-7px;border-right:none;border-top:none}
 #tour-card .t-arrow.top{top:-7px;border-right:none;border-bottom:none}
 #tour-card .t-arrow.bottom{bottom:-7px;border-left:none;border-top:none}
@@ -180,7 +180,7 @@
 #tour-card .t-next{background:var(--green);color:#000;border-color:var(--green);font-weight:600}
 #tour-card .t-ghost{background:none;color:var(--text2)}
 #tour-card button:focus{outline:none}
-#tour-card button:focus-visible{outline:2px solid rgba(255,255,255,.55);outline-offset:2px}
+#tour-card button:focus-visible{outline:2px solid var(--text2,rgba(255,255,255,.55));outline-offset:2px}
 #tour-card .t-keys{font-size:11px;color:var(--text3)}
 #tour-card.t-sheet{left:12px!important;right:12px;bottom:calc(84px + env(safe-area-inset-bottom));top:auto!important;width:auto;max-width:none}
 #tour-card.t-center{left:50%!important;top:50%!important;transform:translate(-50%,-50%)}
@@ -191,7 +191,7 @@
 #tour-prompt{position:fixed;inset:0;z-index:10002;display:flex;align-items:center;justify-content:center;padding:16px;
   background:rgba(0,0,0,.78);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);animation:tpIn .25s ease}
 #tour-prompt.tp-out{opacity:0;transition:opacity .18s}
-#tour-prompt .tp-card{width:100%;max-width:420px;background:var(--bg2);border:1px solid rgba(255,255,255,.1);border-radius:18px;
+#tour-prompt .tp-card{width:100%;max-width:420px;background:var(--bg2);border:1px solid var(--border-strong,rgba(255,255,255,.1));border-radius:18px;
   padding:32px 28px 22px;text-align:center;font-family:var(--font);color:var(--text);box-shadow:0 30px 80px rgba(0,0,0,.6);animation:tpCard .4s cubic-bezier(.16,1,.3,1)}
 #tour-prompt .tp-ico{width:56px;height:56px;margin:0 auto 16px;border-radius:16px;display:flex;align-items:center;justify-content:center;
   background:rgba(var(--lime-rgb),.12);color:var(--green);box-shadow:0 0 0 6px rgba(var(--lime-rgb),.05)}
@@ -200,10 +200,10 @@
 #tour-prompt .tp-actions{display:flex;gap:10px;flex-wrap:wrap-reverse}
 #tour-prompt .tp-btn{flex:1 1 150px;font-family:var(--font);font-size:13px;border-radius:10px;padding:11px 14px;cursor:pointer;border:1px solid var(--border)}
 #tour-prompt .tp-skip{background:none;color:var(--text2)}
-#tour-prompt .tp-skip:hover{color:var(--text);border-color:rgba(255,255,255,.18)}
+#tour-prompt .tp-skip:hover{color:var(--text);border-color:var(--text3,rgba(255,255,255,.18))}
 #tour-prompt .tp-go{background:var(--green);border-color:var(--green);color:#000;font-weight:600}
 #tour-prompt .tp-btn:focus{outline:none}
-#tour-prompt .tp-btn:focus-visible{outline:2px solid rgba(255,255,255,.55);outline-offset:2px}
+#tour-prompt .tp-btn:focus-visible{outline:2px solid var(--text2,rgba(255,255,255,.55));outline-offset:2px}
 #tour-prompt .tp-hint{margin-top:14px;font-size:11px;color:var(--text3)}
 @keyframes tpIn{from{opacity:0}to{opacity:1}}
 @keyframes tpCard{from{opacity:0;transform:translateY(10px) scale(.97)}to{opacity:1;transform:none}}

@@ -11,7 +11,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="/static/feather.min.js"></script>
 <script src="/static/tour-demo.js?v=4" defer></script>
-<script src="/static/tour.js?v=6" defer></script>
+<script src="/static/tour.js?v=7" defer></script>
 <script src="/static/motion.js?v=1" defer></script>
 <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
 <style>
@@ -429,7 +429,7 @@ button{font-family:var(--font)}
 }
 @media (prefers-reduced-motion: reduce){.mmore-sheet,.mmore{transition:none}}
 </style>
-<link rel="stylesheet" href="/static/brand.css?v=2">
+<link rel="stylesheet" href="/static/brand.css?v=3">
 </head>
 <body>
 
@@ -1114,7 +1114,10 @@ const deltaIcon = d => d>0?'▲':d<0?'▼':'–';
 Chart.defaults.color='#52525b';
 Chart.defaults.font.family="'Geist',sans-serif";
 // Current color theme's accent (see static/brand.css + setAccent in Settings)
-function accent(){ return getComputedStyle(document.documentElement).getPropertyValue('--lime').trim()||'#b8f566'; }
+// On the light background, lines use the darker ink of the accent so they stay visible on white
+function accent(){ const cs=getComputedStyle(document.documentElement); return (document.documentElement.dataset.surface==='light' && cs.getPropertyValue('--ink').trim()) || cs.getPropertyValue('--lime').trim() || '#b8f566'; }
+function chartGrid(){ return document.documentElement.dataset.surface==='light' ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.04)'; }
+function chartLegend(){ return getComputedStyle(document.documentElement).getPropertyValue('--text2').trim()||'#a1a1aa'; }
 function accentA(a){ const rgb=getComputedStyle(document.documentElement).getPropertyValue('--lime-rgb').trim()||'184,245,102'; return 'rgba('+rgb+','+a+')'; }
 Chart.defaults.font.size=11;
 
@@ -1349,7 +1352,7 @@ function initDashCharts(){
         }},
         scales:{
           x:{grid:{display:false},border:{display:false},ticks:{color:'#52525b',font:{size:10}}},
-          y:{grid:{color:'rgba(255,255,255,0.04)'},border:{display:false},
+          y:{grid:{color:chartGrid()},border:{display:false},
              ticks:{color:'#52525b',font:{size:10},callback:v=>fmt(v,0)}}
         }
       }
@@ -1378,7 +1381,7 @@ function initDashCharts(){
         plugins:{
           legend:{
             position:'right',
-            labels:{boxWidth:8,boxHeight:8,padding:10,color:'#a1a1aa',font:{size:10},
+            labels:{boxWidth:8,boxHeight:8,padding:10,color:chartLegend(),font:{size:10},
               usePointStyle:true,pointStyleWidth:8}
           },
           tooltip:{
@@ -2254,7 +2257,7 @@ function initSavingsChart(){
       }},
       scales:{
         x:{grid:{display:false},border:{display:false},ticks:{color:'#52525b',font:{size:10}}},
-        y:{grid:{color:'rgba(255,255,255,0.04)'},border:{display:false},
+        y:{grid:{color:chartGrid()},border:{display:false},
            ticks:{color:'#52525b',font:{size:10},callback:v=>v+'%'},
            min:0}
       }
@@ -2457,7 +2460,7 @@ function initInvCharts(){
     chartRegistry.inv=new Chart(ctx,{
       type:'line',
       data:{labels:D.monthLabels,datasets:[{data:D.investHistory,borderColor:'#60a5fa',borderWidth:1.5,backgroundColor:g,fill:true,pointRadius:0,tension:0.4}]},
-      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{backgroundColor:'#1e1e1e',borderColor:'rgba(255,255,255,0.07)',borderWidth:1,padding:10,bodyColor:'#f4f4f5',callbacks:{label:ctx=>' '+fmt(ctx.parsed.y,0)}}},scales:{x:{grid:{display:false},border:{display:false},ticks:{color:'#52525b',font:{size:10}}},y:{grid:{color:'rgba(255,255,255,0.04)'},border:{display:false},ticks:{color:'#52525b',font:{size:10},callback:v=>fmt(v,0)}}}}
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{backgroundColor:'#1e1e1e',borderColor:'rgba(255,255,255,0.07)',borderWidth:1,padding:10,bodyColor:'#f4f4f5',callbacks:{label:ctx=>' '+fmt(ctx.parsed.y,0)}}},scales:{x:{grid:{display:false},border:{display:false},ticks:{color:'#52525b',font:{size:10}}},y:{grid:{color:chartGrid()},border:{display:false},ticks:{color:'#52525b',font:{size:10},callback:v=>fmt(v,0)}}}}
     });
   }
   const ctx2=document.getElementById('allocChart')?.getContext('2d');
@@ -2465,7 +2468,7 @@ function initInvCharts(){
     chartRegistry.alloc=new Chart(ctx2,{
       type:'doughnut',
       data:{labels:D.investments.map(i=>i.ticker),datasets:[{data:D.investments.map(i=>i.val),backgroundColor:D.investments.map(i=>i.color),borderWidth:0}]},
-      options:{responsive:true,maintainAspectRatio:false,cutout:'68%',plugins:{legend:{position:'right',labels:{boxWidth:8,boxHeight:8,padding:10,color:'#a1a1aa',font:{size:10},usePointStyle:true}},tooltip:{backgroundColor:'#1e1e1e',borderColor:'rgba(255,255,255,0.07)',borderWidth:1,padding:10,bodyColor:'#f4f4f5',callbacks:{label:ctx=>' '+fmt(ctx.parsed,0)}}}}
+      options:{responsive:true,maintainAspectRatio:false,cutout:'68%',plugins:{legend:{position:'right',labels:{boxWidth:8,boxHeight:8,padding:10,color:chartLegend(),font:{size:10},usePointStyle:true}},tooltip:{backgroundColor:'#1e1e1e',borderColor:'rgba(255,255,255,0.07)',borderWidth:1,padding:10,bodyColor:'#f4f4f5',callbacks:{label:ctx=>' '+fmt(ctx.parsed,0)}}}}
     });
   }
 }
@@ -2541,7 +2544,7 @@ function initCryptoCharts(){
     chartRegistry.cAlloc=new Chart(ctx,{
       type:'doughnut',
       data:{labels:D.crypto.map(c=>c.coin),datasets:[{data:D.crypto.map(c=>c.val),backgroundColor:D.crypto.map(c=>c.color),borderWidth:0}]},
-      options:{responsive:true,maintainAspectRatio:false,cutout:'68%',plugins:{legend:{position:'bottom',labels:{boxWidth:8,boxHeight:8,padding:12,color:'#a1a1aa',font:{size:11},usePointStyle:true}},tooltip:{backgroundColor:'#1e1e1e',borderColor:'rgba(255,255,255,0.07)',borderWidth:1,padding:10,bodyColor:'#f4f4f5',callbacks:{label:ctx=>' '+fmt(ctx.parsed,2)}}}}
+      options:{responsive:true,maintainAspectRatio:false,cutout:'68%',plugins:{legend:{position:'bottom',labels:{boxWidth:8,boxHeight:8,padding:12,color:chartLegend(),font:{size:11},usePointStyle:true}},tooltip:{backgroundColor:'#1e1e1e',borderColor:'rgba(255,255,255,0.07)',borderWidth:1,padding:10,bodyColor:'#f4f4f5',callbacks:{label:ctx=>' '+fmt(ctx.parsed,2)}}}}
     });
   }
 }
@@ -3823,7 +3826,7 @@ function pgCalendar(){
 // ═══════════════════════════ SETTINGS ═══════════════════════════
 // ── Color themes (styles in static/brand.css) ──
 const ACCENTS=[['lime','Lime','#b8f566'],['mint','Mint','#34d399'],['ocean','Ocean','#38bdf8'],['violet','Violet','#a78bfa'],['sunset','Sunset','#fb923c'],['pink','Pink','#f472b6']];
-const SURFACES=[['graphite','Graphite','#0f0f0f'],['midnight','Midnight','#0b1120'],['black','Black','#000']];
+const SURFACES=[['graphite','Graphite','#0f0f0f'],['midnight','Midnight','#0b1120'],['black','Black','#000'],['light','Light','#f6f6f3']];
 function currentAccent(){ return document.documentElement.dataset.accent||'lime'; }
 function currentSurface(){ return document.documentElement.dataset.surface||'graphite'; }
 function accentPicker(){
@@ -3881,7 +3884,7 @@ function pgSettings(){
   ].join(''))}
   ${section('Appearance',[
     row('Accent color','Highlights, charts and buttons',accentPicker()),
-    row('Background','Graphite, midnight blue or pure black',surfacePicker()),
+    row('Background','Dark, midnight blue, pure black or light',surfacePicker()),
     row('Compact mode','Reduce spacing for more content',tog(false)),
   ].join(''))}
   ${section('Data',[

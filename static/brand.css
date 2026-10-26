@@ -142,3 +142,44 @@ html[data-surface="black"] .main::after{opacity:.6}
 .seg button.on{background:var(--bg5);color:var(--text)}
 .surface-dot{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px;border:1px solid rgba(255,255,255,.15)}
 @media(max-width:700px){.swatches{justify-content:flex-start}}
+
+/* ═══════════ Light background ═══════════
+   Bright accents stay as fills (buttons, bars); text and icons use a darker
+   "ink" of the same hue so they stay readable on white. */
+html[data-surface="light"]{color-scheme:light;
+  --bg:#f6f6f3;--bg2:#ffffff;--bg3:#f1f1ee;--bg4:#e8e8e4;--bg5:#d9d9d4;
+  --border:#e6e6e1;--border2:#efefeb;--border-strong:#d3d3cc;
+  --text:#141416;--text2:#55555e;--text3:#7a7a84;--text4:#a6a6ae;
+  --red:#dc2626;--red-bg:rgba(220,38,38,.07);--red-br:rgba(220,38,38,.2);
+  --yellow:#b45309;--yellow-bg:rgba(217,119,6,.09);
+  --blue:#2563eb;--blue-bg:rgba(37,99,235,.08);--purple:#7c3aed;
+  --ink:#4d7c0f;--green:var(--ink);--green-bg:rgba(var(--lime-rgb),.16);--green-br:rgba(var(--lime-rgb),.45)}
+html[data-surface="light"][data-accent="mint"]  {--ink:#047857}
+html[data-surface="light"][data-accent="ocean"] {--ink:#0369a1}
+html[data-surface="light"][data-accent="violet"]{--ink:#6d28d9}
+html[data-surface="light"][data-accent="sunset"]{--ink:#c2410c}
+html[data-surface="light"][data-accent="pink"]  {--ink:#be185d}
+html[data-surface="light"] .main::before{background-image:linear-gradient(rgba(0,0,0,.045) 1px,transparent 1px),linear-gradient(90deg,rgba(0,0,0,.045) 1px,transparent 1px)}
+html[data-surface="light"] .main::after{background:rgba(var(--lime-rgb),.16)}
+html[data-surface="light"] .sidebar{background:rgba(255,255,255,.86)}
+html[data-surface="light"] .topbar{background:rgba(246,246,243,.8)}
+html[data-surface="light"] .nav-item:hover{background:rgba(0,0,0,.04)}
+html[data-surface="light"] .nav-item.active{background:rgba(var(--lime-rgb),.16);border-color:rgba(var(--lime-rgb),.4)}
+html[data-surface="light"] .nav-item.active .ico,
+html[data-surface="light"] .mtab.active,
+html[data-surface="light"] .page-hero h1 em,
+html[data-surface="light"] .tour-pill{color:var(--ink)}
+html[data-surface="light"] .nav-item::before{background:var(--ink);box-shadow:none}
+html[data-surface="light"] .tour-pill{border-color:rgba(var(--lime-rgb),.6);background:rgba(var(--lime-rgb),.18)}
+html[data-surface="light"] .metric,html[data-surface="light"] .card,html[data-surface="light"] .card-xs,html[data-surface="light"] .acc-card,
+html[data-surface="light"] .insight,html[data-surface="light"] .habit-card{background:var(--bg2);box-shadow:0 1px 2px rgba(0,0,0,.04)}
+html[data-surface="light"] .metric:hover,html[data-surface="light"] .acc-card:hover,html[data-surface="light"] .insight:hover{border-color:rgba(var(--lime-rgb),.6);box-shadow:0 18px 40px -24px rgba(0,0,0,.18)}
+html[data-surface="light"] .metric::after,html[data-surface="light"] .card::after,html[data-surface="light"] .acc-card::after,html[data-surface="light"] .insight::after{
+  background:radial-gradient(380px circle at var(--mx,50%) var(--my,50%),rgba(var(--lime-rgb),.14),transparent 65%)}
+html[data-surface="light"] .btn-ghost:hover{border-color:#bdbdb6}
+html[data-surface="light"] .search-inp:focus{border-color:var(--ink);box-shadow:0 0 0 3px rgba(var(--lime-rgb),.2)}
+html[data-surface="light"] .toggle::after{background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.2)}
+html[data-surface="light"] .sync-dot{box-shadow:none}
+html[data-surface="light"] .swatch{border-color:#fff}
+html[data-surface="light"] .surface-dot{border-color:rgba(0,0,0,.15)}
+@media(max-width:700px){html[data-surface="light"] .mtabs{background:rgba(255,255,255,.92)}}
