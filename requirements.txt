@@ -10,5 +10,6 @@ psycopg2-binary==2.9.13
 bcrypt==5.0.0
 gunicorn==26.2.0
 authlib==1.9.1
+cryptography==50.0.2
 PyJWT==2.15.1
 google-auth==2.62.0

@@ -6,8 +6,27 @@ Multi-user: each user has their own Plaid/Wise/Crypto connections.
 
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime, timezone
+from sqlalchemy.types import TypeDecorator, String, Text
+
+import crypto_util
 
 db = SQLAlchemy()
+
+
+class EncryptedString(TypeDecorator):
+    """Encrypted at rest (see crypto_util). Reads legacy plaintext transparently."""
+    impl = String
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        return crypto_util.encrypt(value)
+
+    def process_result_value(self, value, dialect):
+        return crypto_util.decrypt(value)
+
+
+class EncryptedText(EncryptedString):
+    impl = Text
 
 class User(db.Model):
     __tablename__ = 'users'
@@ -46,7 +65,7 @@ class PlaidConnection(db.Model):
     __tablename__ = 'plaid_connections'
     id           = db.Column(db.Integer, primary_key=True)
     user_id      = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
-    access_token = db.Column(db.String(500), nullable=False)
+    access_token = db.Column(EncryptedString(500), nullable=False)  # encrypted at rest
     item_id      = db.Column(db.String(200), default='')
     institution  = db.Column(db.String(200), default='')
     created_at   = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
@@ -55,7 +74,7 @@ class WiseConnection(db.Model):
     __tablename__ = 'wise_connections'
     id          = db.Column(db.Integer, primary_key=True)
     user_id     = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
-    api_token   = db.Column(db.String(500), nullable=False)
+    api_token   = db.Column(EncryptedString(500), nullable=False)  # encrypted at rest
     profile_id  = db.Column(db.String(50), default='')
     created_at  = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
@@ -105,3 +124,31 @@ class InstitutionLogo(db.Model):
     data       = db.Column(db.LargeBinary, nullable=True)
     color      = db.Column(db.String(16), default='')
     fetched_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+
+
+class BrokerConnection(db.Model):
+    """A read-only investment connection: snaptrade | questrade | ibkr | kraken.
+    `credentials` is a JSON object (tokens/keys), encrypted at rest. Fiscit only
+    ever calls read endpoints with these."""
+    __tablename__ = 'broker_connections'
+    id          = db.Column(db.Integer, primary_key=True)
+    user_id     = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
+    provider    = db.Column(db.String(30), nullable=False)
+    label       = db.Column(db.String(100), default='')
+    credentials = db.Column(EncryptedText, nullable=False)
+    status      = db.Column(db.String(20), default='ok')     # ok | error | pending
+    last_error  = db.Column(db.String(300), default='')
+    cache       = db.Column(db.Text, default='')             # last fetched accounts/positions (JSON, no secrets)
+    last_synced = db.Column(db.DateTime, nullable=True)
+    created_at  = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+
+class BrokerSnapshot(db.Model):
+    """Daily value of each broker account, for the portfolio history chart."""
+    __tablename__ = 'broker_snapshots'
+    id            = db.Column(db.Integer, primary_key=True)
+    connection_id = db.Column(db.Integer, db.ForeignKey('broker_connections.id'), nullable=False, index=True)
+    user_id       = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
+    account_key   = db.Column(db.String(120), nullable=False)
+    balance       = db.Column(db.Float, nullable=False)
+    day           = db.Column(db.Date, nullable=False)

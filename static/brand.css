@@ -243,3 +243,25 @@ html[data-surface="light"] .surface-dot{border-color:rgba(0,0,0,.15)}
 .acc-logo img,.ticker-box img{width:100%;height:100%;object-fit:contain;border-radius:6px;display:block}
 .acc-logo.has-logo span,.ticker-box.has-logo span{display:none}
 .acc-logo{width:36px;height:36px;border-radius:10px}
+
+
+/* ═══════════ Brokerage connections ═══════════ */
+.broker-card{max-width:460px}
+.broker-opts{display:grid;gap:8px;margin:4px 0 4px}
+.broker-opt{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;padding:12px 14px;border-radius:12px;border:1px solid var(--border-strong);background:var(--bg3);color:var(--text);cursor:pointer;font-family:var(--font);transition:border-color .15s,background .15s}
+.broker-opt:hover{border-color:rgba(var(--lime-rgb),.5);background:rgba(var(--lime-rgb),.05)}
+.broker-opt b{font-size:13px;font-weight:600}
+.broker-opt span{font-size:11.5px;color:var(--text3)}
+.broker-opt.disabled{opacity:.5;cursor:default}
+.broker-opt.disabled:hover{border-color:var(--border-strong);background:var(--bg3)}
+.broker-steps{margin:0 0 12px 18px;padding:0;display:grid;gap:6px;font-size:12px;color:var(--text2);line-height:1.5}
+.broker-row{display:flex;align-items:center;gap:8px;padding:10px 0;border-top:1px solid var(--border2)}
+.broker-row:first-of-type{border-top:none}
+.inv-pos{margin:-4px 0 8px 48px}
+.inv-pos summary{font-size:11.5px;color:var(--text3);cursor:pointer;width:max-content}
+.inv-pos summary:hover{color:var(--text)}
+.inv-pos-grid{display:grid;grid-template-columns:1.2fr 1fr 1fr 1fr;gap:6px 12px;margin-top:8px;font-size:12px;font-variant-numeric:tabular-nums;color:var(--text2)}
+.inv-pos-grid>span:nth-child(-n+4){font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--text3)}
+.inv-pos-grid>span:nth-child(4n),.inv-pos-grid>span:nth-child(4n-1),.inv-pos-grid>span:nth-child(4n-2){text-align:right}
+.inv-pos-grid b{font-weight:600;color:var(--text)}
+@media(max-width:700px){.inv-pos{margin-left:0}.inv-pos-grid{grid-template-columns:1fr 1fr 1fr}.inv-pos-grid>*:nth-child(4n-2){display:none}}

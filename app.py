@@ -10,14 +10,15 @@ On first run with no saved config → redirects to /setup.
 After setup, config is saved to saved_config.json — never asks again on restart.
 """
 
-import os, json, re, threading, uuid
+import os, json, re, threading, time, uuid
 from flask import Flask, request, session, redirect, url_for, render_template_string, jsonify, send_from_directory, flash
 from datetime import datetime, timedelta, timezone
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from authlib.integrations.flask_client import OAuth
 import jwt as pyjwt
 from pathlib import Path
-from models import db, User as UserModel, PlaidConnection, WiseConnection, CryptoWallet, InvestmentAccount, InvestmentSnapshot, UsedSsoToken, InstitutionLogo
+from models import db, User as UserModel, PlaidConnection, WiseConnection, CryptoWallet, InvestmentAccount, InvestmentSnapshot, UsedSsoToken, InstitutionLogo, BrokerConnection, BrokerSnapshot
+import brokers
 
 # Normalize French categories to English (matches generate_data.py CATEGORY_ALIASES)
 CATEGORY_ALIASES = {
@@ -333,6 +334,12 @@ def _dedupe_plaid_connections(uid):
     newest (freshest credentials), revoke the older Item at Plaid, delete its row.
     Different logins at the same bank (no shared account) are left alone."""
     conns = PlaidConnection.query.filter_by(user_id=uid).order_by(PlaidConnection.created_at.desc(), PlaidConnection.id.desc()).all()
+    # Connections made from fiscit.com's onboarding have no institution name yet
+    if len(conns) > 1 and any(not c.institution for c in conns):
+        for c in conns:
+            if not c.institution:
+                c.institution = _plaid_item_institution(c.access_token)
+        db.session.commit()
     by_inst = {}
     for c in conns:
         by_inst.setdefault((c.institution or '').strip().lower(), []).append(c)
@@ -438,8 +445,11 @@ def fetch_data(user_id, config):
         # Bank / platform logos for the Accounts and Investments pages
         try:
             with app.app_context():
+                _sync_user_brokers(user_id)
                 names = [a.get('inst') or a.get('name') for a in data.get('accounts', [])]
                 names += [i.platform for i in InvestmentAccount.query.filter_by(user_id=user_id).all()]
+                names += [a.get('institution') for c in BrokerConnection.query.filter_by(user_id=user_id).all()
+                          for a in json.loads(c.cache or '[]')]
                 _ensure_logos(names)
         except Exception as e:
             app.logger.warning('logo refresh skipped: %s', type(e).__name__)
@@ -457,6 +467,65 @@ def fetch_data(user_id, config):
             state["error"]  = 'Could not sync your accounts. Please try again later.'
         print(f"[error] fetch_data user {user_id}: {e}")
         traceback.print_exc()
+
+def _migrate_token_encryption(inspector):
+    """One-time, idempotent: encrypt plaintext tokens, and move Plaid Items that the
+    fiscit.com onboarding saved only in vault_credentials into plaid_connections
+    (the dashboard syncs from there, so those banks never showed up)."""
+    import crypto_util
+    from sqlalchemy import text
+    tables = set(inspector.get_table_names())
+    targets = [('plaid_connections', 'access_token'), ('wise_connections', 'api_token')]
+    if 'vault_credentials' in tables:
+        targets += [('vault_credentials', c) for c in ('plaid_token', 'wise_token')
+                    if c in [col['name'] for col in inspector.get_columns('vault_credentials')]]
+    for table, col in targets:
+        if table not in tables:
+            continue
+        key = 'user_id' if table == 'vault_credentials' else 'id'
+        rows = db.session.execute(text(f'SELECT {key}, {col} FROM {table}')).fetchall()
+        changed = 0
+        for rid, val in rows:
+            if val and not crypto_util.is_encrypted(val):
+                db.session.execute(text(f'UPDATE {table} SET {col} = :v WHERE {key} = :id'),
+                                   {'v': crypto_util.encrypt(val), 'id': rid})
+                changed += 1
+        if changed:
+            db.session.commit()
+            print(f"  Encrypted {changed} token(s) in {table}.{col}")
+    if 'vault_credentials' in tables:
+        moved = 0
+        for uid, stored in db.session.execute(text('SELECT user_id, plaid_token FROM vault_credentials WHERE plaid_token IS NOT NULL')).fetchall():
+            tok = crypto_util.decrypt(stored)
+            if not tok or not tok.startswith('access-'):
+                continue
+            if any(pc.access_token == tok for pc in PlaidConnection.query.filter_by(user_id=uid).all()):
+                continue
+            if not db.session.get(UserModel, uid):
+                continue
+            db.session.add(PlaidConnection(user_id=uid, access_token=tok, institution=_plaid_item_institution(tok)))
+            moved += 1
+        if moved:
+            db.session.commit()
+            print(f"  Linked {moved} onboarding Plaid connection(s) to the dashboard")
+
+def _plaid_item_institution(access_token):
+    """Institution name of a Plaid Item (best effort, '' on failure)."""
+    import requests as req
+    cid, secret = os.getenv('PLAID_CLIENT_ID'), os.getenv('PLAID_SECRET')
+    if not (cid and secret):
+        return ''
+    base = {'production': 'https://production.plaid.com', 'development': 'https://development.plaid.com'}.get(os.getenv('PLAID_ENV', 'production'), 'https://sandbox.plaid.com')
+    try:
+        item = req.post(f'{base}/item/get', json={'client_id': cid, 'secret': secret, 'access_token': access_token}, timeout=8).json().get('item', {})
+        inst_id = item.get('institution_id')
+        if not inst_id:
+            return ''
+        inst = req.post(f'{base}/institutions/get_by_id', json={'client_id': cid, 'secret': secret, 'institution_id': inst_id,
+                        'country_codes': [c.strip().upper() for c in os.getenv('PLAID_COUNTRY_CODES', 'CA').split(',') if c.strip()]}, timeout=8)
+        return (inst.json().get('institution') or {}).get('name', '') if inst.ok else ''
+    except Exception:
+        return ''
 
 # ── On startup: create DB tables + migrate ──────────────────────────────────
 with app.app_context():
@@ -491,6 +560,8 @@ with app.app_context():
                 print("  Migrated: users.password_hash now nullable")
             except Exception:
                 pass  # already nullable
+        # Encrypt third-party tokens still stored in plaintext (idempotent)
+        _migrate_token_encryption(inspector)
         # Verify connection
         result = db.session.execute(db.text('SELECT 1'))
         print(f"  DB connection OK: {result.scalar()}")
@@ -745,6 +816,73 @@ def _investment_js(a, updated=None):
 
 _PLAID_INV_COLORS = ['#a78bfa', '#22d3ee', '#f472b6', '#fb923c', '#34d399']
 
+# ── Broker connections (read-only) ───────────────────────────────────────────
+_BROKER_MIN_INTERVAL = timedelta(minutes=30)
+
+def _broker_public(c):
+    """What the browser may see about a connection (never credentials)."""
+    return {'id': c.id, 'provider': c.provider, 'label': c.label or brokers.PROVIDERS.get(c.provider, {}).get('label', c.provider),
+            'status': c.status, 'error': c.last_error or '',
+            'lastSynced': _naive(c.last_synced).strftime('%Y-%m-%d %H:%M') if c.last_synced else ''}
+
+def _record_broker_sync(conn, creds, accounts):
+    conn.credentials = json.dumps(creds)
+    conn.cache = json.dumps(accounts)
+    conn.status, conn.last_error = 'ok', ''
+    conn.last_synced = datetime.now(timezone.utc)
+    today = datetime.now(timezone.utc).date()
+    for a in accounts:
+        snap = BrokerSnapshot.query.filter_by(connection_id=conn.id, account_key=a['key'], day=today).first()
+        if snap:
+            snap.balance = a['balance_cad']
+        else:
+            db.session.add(BrokerSnapshot(connection_id=conn.id, user_id=conn.user_id, account_key=a['key'],
+                                          balance=a['balance_cad'], day=today))
+    db.session.commit()
+
+def _sync_broker(conn):
+    """Sync one connection; errors are stored on the connection, never raised."""
+    provider = brokers.PROVIDERS.get(conn.provider)
+    if not provider or conn.status == 'pending':
+        return
+    creds = json.loads(conn.credentials or '{}')
+
+    def persist(new_creds):  # rotating tokens (Questrade) are saved the moment they change
+        conn.credentials = json.dumps(new_creds)
+        db.session.commit()
+    try:
+        creds, accounts = provider['sync'](creds, persist)
+        _record_broker_sync(conn, creds, accounts)
+    except brokers.BrokerError as e:
+        db.session.rollback()
+        conn.status, conn.last_error = 'error', str(e)[:300]
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error('Broker sync %s failed: %s', conn.provider, type(e).__name__)
+        conn.status, conn.last_error = 'error', 'Sync failed. Try again later.'
+        db.session.commit()
+
+def _sync_user_brokers(user_id, force=False):
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    for conn in BrokerConnection.query.filter_by(user_id=user_id).all():
+        if force or not conn.last_synced or now - _naive(conn.last_synced) > _BROKER_MIN_INTERVAL:
+            _sync_broker(conn)
+
+def _broker_keepalive():
+    """Questrade refresh tokens die if unused for a few days: refresh them even when
+    the user doesn't open the dashboard. One gunicorn worker, so one loop."""
+    while True:
+        time.sleep(6 * 3600)
+        try:
+            with app.app_context():
+                stale = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=12)
+                for conn in BrokerConnection.query.filter_by(provider='questrade').all():
+                    if conn.status != 'pending' and (not conn.last_synced or _naive(conn.last_synced) < stale):
+                        _sync_broker(conn)
+        except Exception as e:
+            app.logger.warning('broker keepalive: %s', type(e).__name__)
+
 def _investments_payload(user_id, accounts):
     """Everything the Investments page and net worth need.
     - manual accounts (entered by the user; NOT in the bank-sync net worth -> add them)
@@ -771,7 +909,27 @@ def _investments_payload(user_id, accounts):
             'source': 'plaid', 'updated': '', 'logo': logos.get(acc.get('inst', ''), ''),
         })
 
-    # Month-end value of manual accounts over the last 12 months (only months they existed)
+    # Read-only broker connections (SnapTrade, Questrade, IBKR, Kraken)
+    conns = BrokerConnection.query.filter_by(user_id=user_id).all()
+    broker_total = 0.0
+    broker_logos = _logo_urls([a.get('institution', '') for c in conns for a in json.loads(c.cache or '[]')])
+    for c in conns:
+        for a in json.loads(c.cache or '[]'):
+            broker_total += a.get('balance_cad', 0) or 0
+            items.append({
+                'id': f"broker-{c.id}-{a['key']}", 'connectionId': c.id, 'provider': c.provider,
+                'name': a.get('name', ''), 'platform': a.get('institution', ''), 'label': a.get('type', ''),
+                'ticker': (a.get('type') or a.get('institution') or '?')[:4].upper(), 'val': a.get('balance_cad', 0),
+                'balance': a.get('balance_cad', 0), 'pct': 0, 'color': '#22d3ee', 'source': 'broker',
+                'updated': _naive(c.last_synced).strftime('%Y-%m-%d') if c.last_synced else '',
+                'logo': broker_logos.get(a.get('institution', ''), ''),
+                'positions': sorted(a.get('positions', []), key=lambda p: -(p.get('value_cad') or 0))[:25],
+            })
+    broker_snaps = {}
+    for sn in BrokerSnapshot.query.filter_by(user_id=user_id).order_by(BrokerSnapshot.day).all():
+        broker_snaps.setdefault((sn.connection_id, sn.account_key), []).append((sn.day, sn.balance))
+
+    # Month-end value of manual + broker accounts over the last 12 months (only months they existed)
     now = datetime.now()
     labels, values = [], []
     for back in range(11, -1, -1):
@@ -787,11 +945,19 @@ def _investments_payload(user_id, accounts):
             if known:
                 total += known[-1]
                 seen = True
+        for hist in broker_snaps.values():
+            known = [b for d, b in hist if d <= month_end.date()]
+            if known:
+                total += known[-1]
+                seen = True
         if seen:
             labels.append(datetime(y, mth, 1).strftime('%b'))
             values.append(round(total, 2))
     return {'investments': items, 'manualTotal': manual_total,
-            'investHistory': values, 'investHistoryLabels': labels}
+            # Not part of the bank sync, so added to net worth
+            'externalTotal': round(manual_total + broker_total, 2),
+            'investHistory': values, 'investHistoryLabels': labels,
+            'brokers': [_broker_public(c) for c in conns], 'snaptradeEnabled': brokers.snaptrade_enabled()}
 
 def _html_safe(obj):
     """HTML-escape every string in a JSON-like structure. The dashboard renders
@@ -820,7 +986,7 @@ def _build_real_data_js(data, user=None):
     cat_spend    = data.get("categorySpending", [])
     inv = _investments_payload(user.id, raw_accounts) if user else {'investments': [], 'manualTotal': 0, 'investHistory': [], 'investHistoryLabels': []}
     # Manually tracked investments aren't part of the bank sync: add them to net worth
-    net_worth    = round((data.get("netWorth", 0) or 0) + inv['manualTotal'], 2)
+    net_worth    = round((data.get("netWorth", 0) or 0) + inv['externalTotal'], 2)
     income       = data.get("monthlyIncome", 0)
     spending     = data.get("monthlySpending", 0)
     cash_flow    = data.get("cashFlow", 0)
@@ -908,7 +1074,7 @@ def _build_real_data_js(data, user=None):
     return f"""const D = {{
   // ── Real data injected by Vault/Flask ({generated}) ──
   netWorth:        {net_worth},
-  totalAssets:     {round((data.get("totalAssets", 0) or 0) + inv['manualTotal'], 2)},
+  totalAssets:     {round((data.get("totalAssets", 0) or 0) + inv['externalTotal'], 2)},
   totalDebt:       {total_debt},
   income:          {income},
   spending:        {spending},
@@ -938,6 +1104,8 @@ def _build_real_data_js(data, user=None):
   investments: {_js(inv['investments'])},
   investHistory: {json.dumps(inv['investHistory'])},
   investHistoryLabels: {_js(inv['investHistoryLabels'])},
+  brokers: {_js(inv['brokers'])},
+  snaptradeEnabled: {json.dumps(inv['snaptradeEnabled'])},
   crypto: [],
   habits: [],
   gym: [],
@@ -1717,7 +1885,8 @@ def api_status():
 def _api_investments(uid, accounts):
     p = _investments_payload(uid, accounts)
     return {'investments': p['investments'], 'investHistory': p['investHistory'],
-            'investHistoryLabels': p['investHistoryLabels'], 'manualTotal': p['manualTotal']}
+            'investHistoryLabels': p['investHistoryLabels'], 'manualTotal': p['manualTotal'],
+            'externalTotal': p['externalTotal'], 'brokers': p['brokers'], 'snaptradeEnabled': p['snaptradeEnabled']}
 
 @app.route('/api/data')
 @api_auth_required
@@ -1736,7 +1905,7 @@ def api_data():
             'onboarded': current_user.model.onboarded,
             'tourSeen': current_user.model.tour_seen,
             **_html_safe(_api_investments(uid, [])),
-            'netWorth': _api_investments(uid, [])['manualTotal'],
+            'netWorth': _api_investments(uid, [])['externalTotal'],
         })
     # Normalize field names to match vault.html mock format
     result = _normalize_api_data(data)
@@ -1747,8 +1916,8 @@ def api_data():
     result['tourSeen'] = current_user.model.tour_seen
     inv = _api_investments(uid, data.get('accounts', []))
     result.update(inv)
-    result['netWorth'] = round((data.get('netWorth', 0) or 0) + inv['manualTotal'], 2)
-    result['totalAssets'] = round((data.get('totalAssets', 0) or 0) + inv['manualTotal'], 2)
+    result['netWorth'] = round((data.get('netWorth', 0) or 0) + inv['externalTotal'], 2)
+    result['totalAssets'] = round((data.get('totalAssets', 0) or 0) + inv['externalTotal'], 2)
     return jsonify(_html_safe(result))
 
 @app.route('/api/refresh', methods=['POST'])
@@ -1844,6 +2013,95 @@ def api_add_investment():
     _ensure_logos_async([acct.platform])
     return jsonify({'ok': True, 'id': acct.id})
 
+# ── Broker connection routes (all read-only on the broker side) ─────────────
+@app.route('/api/brokers', methods=['GET'])
+@api_auth_required
+def api_brokers():
+    conns = BrokerConnection.query.filter_by(user_id=current_user.model.id).all()
+    return jsonify({'ok': True, 'brokers': [_broker_public(c) for c in conns], 'snaptradeEnabled': brokers.snaptrade_enabled()})
+
+@app.route('/api/brokers/<provider>', methods=['POST'])
+@api_auth_required
+def api_broker_connect(provider):
+    """Direct connections: questrade (token), ibkr (Flex token + query id), kraken (Query Funds key)."""
+    uid = current_user.model.id
+    if provider not in ('questrade', 'ibkr', 'kraken'):
+        return jsonify({'ok': False, 'error': 'Unknown provider.'}), 404
+    if BrokerConnection.query.filter_by(user_id=uid).count() >= 10:
+        return jsonify({'ok': False, 'error': 'You can connect up to 10 accounts.'}), 400
+    try:
+        creds, accounts = brokers.PROVIDERS[provider]['connect'](request.get_json(silent=True) or {})
+    except brokers.BrokerError as e:
+        return jsonify({'ok': False, 'error': str(e)}), 400
+    except Exception as e:
+        app.logger.error('Broker connect %s failed: %s', provider, type(e).__name__)
+        return jsonify({'ok': False, 'error': 'Could not connect. Please try again.'}), 502
+    conn = BrokerConnection(user_id=uid, provider=provider, label=brokers.PROVIDERS[provider]['label'],
+                            credentials=json.dumps(creds), status='ok')
+    db.session.add(conn)
+    db.session.flush()
+    _record_broker_sync(conn, creds, accounts)
+    _ensure_logos_async([a.get('institution') for a in accounts])
+    return jsonify({'ok': True, 'accounts': len(accounts)})
+
+@app.route('/api/brokers/snaptrade/connect', methods=['POST'])
+@api_auth_required
+def api_snaptrade_connect():
+    """Open SnapTrade's portal in read-only mode (Wealthsimple, Questrade, IBKR…)."""
+    if not brokers.snaptrade_enabled():
+        return jsonify({'ok': False, 'error': 'SnapTrade is not set up yet.'}), 503
+    uid = current_user.model.id
+    conn = BrokerConnection.query.filter_by(user_id=uid, provider='snaptrade').first()
+    try:
+        if not conn:
+            creds = brokers.snaptrade_register(f'fiscit-{uid}-{uuid.uuid4().hex[:12]}')
+            conn = BrokerConnection(user_id=uid, provider='snaptrade', label='SnapTrade',
+                                    credentials=json.dumps(creds), status='pending')
+            db.session.add(conn)
+            db.session.commit()
+        url = brokers.snaptrade_portal_url(json.loads(conn.credentials), url_for('snaptrade_done', _external=True, _scheme='https'))
+    except brokers.BrokerError as e:
+        return jsonify({'ok': False, 'error': str(e)}), 502
+    return jsonify({'ok': True, 'url': url})
+
+@app.route('/brokers/snaptrade/done')
+@login_required
+def snaptrade_done():
+    conn = BrokerConnection.query.filter_by(user_id=current_user.model.id, provider='snaptrade').first()
+    if conn:
+        conn.status = 'ok'
+        db.session.commit()
+        _sync_broker(conn)
+    return redirect(url_for('index', view='investments'))
+
+@app.route('/api/brokers/<int:conn_id>/sync', methods=['POST'])
+@api_auth_required
+def api_broker_sync(conn_id):
+    conn = BrokerConnection.query.filter_by(id=conn_id, user_id=current_user.model.id).first()
+    if not conn:
+        return jsonify({'ok': False, 'error': 'Not found.'}), 404
+    if conn.status == 'pending':
+        conn.status = 'ok'
+    _sync_broker(conn)
+    return jsonify({'ok': conn.status == 'ok', 'error': conn.last_error})
+
+@app.route('/api/brokers/<int:conn_id>', methods=['DELETE'])
+@api_auth_required
+def api_broker_delete(conn_id):
+    conn = BrokerConnection.query.filter_by(id=conn_id, user_id=current_user.model.id).first()
+    if not conn:
+        return jsonify({'ok': False, 'error': 'Not found.'}), 404
+    _delete_broker_connection(conn)
+    db.session.commit()
+    return jsonify({'ok': True})
+
+def _delete_broker_connection(conn):
+    if conn.provider == 'snaptrade' and brokers.snaptrade_enabled():
+        brokers.snaptrade_delete_user(json.loads(conn.credentials or '{}'))  # also revokes its broker links
+    BrokerSnapshot.query.filter_by(connection_id=conn.id).delete()
+    db.session.delete(conn)
+
+
 @app.route('/api/investments/<int:acct_id>', methods=['PUT'])
 @api_auth_required
 def api_update_investment(acct_id):
@@ -1920,13 +2178,16 @@ def api_delete_account():
     try:
         row = db.session.execute(db.text('SELECT plaid_token FROM vault_credentials WHERE user_id = :uid'), {'uid': uid}).first()
         if row and row[0]:
-            tokens.append(row[0])
+            import crypto_util
+            tokens.append(crypto_util.decrypt(row[0]))
     except Exception:
         db.session.rollback()
     _plaid_remove_items(set(t for t in tokens if t))
 
     try:
         CryptoWallet.query.filter_by(user_id=uid).delete()
+        for bc in BrokerConnection.query.filter_by(user_id=uid).all():
+            _delete_broker_connection(bc)
         InvestmentSnapshot.query.filter_by(user_id=uid).delete()
         InvestmentAccount.query.filter_by(user_id=uid).delete()
         PlaidConnection.query.filter_by(user_id=uid).delete()
@@ -2116,6 +2377,10 @@ def api_wise_test():
     except Exception as e:
         app.logger.error('Request failed: %s', e)
         return jsonify({'ok': False, 'error': 'Something went wrong. Please try again.'}), 500
+
+# Keep Questrade tokens alive between visits (defined above; production only)
+if IS_PROD:
+    threading.Thread(target=_broker_keepalive, daemon=True).start()
 
 if __name__ == '__main__':
     port  = int(os.getenv('PORT', 5050))

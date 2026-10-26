@@ -429,7 +429,7 @@ button{font-family:var(--font)}
 }
 @media (prefers-reduced-motion: reduce){.mmore-sheet,.mmore{transition:none}}
 </style>
-<link rel="stylesheet" href="/static/brand.css?v=6">
+<link rel="stylesheet" href="/static/brand.css?v=7">
 </head>
 <body>
 
@@ -2433,12 +2433,16 @@ function pgInvestments(){
       <svg data-feather="trending-up" style="width:32px;height:32px;opacity:.25;margin-bottom:16px"></svg>
       <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:6px">No investment accounts yet</div>
       <div style="font-size:12.5px;color:var(--text3);max-width:360px;margin:0 auto 18px">Add your TFSA, RRSP or brokerage accounts with today's balance. Update them whenever you like — Fiscit keeps the history and counts them in your net worth.</div>
-      <button class="btn btn-primary btn-sm" onclick="addAccInvestment()"><svg data-feather="plus"></svg> Add investment account</button>
-    </div>`;
+      <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+        <button class="btn btn-primary btn-sm" onclick="openBrokerConnect()"><svg data-feather="link"></svg> Connect a brokerage</button>
+        <button class="btn btn-ghost btn-sm" onclick="addAccInvestment()"><svg data-feather="plus"></svg> Add manually</button>
+      </div>
+      <div style="font-size:11px;color:var(--text3);margin-top:12px">Read-only: Fiscit can see your investments but can never trade or move money.</div>
+    </div>${brokerCard()}`;
   }
 
-  const manual = invs.filter(i=>i.source!=='plaid');
-  const linked = invs.filter(i=>i.source==='plaid');
+  const manual = invs.filter(i=>i.source!=='plaid' && i.source!=='broker');
+  const linked = invs.filter(i=>i.source==='plaid' || i.source==='broker');
   const sum = arr => arr.reduce((t,i)=>t+(i.val||0),0);
   const totalVal = sum(invs);
   const hist = D.investHistory || [];
@@ -2449,7 +2453,17 @@ function pgInvestments(){
     const isManual = inv.source==='manual';
     const meta = inv.source==='plaid'
       ? `${inv.platform} · synced from your bank`
+      : inv.source==='broker'
+      ? `${inv.platform}${inv.label?' · '+inv.label:''} · synced ${inv.updated?fmtDate(inv.updated):''}${(inv.positions||[]).length?' · '+inv.positions.length+' holding'+(inv.positions.length>1?'s':''):''}`
       : `${inv.platform||''}${inv.label?' · '+inv.label:''}${inv.updated?' · updated '+fmtDate(inv.updated):''}`;
+    const pos = inv.source==='broker' && (inv.positions||[]).length ? `
+      <details class="inv-pos">
+        <summary>Holdings</summary>
+        <div class="inv-pos-grid">
+          <span>Symbol</span><span>Quantity</span><span>Price</span><span>Value (CAD)</span>
+          ${inv.positions.map(p=>`<b title="${p.description||''}">${p.symbol||'—'}</b><span>${(+p.quantity||0).toLocaleString('en-CA',{maximumFractionDigits:6})}</span><span>${p.price?(+p.price).toLocaleString('en-CA',{maximumFractionDigits:2})+(p.currency&&p.currency!=='CAD'?' '+p.currency:''):'—'}</span><span>${fmt(p.value_cad||0,2)}</span>`).join('')}
+        </div>
+      </details>` : '';
     return `
     <div class="inv-row">
       ${instLogo(inv.logo, inv.ticker, inv.color, 'ticker-box')}
@@ -2464,8 +2478,9 @@ function pgInvestments(){
       ${isManual ? `<div class="inv-actions">
         <button class="btn btn-ghost btn-sm" onclick="editInvestment(${inv.id})" title="Update balance"><svg data-feather="edit-2"></svg><span>Update</span></button>
         <button class="icon-btn" onclick="deleteInvestment(${inv.id})" title="Delete account" aria-label="Delete account"><svg data-feather="trash-2"></svg></button>
-      </div>` : inv.source==='plaid' ? `<div class="inv-actions"><span class="badge b-blue">Bank</span></div>` : ''}
-    </div>`;}).join('');
+      </div>` : inv.source==='plaid' ? `<div class="inv-actions"><span class="badge b-blue">Bank</span></div>`
+        : inv.source==='broker' ? `<div class="inv-actions"><span class="badge b-green">Live</span></div>` : ''}
+    </div>${pos}`;}).join('');
 
   return`
   <div class="metrics-row mb20">
@@ -2480,7 +2495,7 @@ function pgInvestments(){
       <div class="metric-delta flat">${manual.length} account${manual.length!==1?'s':''}</div>
     </div>
     <div class="metric">
-      <div class="metric-label">Synced from banks</div>
+      <div class="metric-label">Synced automatically</div>
       <div class="metric-val">${fmt(sum(linked),0)}</div>
       <div class="metric-delta flat">${linked.length} account${linked.length!==1?'s':''}</div>
     </div>
@@ -2505,10 +2520,117 @@ function pgInvestments(){
   <div class="card">
     <div class="sec-hdr">
       <span class="sec-title">Accounts</span>
-      <button class="btn btn-primary btn-sm" onclick="addAccInvestment()"><svg data-feather="plus"></svg> Add account</button>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-ghost btn-sm" onclick="addAccInvestment()"><svg data-feather="plus"></svg> Add manually</button>
+        <button class="btn btn-primary btn-sm" onclick="openBrokerConnect()"><svg data-feather="link"></svg> Connect a brokerage</button>
+      </div>
     </div>
     ${rows}
+  </div>${brokerCard()}`;
+}
+
+// ── Brokerage connections (read-only) ──
+const BROKER_NAMES = {snaptrade:'SnapTrade', questrade:'Questrade', ibkr:'Interactive Brokers', kraken:'Kraken'};
+function brokerCard(){
+  const list = D.brokers || [];
+  if(!list.length) return '';
+  return `<div class="card" style="margin-top:14px">
+    <div class="sec-hdr"><span class="sec-title">Connected brokerages</span><span style="font-size:11px;color:var(--text3)">Read-only</span></div>
+    ${list.map(b=>`<div class="broker-row">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:500;color:var(--text)">${BROKER_NAMES[b.provider]||b.label}</div>
+        <div style="font-size:11px;color:${b.status==='error'?'var(--red)':'var(--text3)'}">${b.status==='error' ? b.error : b.status==='pending' ? 'Waiting for you to finish connecting' : 'Synced '+(b.lastSynced||'—')}</div>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="syncBroker(${b.id},this)"><svg data-feather="refresh-cw"></svg> Sync</button>
+      <button class="icon-btn" onclick="disconnectBroker(${b.id})" title="Disconnect" aria-label="Disconnect"><svg data-feather="x"></svg></button>
+    </div>`).join('')}
   </div>`;
+}
+
+function openBrokerConnect(){
+  document.getElementById('broker-modal')?.remove();
+  const snap = D.snaptradeEnabled;
+  const o = document.createElement('div');
+  o.id = 'broker-modal'; o.className = 'inv-edit';
+  o.innerHTML = `<div class="inv-edit-card broker-card" role="dialog" aria-modal="true" aria-labelledby="bk-title">
+    <h3 id="bk-title">Connect a brokerage</h3>
+    <p>Read-only access: Fiscit can see balances and holdings, never trade, withdraw or move money.</p>
+    <div class="broker-opts" id="bk-opts">
+      <button class="broker-opt ${snap?'':'disabled'}" ${snap?'onclick="connectSnapTrade(this)"':'disabled'}>
+        <b>Wealthsimple, Questrade, IBKR, BMO, CIBC…</b>
+        <span>${snap?'Sign in to your broker through SnapTrade (recommended)':'Coming soon'}</span>
+      </button>
+      <button class="broker-opt" onclick="brokerForm('questrade')"><b>Questrade</b><span>Paste a read-only API token</span></button>
+      <button class="broker-opt" onclick="brokerForm('ibkr')"><b>Interactive Brokers</b><span>Flex Web Service token + query ID</span></button>
+      <button class="broker-opt" onclick="brokerForm('kraken')"><b>Kraken</b><span>API key with "Query Funds" only</span></button>
+    </div>
+    <div id="bk-form"></div>
+    <div class="inv-edit-actions" style="margin-top:14px"><button class="btn btn-ghost" onclick="document.getElementById('broker-modal').remove()">Close</button></div>
+  </div>`;
+  document.body.appendChild(o);
+  o.addEventListener('click', e=>{ if(e.target===o) o.remove(); });
+  o.addEventListener('keydown', e=>{ if(e.key==='Escape') o.remove(); });
+}
+
+const BROKER_FORMS = {
+  questrade: {title:'Questrade', steps:['Log in to Questrade and open <b>App Hub / API Centre</b>.','Register a personal app with <b>only "Retrieve balances, positions…" (read account)</b> — never trading.','Click <b>Generate new token</b> and paste it below. Fiscit keeps it encrypted and renews it automatically.'],
+    fields:[['token','Token','text']]},
+  ibkr: {title:'Interactive Brokers', steps:['In Client Portal: <b>Performance &amp; Reports → Flex Queries</b>.','Create an <b>Activity Flex Query</b> with <b>Open Positions</b> and <b>Net Asset Value</b>, format XML. Note its <b>Query ID</b>.','Under <b>Flex Web Service</b>, enable it and copy the <b>token</b>.'],
+    fields:[['token','Flex Web Service token','text'],['query_id','Flex Query ID','text']]},
+  kraken: {title:'Kraken', steps:['In Kraken: <b>Settings → API → Create API key</b>.','Enable <b>only "Query Funds"</b>. Leave trading, deposits and withdrawals <b>off</b>.','Paste the API key and private key below.'],
+    fields:[['api_key','API key','text'],['private_key','Private key','password']]},
+};
+
+function brokerForm(provider){
+  const f = BROKER_FORMS[provider];
+  document.getElementById('bk-opts').style.display='none';
+  document.getElementById('bk-form').innerHTML = `<form onsubmit="submitBroker(event,'${provider}')">
+    <div style="font-size:13px;font-weight:600;margin:4px 0 8px">${f.title}</div>
+    <ol class="broker-steps">${f.steps.map(x=>`<li>${x}</li>`).join('')}</ol>
+    ${f.fields.map(([k,l,t])=>`<label>${l}<input name="${k}" type="${t}" autocomplete="off" spellcheck="false" required></label>`).join('')}
+    <div id="bk-err" class="inv-edit-err" role="alert"></div>
+    <div class="inv-edit-actions">
+      <button type="button" class="btn btn-ghost" onclick="openBrokerConnect()">Back</button>
+      <button type="submit" class="btn btn-primary" id="bk-save">Connect</button>
+    </div>
+  </form>`;
+  document.querySelector('#bk-form input')?.focus();
+}
+
+async function submitBroker(e, provider){
+  e.preventDefault();
+  const form = e.target, btn = document.getElementById('bk-save'), err = document.getElementById('bk-err');
+  const body = Object.fromEntries(new FormData(form).entries());
+  btn.disabled = true; btn.textContent = provider==='ibkr' ? 'Fetching statement…' : 'Connecting…'; err.textContent='';
+  try{
+    const r = await fetch('/api/brokers/'+provider,{method:'POST',credentials:'include',headers:csrfHeaders({'Content-Type':'application/json'}),body:JSON.stringify(body)});
+    const d = await r.json();
+    if(!d.ok) throw new Error(d.error||'Could not connect.');
+    document.getElementById('broker-modal')?.remove();
+    await _reloadInvestments();
+  }catch(ex){ err.textContent = ex.message; btn.disabled=false; btn.textContent='Connect'; }
+}
+
+async function connectSnapTrade(btn){
+  btn.disabled = true;
+  try{
+    const r = await fetch('/api/brokers/snaptrade/connect',{method:'POST',credentials:'include',headers:csrfHeaders()});
+    const d = await r.json();
+    if(!d.ok) throw new Error(d.error||'Could not start the connection.');
+    window.location.href = d.url;
+  }catch(ex){ alert(ex.message); btn.disabled=false; }
+}
+
+async function syncBroker(id, btn){
+  if(btn){ btn.disabled = true; }
+  await fetch('/api/brokers/'+id+'/sync',{method:'POST',credentials:'include',headers:csrfHeaders()}).catch(()=>{});
+  await _reloadInvestments();
+}
+
+async function disconnectBroker(id){
+  if(!confirm('Disconnect this brokerage? Its accounts and history will be removed from Fiscit (nothing changes at the broker).')) return;
+  const r = await fetch('/api/brokers/'+id,{method:'DELETE',credentials:'include',headers:csrfHeaders()});
+  if(r.ok) await _reloadInvestments(); else alert('Could not disconnect.');
 }
 
 function initInvCharts(){
@@ -4847,14 +4969,16 @@ document.addEventListener('DOMContentLoaded',()=>{
     if(!didOnboard){
       showOnboarding();
     } else {
-      navigate('dashboard');
+      const _view = new URLSearchParams(location.search).get('view');
+      navigate(_view==='investments' ? 'investments' : 'dashboard');
+      if(_view) history.replaceState(null,'',location.pathname);
       initNotifications();
       updateBudgetBadge();
       updateHeaderClock();
       setInterval(updateHeaderClock,30000);
       document.addEventListener('click',closeNotifDropdown);
       feather.replace({width:14,height:14});
-      if(window.FiscitTour) FiscitTour.maybeStart();
+      if(window.FiscitTour && !_view) FiscitTour.maybeStart();
     }
   }).catch(()=>{
     // Network error — still show something
