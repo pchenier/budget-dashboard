@@ -853,10 +853,13 @@ def _sync_broker(conn):
     try:
         creds, accounts = provider['sync'](creds, persist)
         _record_broker_sync(conn, creds, accounts)
+        app.logger.warning('Broker sync %s (connection %s): ok, %d account(s), %d position(s)', conn.provider, conn.id,
+                           len(accounts), sum(len(a.get('positions', [])) for a in accounts))
     except brokers.BrokerError as e:
         db.session.rollback()
         conn.status, conn.last_error = 'error', str(e)[:300]
         db.session.commit()
+        app.logger.warning('Broker sync %s (connection %s): %s', conn.provider, conn.id, str(e)[:200])
     except Exception as e:
         db.session.rollback()
         app.logger.error('Broker sync %s failed: %s', conn.provider, type(e).__name__)
