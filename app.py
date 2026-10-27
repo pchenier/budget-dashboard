@@ -17,7 +17,7 @@ from flask_login import LoginManager, UserMixin, login_user, login_required, log
 from authlib.integrations.flask_client import OAuth
 import jwt as pyjwt
 from pathlib import Path
-from models import db, User as UserModel, PlaidConnection, WiseConnection, CryptoWallet, InvestmentAccount, InvestmentSnapshot, UsedSsoToken, InstitutionLogo, BrokerConnection, BrokerSnapshot
+from models import db, User as UserModel, PlaidConnection, WiseConnection, CryptoWallet, InvestmentAccount, InvestmentSnapshot, UsedSsoToken, PasswordReset, InstitutionLogo, BrokerConnection, BrokerSnapshot
 import brokers
 
 # Normalize French categories to English (matches generate_data.py CATEGORY_ALIASES)
@@ -65,6 +65,36 @@ app.secret_key = os.getenv("SECRET_KEY", "vault-local-secret-do-not-deploy")
 # the real client (rate limits) and generated URLs are https.
 from werkzeug.middleware.proxy_fix import ProxyFix
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
+
+# ── Errors: branded pages for people, JSON for the API, details only in the logs ──
+import logging
+import monitoring
+from werkzeug.exceptions import HTTPException
+
+app.logger.setLevel(logging.INFO)
+if monitoring.init_logging(app):
+    print("  Better Stack log shipping on")
+
+def _error_response(code, ref=''):
+    if request.path.startswith('/api/'):
+        body = {'error': monitoring.ERROR_PAGES.get(code, monitoring.ERROR_PAGES[500])[1]}
+        if ref:
+            body['ref'] = ref
+        return jsonify(body), code
+    return monitoring.error_page(code, ref), code
+
+@app.errorhandler(HTTPException)
+def _handle_http_error(e):
+    if e.code is None or e.code < 400:
+        return e  # redirects raised by routing
+    return _error_response(e.code)
+
+@app.errorhandler(Exception)
+def _handle_unexpected_error(e):
+    # The reference lets support match a user's screenshot to the log line
+    ref = uuid.uuid4().hex[:8]
+    app.logger.exception('Unhandled error %s on %s %s', ref, request.method, request.path)
+    return _error_response(500, ref)
 
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
@@ -201,10 +231,11 @@ def _check_login(email, password):
 
 SSO_AUDIENCE = 'fiscit-sso'
 
-def make_jwt(user_id, email):
+def make_jwt(user_id, email, token_version=0):
     return pyjwt.encode({
         'sub': str(user_id),
         'email': email,
+        'tv': token_version,
         'exp': datetime.now(timezone.utc) + timedelta(days=JWT_EXPIRY_DAYS),
     }, JWT_SECRET, algorithm='HS256')
 
@@ -214,6 +245,13 @@ def verify_jwt(token):
         return payload
     except (pyjwt.ExpiredSignatureError, pyjwt.InvalidTokenError):
         return None
+
+def _token_version_ok(user, payload):
+    """A token issued before the user's last "sign out everywhere" / password reset is dead."""
+    try:
+        return int(payload.get('tv', 0)) == (user.token_version or 0)
+    except (TypeError, ValueError):
+        return False
 
 def api_auth_required(f):
     """Accept either Flask-Login cookie auth or JWT Bearer token."""
@@ -227,7 +265,7 @@ def api_auth_required(f):
             payload = verify_jwt(token)
             if payload:
                 user = UserModel.query.filter_by(id=int(payload['sub'])).first()
-                if user:
+                if user and _token_version_ok(user, payload):
                     from flask_login import login_user as _login_user
                     _login_user(FlaskUser(user), remember=False)
                     return f(*args, **kwargs)
@@ -266,8 +304,16 @@ google = oauth.register(
 
 @login_manager.user_loader
 def load_user(user_id):
-    user = db.session.get(UserModel, int(user_id))
-    if user:
+    # Session ids are "<user id>:<token version>" (plain "<user id>" from before
+    # versions existed counts as version 0), so bumping the version logs out
+    # every existing session and remember-me cookie.
+    uid, _, tv = str(user_id).partition(':')
+    try:
+        user = db.session.get(UserModel, int(uid))
+        tv = int(tv or 0)
+    except (TypeError, ValueError):
+        return None
+    if user and tv == (user.token_version or 0):
         return FlaskUser(user)
     return None
 
@@ -280,7 +326,7 @@ class FlaskUser(UserMixin):
     def email(self): return self.model.email
     @property
     def name(self): return self.model.name
-    def get_id(self): return str(self.model.id)
+    def get_id(self): return f'{self.model.id}:{self.model.token_version or 0}'
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 BASE_DIR     = Path(__file__).parent
@@ -548,6 +594,10 @@ with app.app_context():
             db.session.execute(text('ALTER TABLE users ADD COLUMN tour_seen BOOLEAN NOT NULL DEFAULT FALSE'))
             db.session.commit()
             print("  Migrated: added users.tour_seen")
+        if 'token_version' not in existing_cols:
+            db.session.execute(text('ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0'))
+            db.session.commit()
+            print("  Migrated: added users.token_version")
         if 'email_confirmed' not in existing_cols:
             db.session.execute(text("ALTER TABLE users ADD COLUMN email_confirmed BOOLEAN NOT NULL DEFAULT TRUE"))
             db.session.commit()
@@ -1234,6 +1284,7 @@ a{color:#4ade80;text-decoration:none;font-size:0.85rem}
     <input type="password" name="password" placeholder="Your password" required>
     <button type="submit" class="btn">Log in</button>
   </form>
+  <div class="link"><a href="https://fiscit.com/forgot">Forgot your password?</a></div>
   <div class="link">Don't have an account? <a href="/register">Sign up</a></div>
 </div>
 </body>
@@ -1602,6 +1653,21 @@ def logout():
     logout_user()
     return redirect(url_for('login'))
 
+@app.route('/api/auth/logout-all', methods=['POST'])
+@login_required
+def api_logout_all():
+    """Sign out of every device: the dashboard here, fiscit.com, and mobile tokens."""
+    # csrf_required lets /api/ through, so check the dashboard's token here
+    if not session.get('csrf_token') or request.headers.get('X-CSRF-Token') != session.get('csrf_token'):
+        return jsonify({'error': 'CSRF token missing or invalid'}), 403
+    user = current_user.model
+    user.token_version = (user.token_version or 0) + 1
+    db.session.commit()
+    app.logger.info('User %s signed out of all devices', user.id)
+    logout_user()
+    session.clear()
+    return jsonify({'ok': True})
+
 @app.route('/api/auth/logout', methods=['POST'])
 def api_logout():
     """Logout endpoint for frontend JavaScript — clears session."""
@@ -1626,7 +1692,7 @@ def api_auth_login():
         return jsonify({'error': 'Invalid email or password'}), 401
     if not user.email_confirmed:
         return jsonify({'error': 'Please confirm your email first', 'needsVerification': True}), 403
-    token = make_jwt(user.id, user.email)
+    token = make_jwt(user.id, user.email, user.token_version or 0)
     return jsonify({
         'ok': True,
         'token': token,
@@ -1677,6 +1743,9 @@ def sso():
         user = db.session.get(UserModel, int(payload['sub']))
         if not user:
             app.logger.warning('SSO rejected: user %s not found', payload['sub'])
+            return redirect(url_for('login'))
+        if not _token_version_ok(user, payload):
+            app.logger.warning('SSO rejected: session was revoked')
             return redirect(url_for('login'))
         session.permanent = True
         login_user(FlaskUser(user), remember=True)
@@ -1754,7 +1823,7 @@ def api_auth_google():
     if not user:
         return jsonify({'error': 'This email is linked to a different Google account'}), 409
 
-    token = make_jwt(user.id, user.email)
+    token = make_jwt(user.id, user.email, user.token_version or 0)
     return jsonify({
         'ok': True,
         'token': token,
@@ -2214,6 +2283,7 @@ def api_delete_account():
         for bc in BrokerConnection.query.filter_by(user_id=uid).all():
             _delete_broker_connection(bc)
         InvestmentSnapshot.query.filter_by(user_id=uid).delete()
+        PasswordReset.query.filter_by(user_id=uid).delete()
         InvestmentAccount.query.filter_by(user_id=uid).delete()
         PlaidConnection.query.filter_by(user_id=uid).delete()
         WiseConnection.query.filter_by(user_id=uid).delete()

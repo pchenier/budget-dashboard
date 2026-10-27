@@ -4150,6 +4150,8 @@ function pgSettings(){
     row('Privacy & terms','How Fiscit handles your data','<span style="display:flex;gap:8px"><a class="btn btn-ghost btn-sm" href="https://fiscit.com/privacy" target="_blank" rel="noopener">Privacy</a><a class="btn btn-ghost btn-sm" href="https://fiscit.com/terms" target="_blank" rel="noopener">Terms</a></span>'),
     row('Product tour','Step-by-step walkthrough of every tab','<button class="btn btn-ghost btn-sm" onclick="FiscitTour.start()"><svg data-feather="map"></svg> Start tour</button>'),
     row('Replay onboarding','Walk through the intro tour again','<button class="btn btn-ghost btn-sm" onclick="replayOnboarding()"><svg data-feather="play-circle"></svg> Replay</button>'),
+    row('Password','Get an email link to choose a new password','<a class="btn btn-ghost btn-sm" href="https://fiscit.com/forgot" target="_blank" rel="noopener"><svg data-feather="key"></svg> Change password</a>'),
+    row('Sign out everywhere','Log out of every phone, browser and computer','<button class="btn btn-ghost btn-sm" onclick="doLogoutAll()"><svg data-feather="shield"></svg> Sign out all devices</button>'),
     row('Sign out','Log out of your account','<button class="btn btn-ghost btn-sm" onclick="doLogout()"><svg data-feather="log-out" style="width:14px;height:14px;vertical-align:middle;margin-right:4px"></svg> Sign out</button>'),
   ].join(''))}`;
 }
@@ -4169,6 +4171,13 @@ function doLogout(){
   }).catch(()=>{
     window.location.href='/login';
   });
+}
+
+function doLogoutAll(){
+  if(!confirm('Sign out of Fiscit on every device, including this one?')) return;
+  fetch('/api/auth/logout-all',{method:'POST',headers:csrfHeaders({'Content-Type':'application/json'}),credentials:'include'})
+    .then(r=>{ if(!r.ok) throw new Error(); window.location.href='https://fiscit.com/api/auth/logout'; })
+    .catch(()=>alert('Could not sign out other devices. Please try again.'));
 }
 
 // Delete-account modal: created on demand so it works from Settings (it used to

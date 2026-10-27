@@ -38,6 +38,8 @@ class User(db.Model):
     onboarded     = db.Column(db.Boolean, default=False, nullable=False)
     tour_seen     = db.Column(db.Boolean, default=False, nullable=False)  # guided tour offered once
     email_confirmed = db.Column(db.Boolean, default=True, nullable=False)  # auto-confirmed for API users
+    # Bumped to sign out every device: sessions and tokens carry the version they were issued with
+    token_version = db.Column(db.Integer, default=0, nullable=False)
     created_at    = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     # Relationships
@@ -102,6 +104,17 @@ class UsedSsoToken(db.Model):
     __tablename__ = 'used_sso_tokens'
     jti     = db.Column(db.String(64), primary_key=True)
     used_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
+
+
+class PasswordReset(db.Model):
+    """Pending "forgot password" links. Created and redeemed by fiscit.com; only the
+    SHA-256 of the emailed token is stored, so a database leak can't reset passwords."""
+    __tablename__ = 'password_resets'
+    id         = db.Column(db.Integer, primary_key=True)
+    user_id    = db.Column(db.Integer, nullable=False, index=True)
+    token_hash = db.Column(db.String(64), unique=True, nullable=False)
+    expires_at = db.Column(db.DateTime(timezone=True), nullable=False)
+    created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
 
 class InvestmentSnapshot(db.Model):
