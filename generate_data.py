@@ -148,10 +148,12 @@ def pull_all(config):
             return {}
         try:
             data = gen.plaid_post("/accounts/balance/get", {"access_token": token})
+            institution = (config.get("plaid_institutions") or {}).get(token, "")
             result = {}
             for acc in data.get("accounts", []):
                 aid = acc["account_id"]
                 result[aid] = {
+                    "institution": institution or acc["name"],
                     "name":    acc["name"],
                     "current": acc["balances"].get("current") or 0,
                     "type":    acc["type"],

@@ -433,6 +433,9 @@ def build_user_config(user):
     plaid_conns = PlaidConnection.query.filter_by(user_id=user.model.id).all()
     if plaid_conns:
         cfg['plaid_tokens'] = [pc.access_token for pc in plaid_conns]
+        # Bank name per Item, so accounts show (and get the logo of) "Scotiabank",
+        # not their own name ("Scene+ Visa card")
+        cfg['plaid_institutions'] = {pc.access_token: pc.institution or '' for pc in plaid_conns}
         cfg['plaid_token'] = plaid_conns[0].access_token  # backwards compat
     # Wise connection
     wc = WiseConnection.query.filter_by(user_id=user.model.id).first()
@@ -729,6 +732,8 @@ _KNOWN_DOMAINS = {
     'koho': 'koho.ca', 'neo financial': 'neofinancial.com', 'american express': 'americanexpress.com',
     'capital one': 'capitalone.ca', 'laurentian': 'laurentianbank.ca', 'atb': 'atb.com', 'hsbc': 'hsbc.ca',
 }
+# Account "institutions" that aren't banks: wallets show their blockchain
+_NOT_BANKS = {'ethereum': 'ethereum.org', 'bitcoin': 'bitcoin.org', 'solana': 'solana.com'}
 _LOGO_MIMES = {'image/png', 'image/jpeg', 'image/x-icon', 'image/vnd.microsoft.icon', 'image/webp', 'image/gif'}
 
 def _logo_key(name):
@@ -808,9 +813,15 @@ def _ensure_logos(names):
         row = db.session.get(InstitutionLogo, key)
         if row:
             age = now - _naive(row.fetched_at)
-            if (row.data and age < timedelta(days=30)) or (not row.data and age < timedelta(days=7)):
+            missing_retry = timedelta(hours=1) if name.strip().lower() in _NOT_BANKS else timedelta(days=7)
+            if (row.data and age < timedelta(days=30)) or (not row.data and age < missing_retry):
                 continue
-        data, color, site = _plaid_institution(name)
+        low = name.lower()
+        if low in _NOT_BANKS:
+            # Plaid's institution search would match some unrelated bank for these
+            data, color, site = None, '', _NOT_BANKS[low]
+        else:
+            data, color, site = _plaid_institution(name)
         mime = 'image/png' if data else ''
         if not data:
             low = name.lower()
