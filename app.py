@@ -1177,7 +1177,7 @@ def _build_real_data_js(data, user=None):
   investHistoryLabels: {_js(inv['investHistoryLabels'])},
   brokers: {_js(inv['brokers'])},
   snaptradeEnabled: {json.dumps(inv['snaptradeEnabled'])},
-  crypto: [],
+  crypto: {_js(data.get('crypto', []))},
   habits: [],
   gym: [],
   gymDays: [],

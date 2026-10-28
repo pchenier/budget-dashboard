@@ -2781,7 +2781,7 @@ function pgCrypto(){
       <div class="coin-ico" style="background:${c.color}20;color:${c.color}">${c.coin[0]}</div>
       <div style="flex:1">
         <div style="font-size:13px;font-weight:500;color:var(--text)">${c.name}</div>
-        <div style="font-size:11px;color:var(--text3)">${c.amt} ${c.coin} · ${fmt(c.price,0)}/coin</div>
+        <div style="font-size:11px;color:var(--text3)">${c.amt} ${c.coin} · ${c.price>=1?fmt(c.price,2):c.price>0?"$"+(+c.price).toPrecision(3):"price n/a"}/coin</div>
       </div>
       <div style="text-align:right">
         <div style="font-size:13px;font-weight:500;font-variant-numeric:tabular-nums;color:var(--text)">${fmt(c.val,2)}</div>

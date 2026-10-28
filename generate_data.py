@@ -13,6 +13,7 @@ from pathlib import Path
 # ── Import generate.py functions ──────────────────────────────────────────────
 sys.path.insert(0, str(Path(__file__).parent))
 import generate as gen
+import crypto_balances
 
 CATEGORY_ICONS = {
     "Groceries":         "🛒",
@@ -186,81 +187,20 @@ def pull_all(config):
             print(f"  Plaid token {token[:8]}... txns error → {e}")
             return []
 
-    # Public Ethereum JSON-RPC nodes (no API key). Etherscan's keyless V1 API was shut
-    # down; asking a node directly with eth_getBalance needs no account at all.
-    ETH_RPC_URLS = ("https://ethereum-rpc.publicnode.com", "https://cloudflare-eth.com", "https://eth.llamarpc.com")
-
-    def _eth_balance_wei(address):
-        last = None
-        for url in ETH_RPC_URLS:
-            try:
-                r = requests.post(url, json={"jsonrpc": "2.0", "id": 1, "method": "eth_getBalance",
-                                             "params": [address, "latest"]}, timeout=10)
-                r.raise_for_status()
-                body = r.json()
-                if "result" in body:
-                    return int(body["result"], 16)
-                last = body.get("error", {}).get("message", "no result")
-            except Exception as e:
-                last = e
-        raise RuntimeError(f"every Ethereum node failed ({last})")
-
     def _fetch_crypto_wallet(w):
+        """(chain, address, label, holdings or None if the sync failed)"""
         chain   = w.get("chain", "solana").lower()
         address = w.get("address", "").strip()
         label   = w.get("label", chain.title())
         if not address:
             return None
+        status_cb(f"Crypto: {label}...")
         try:
-            if chain == "solana":
-                status_cb(f"Crypto: {label} (SOL)...")
-                r = requests.post("https://api.mainnet-beta.solana.com", json={
-                    "jsonrpc": "2.0", "id": 1,
-                    "method": "getBalance",
-                    "params": [address],
-                }, timeout=10)
-                r.raise_for_status()
-                lamports = r.json().get("result", {}).get("value", 0)
-                native_bal = lamports / 1e9
-                p = requests.get(
-                    "https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd",
-                    timeout=10,
-                )
-                price = p.json().get("solana", {}).get("usd", 0) if p.ok else 0
-                return ("solana", address, label, native_bal, "SOL", native_bal * price)
-
-            elif chain == "ethereum":
-                status_cb(f"Crypto: {label} (ETH)...")
-                if not (address.startswith("0x") and len(address) == 42):
-                    raise ValueError("not an Ethereum address (expected 0x followed by 40 characters)")
-                native_bal = _eth_balance_wei(address) / 1e18
-                p = requests.get(
-                    "https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd",
-                    timeout=10,
-                )
-                price = p.json().get("ethereum", {}).get("usd", 0) if p.ok else 0
-                return ("ethereum", address, label, native_bal, "ETH", native_bal * price)
-
-            elif chain == "bitcoin":
-                status_cb(f"Crypto: {label} (BTC)...")
-                r = requests.get(
-                    f"https://blockchain.info/balance?active={address}",
-                    timeout=10,
-                )
-                r.raise_for_status()
-                satoshi = r.json().get(address, {}).get("final_balance", 0)
-                native_bal = satoshi / 1e8
-                p = requests.get(
-                    "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd",
-                    timeout=10,
-                )
-                price = p.json().get("bitcoin", {}).get("usd", 0) if p.ok else 0
-                return ("bitcoin", address, label, native_bal, "BTC", native_bal * price)
+            return (chain, address, label, crypto_balances.wallet_holdings(chain, address))
         except Exception as e:
             print(f"  Crypto {label} ({chain}): error → {e}")
             # Still return the wallet so it shows up (marked as not synced) instead of vanishing
-            return (chain, address, label, None, {"solana": "SOL", "ethereum": "ETH", "bitcoin": "BTC"}.get(chain, chain.upper()), 0)
-        return None
+            return (chain, address, label, None)
 
     # Launch all independent network calls in parallel
     with ThreadPoolExecutor(max_workers=6) as pool:
@@ -319,12 +259,12 @@ def pull_all(config):
             print(f"  Plaid txns error: {e}")
 
     # Collect crypto balances
-    crypto_balances = []
+    crypto_balances_list = []
     for future in as_completed(crypto_futures):
         try:
             result = future.result()
             if result:
-                crypto_balances.append(result)
+                crypto_balances_list.append(result)
                 print(f"  Crypto: got {result[2]} balance")
         except Exception as e:
             print(f"  Crypto error: {e}")
@@ -335,7 +275,7 @@ def pull_all(config):
     # ─────────────────────────────────────────────────────────────────────────
     # Build accounts list
     # ─────────────────────────────────────────────────────────────────────────
-    print(f"  Building accounts from {len(balances)} Plaid balances + {len(wise_bal or {})} Wise + {len(crypto_balances)} crypto")
+    print(f"  Building accounts from {len(balances)} Plaid balances + {len(wise_bal or {})} Wise + {len(crypto_balances_list)} crypto")
     accounts = []
     for aid, acc in balances.items():
         bal = acc["current"]
@@ -375,17 +315,44 @@ def pull_all(config):
         })
 
     # Add crypto wallet accounts
-    # Every saved wallet is listed, even empty or failing ones, so adding one is visible
-    for i, (chain, address, label, native_bal, native_sym, usd_val) in enumerate(crypto_balances):
+    # Every saved wallet is listed, even empty or failing ones, so adding one is visible.
+    # The Crypto page gets one row per coin or token held.
+    crypto_rows = []
+    for i, (chain, address, label, holdings) in enumerate(crypto_balances_list):
+        native_sym = crypto_balances.NATIVE.get(chain, (chain.upper(),))[0]
+        if holdings is None:
+            subtype, sync, total_usd = f"{native_sym} · balance unavailable, retrying", "sync failed", 0
+        else:
+            total_usd = sum(h["usd"] for h in holdings)
+            native = next((h for h in holdings if h["sym"] == native_sym), None)
+            tokens = [h for h in holdings if h is not native]
+            subtype = f"{native['amount']:.6f} {native_sym}" if native else native_sym
+            if tokens:
+                subtype += f" + {len(tokens)} token{'s' if len(tokens) > 1 else ''}"
+            sync = "just now"
+            for h in holdings:
+                if h["amount"] <= 0:
+                    continue
+                crypto_rows.append({
+                    "name":   f"{h['name']} · {label}",
+                    "coin":   h["sym"],
+                    "amt":    f"{h['amount']:,.6f}".rstrip("0").rstrip("."),
+                    "price":  round((h["price"] or 0) * USD_TO_CAD, 6),
+                    "val":    round(h["usd"] * USD_TO_CAD, 2),
+                    "pct":    round(h["change"], 2),
+                    "color":  h["color"],
+                    "wallet": label,
+                })
         accounts.append({
             "id":      f"crypto_{chain}_{i}",
             "name":    label,
             "inst":    chain.title(),
-            "balance": round((usd_val or 0) * USD_TO_CAD, 2),
+            "balance": round(total_usd * USD_TO_CAD, 2),
             "type":    "Crypto",
-            "subtype": f"{native_bal:.6f} {native_sym}" if native_bal is not None else f"{native_sym} · balance unavailable, retrying",
-            "sync":    "just now" if native_bal is not None else "sync failed",
+            "subtype": subtype,
+            "sync":    sync,
         })
+    crypto_rows.sort(key=lambda r: r["val"], reverse=True)
 
     # ─────────────────────────────────────────────────────────────────────────
     # Net worth
@@ -499,6 +466,7 @@ def pull_all(config):
 
         # Accounts
         "accounts": accounts,
+        "crypto":   crypto_rows,
 
         # Transactions (most recent first, all of them)
         "transactions": serialized_txns,
