@@ -2046,6 +2046,16 @@ def api_add_wallet():
         return jsonify({'ok': False, 'error': 'Invalid chain.'}), 400
     if not address:
         return jsonify({'ok': False, 'error': 'Address is required.'}), 400
+    # Catch a wrong chain or a pasted typo now, rather than a wallet that never syncs
+    formats = {
+        'ethereum': (r'0x[0-9a-fA-F]{40}', 'An Ethereum address starts with 0x followed by 40 characters.'),
+        'bitcoin':  (r'(bc1[02-9ac-hj-np-z]{11,87}|[13][1-9A-HJ-NP-Za-km-z]{25,34})', 'That does not look like a Bitcoin address (bc1…, 1… or 3…).'),
+        'solana':   (r'[1-9A-HJ-NP-Za-km-z]{32,44}', 'That does not look like a Solana address.'),
+    }
+    if chain in formats and not re.fullmatch(formats[chain][0], address):
+        return jsonify({'ok': False, 'error': formats[chain][1]}), 400
+    if CryptoWallet.query.filter_by(user_id=uid, chain=chain, address=address).first():
+        return jsonify({'ok': False, 'error': 'This wallet is already added.'}), 400
     w = CryptoWallet(user_id=uid, chain=chain, address=address, label=label or chain.title())
     db.session.add(w)
     db.session.commit()

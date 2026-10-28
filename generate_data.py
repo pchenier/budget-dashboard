@@ -186,6 +186,25 @@ def pull_all(config):
             print(f"  Plaid token {token[:8]}... txns error → {e}")
             return []
 
+    # Public Ethereum JSON-RPC nodes (no API key). Etherscan's keyless V1 API was shut
+    # down; asking a node directly with eth_getBalance needs no account at all.
+    ETH_RPC_URLS = ("https://ethereum-rpc.publicnode.com", "https://cloudflare-eth.com", "https://eth.llamarpc.com")
+
+    def _eth_balance_wei(address):
+        last = None
+        for url in ETH_RPC_URLS:
+            try:
+                r = requests.post(url, json={"jsonrpc": "2.0", "id": 1, "method": "eth_getBalance",
+                                             "params": [address, "latest"]}, timeout=10)
+                r.raise_for_status()
+                body = r.json()
+                if "result" in body:
+                    return int(body["result"], 16)
+                last = body.get("error", {}).get("message", "no result")
+            except Exception as e:
+                last = e
+        raise RuntimeError(f"every Ethereum node failed ({last})")
+
     def _fetch_crypto_wallet(w):
         chain   = w.get("chain", "solana").lower()
         address = w.get("address", "").strip()
@@ -212,13 +231,9 @@ def pull_all(config):
 
             elif chain == "ethereum":
                 status_cb(f"Crypto: {label} (ETH)...")
-                r = requests.get(
-                    f"https://api.etherscan.io/api?module=account&action=balance&address={address}&tag=latest",
-                    timeout=10,
-                )
-                r.raise_for_status()
-                wei = int(r.json().get("result", "0") or "0")
-                native_bal = wei / 1e18
+                if not (address.startswith("0x") and len(address) == 42):
+                    raise ValueError("not an Ethereum address (expected 0x followed by 40 characters)")
+                native_bal = _eth_balance_wei(address) / 1e18
                 p = requests.get(
                     "https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd",
                     timeout=10,
@@ -243,6 +258,8 @@ def pull_all(config):
                 return ("bitcoin", address, label, native_bal, "BTC", native_bal * price)
         except Exception as e:
             print(f"  Crypto {label} ({chain}): error → {e}")
+            # Still return the wallet so it shows up (marked as not synced) instead of vanishing
+            return (chain, address, label, None, {"solana": "SOL", "ethereum": "ETH", "bitcoin": "BTC"}.get(chain, chain.upper()), 0)
         return None
 
     # Launch all independent network calls in parallel
@@ -358,17 +375,17 @@ def pull_all(config):
         })
 
     # Add crypto wallet accounts
+    # Every saved wallet is listed, even empty or failing ones, so adding one is visible
     for i, (chain, address, label, native_bal, native_sym, usd_val) in enumerate(crypto_balances):
-        if native_bal and native_bal > 0:
-            accounts.append({
-                "id":      f"crypto_{chain}_{i}",
-                "name":    label,
-                "inst":    chain.title(),
-                "balance": round(usd_val * USD_TO_CAD, 2),
-                "type":    "Crypto",
-                "subtype": f"{native_bal:.6f} {native_sym}",
-                "sync":    "just now",
-            })
+        accounts.append({
+            "id":      f"crypto_{chain}_{i}",
+            "name":    label,
+            "inst":    chain.title(),
+            "balance": round((usd_val or 0) * USD_TO_CAD, 2),
+            "type":    "Crypto",
+            "subtype": f"{native_bal:.6f} {native_sym}" if native_bal is not None else f"{native_sym} · balance unavailable, retrying",
+            "sync":    "just now" if native_bal is not None else "sync failed",
+        })
 
     # ─────────────────────────────────────────────────────────────────────────
     # Net worth
