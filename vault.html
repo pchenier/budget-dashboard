@@ -429,7 +429,7 @@ button{font-family:var(--font)}
 }
 @media (prefers-reduced-motion: reduce){.mmore-sheet,.mmore{transition:none}}
 </style>
-<link rel="stylesheet" href="/static/brand.css?v=7">
+<link rel="stylesheet" href="/static/brand.css?v=8">
 </head>
 <body>
 
@@ -1216,7 +1216,7 @@ function pgDashboard(){
       <div class="txn-ico">${ico(t.ico||'folder',14)}</div>
       <div class="txn-info">
         <div class="txn-name">${t.name}</div>
-        <div class="txn-sub">${t.cat} · ${t.acc}</div>
+        <div class="txn-sub">${txnCats(t).join(' + ')} · ${t.acc}</div>
       </div>
       <div class="txn-right">
         <div class="txn-amt ${t.amt<0?'debit':'credit'}">${fmt(t.amt,2)}</div>
@@ -1484,6 +1484,7 @@ function applyRules(txns){
       if(match){
         result.cat = r.cat;
         result.ico = catIco(r.cat);
+        result.cats2 = Array.isArray(r.cats2) ? r.cats2.filter(c=>c!==r.cat) : [];
       }
     }
     return result;
@@ -1527,6 +1528,9 @@ function refreshCatSelects(){
     const el=document.getElementById(id);
     if(el){ const v=el.value; el.innerHTML=opts; el.value=v||el.options[0]?.value; }
   });
+  const r2=document.getElementById('r-cat2');
+  if(r2){ const v=r2.value; r2.innerHTML='<option value="">(none)</option>'+opts; r2.value=v; }
+  if(document.getElementById('te-cats2')) renderExtraCatChips();
   // Also refresh the top filter dropdown
   const filterEl = document.getElementById('catFilter');
   if(filterEl){
@@ -1552,9 +1556,10 @@ function addRule(){
   const op    = document.getElementById('r-op').value;
   const val   = document.getElementById('r-val').value.trim();
   const cat   = document.getElementById('r-cat').value;
+  const cat2  = document.getElementById('r-cat2')?.value || '';
   if(!val) return;
   const rules = getRules();
-  rules.push({ id: Date.now()+'', field, operator: op, value: val, cat });
+  rules.push({ id: Date.now()+'', field, operator: op, value: val, cat, cats2: cat2 && cat2!==cat ? [cat2] : [] });
   saveRules(rules);
   document.getElementById('r-val').value = '';
   renderRulesList();
@@ -1580,7 +1585,7 @@ function renderRulesList(){
         <span style="color:var(--text3)">If <strong style="color:var(--text)">${r.field}</strong> ${r.operator.replace('_',' ')} </span>
         <span style="color:var(--blue)">"${r.value}"</span>
         <span style="color:var(--text3)"> → </span>
-        <span class="badge b-gray" style="font-size:10px">${ico(catIco(r.cat),12)} ${r.cat}</span>
+        ${catBadges({cat:r.cat,cats2:r.cats2},10)}
       </div>
       <button onclick="deleteRule('${r.id}')" style="background:none;border:none;color:var(--text4);cursor:pointer;font-size:16px;line-height:1;padding:2px 6px" title="Delete rule">×</button>
     </div>`).join('');
@@ -1592,6 +1597,12 @@ function applyOverrides(txns){ const o=getTxnOverrides(); return txns.map(t=>o[t
 
 const DEFAULT_CATS = ['Groceries','Food/Dining','Gas','Transport','Shopping','Business/Tech','Gym','Health','Phone/Internet','Entertainment','Subscriptions','Housing','Utilities','Cash/Transfers','Investments','Income','P2P/Personal Transfer','Other'];
 const CATS_KEY = 'vault_categories';
+// A transaction has one main category (used for totals and charts) plus optional
+// extra ones, e.g. Anytime Fitness = Gym + Subscriptions. Extras make it show up in
+// those categories' filters, budgets and the Subscriptions view; totals count it once.
+function txnCats(t){ const out=[t.cat]; (Array.isArray(t.cats2)?t.cats2:[]).forEach(c=>{ if(c&&!out.includes(c)) out.push(c); }); return out; }
+function txnHasCat(t,c){ return txnCats(t).includes(c); }
+function catBadges(t,size){ return txnCats(t).map(c=>`<span class="badge b-gray" style="font-size:${size||10}px">${ico(catIco(c),size||10)} ${c}</span>`).join(''); }
 function getCats(){ try{ const s=localStorage.getItem(CATS_KEY); return s?JSON.parse(s):DEFAULT_CATS; }catch(e){return DEFAULT_CATS;} }
 function saveCats(cats){ localStorage.setItem(CATS_KEY,JSON.stringify(cats)); }
 let ALL_CATS = getCats();
@@ -1602,10 +1613,28 @@ function openTxnEdit(idx){
   const modal = document.getElementById('txn-modal');
   document.getElementById('te-name').value  = t.name;
   document.getElementById('te-cat').value   = t.cat;
+  _teExtraCats = txnCats(t).slice(1);
+  renderExtraCatChips();
   document.getElementById('te-amt').value   = Math.abs(t.amt).toFixed(2);
   document.getElementById('te-idx').value   = idx;
   modal.style.display = 'flex';
   setTimeout(()=>modal.style.opacity='1',10);
+}
+let _teExtraCats = [];
+function renderExtraCatChips(){
+  const el = document.getElementById('te-cats2');
+  if(!el) return;
+  const main = document.getElementById('te-cat').value;
+  _teExtraCats = _teExtraCats.filter(c=>c!==main);
+  el.innerHTML = ALL_CATS.filter(c=>c!==main).map(c=>{
+    const on = _teExtraCats.includes(c);
+    return `<button type="button" class="cat-chip${on?' on':''}" aria-pressed="${on}" data-cat="${c.replace(/"/g,'&quot;')}" onclick="toggleExtraCat(this.dataset.cat)">${ico(catIco(c),11)} ${c}</button>`;
+  }).join('');
+  feather.replace({width:11,height:11});
+}
+function toggleExtraCat(c){
+  _teExtraCats = _teExtraCats.includes(c) ? _teExtraCats.filter(x=>x!==c) : [..._teExtraCats, c];
+  renderExtraCatChips();
 }
 function closeTxnModal(){
   const modal = document.getElementById('txn-modal');
@@ -1619,28 +1648,31 @@ function saveTxnEdit(){
   const t    = _filteredTxns[idx];
   if(!t) return;
   const id = t.id || t.name+t.date;
-  const oldCat = t.cat;
+  const oldCats = txnCats(t).join('|');
+  const cats2 = _teExtraCats.filter(c=>c!==cat);
 
-  saveTxnOverride(id, { name, cat, ico: catIco(cat) });
-  t.name = name; t.cat = cat; t.ico = catIco(cat);
+  saveTxnOverride(id, { name, cat, cats2, ico: catIco(cat) });
+  t.name = name; t.cat = cat; t.cats2 = cats2; t.ico = catIco(cat);
   const origIdx = D.txns.findIndex(x=>(x.id||x.name+x.date)===id);
-  if(origIdx>=0){ D.txns[origIdx].name=name; D.txns[origIdx].cat=cat; D.txns[origIdx].ico=catIco(cat); }
+  if(origIdx>=0){ Object.assign(D.txns[origIdx], { name, cat, cats2, ico: catIco(cat) }); }
   closeTxnModal();
   renderTxnList(_filteredTxns);
 
-  // If category changed, offer quick rule — wait for modal close animation
-  if(cat !== oldCat){
+  // If the categories changed, offer a quick rule — wait for modal close animation
+  if(txnCats(t).join('|') !== oldCats){
     const tName = t.name;
     setTimeout(()=>{
       const similarCount = D.txns.filter(x => (x.name||'').toLowerCase().includes((tName||'').toLowerCase().slice(0,12))).length;
       if(similarCount > 1){
-        showQuickRulePrompt(tName, cat, similarCount);
+        showQuickRulePrompt(tName, cat, similarCount, cats2);
       }
     }, 200);
   }
 }
 
-function showQuickRulePrompt(txnName, cat, count){
+function showQuickRulePrompt(txnName, cat, count, cats2){
+  _quickRuleCats2 = cats2 || [];
+  const label = [cat, ..._quickRuleCats2].join(' + ');
   const short = txnName.slice(0,20).trim();
   let el = document.getElementById('quick-rule-banner');
   if(!el){
@@ -1651,7 +1683,7 @@ function showQuickRulePrompt(txnName, cat, count){
   el.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:9999;background:var(--bg3);border:1px solid rgba(96,165,250,.25);border-radius:var(--r);padding:14px 18px;box-shadow:0 8px 32px rgba(0,0,0,.5);min-width:420px;max-width:90vw;opacity:0;transition:opacity .2s';
   el.innerHTML = `
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-      <span style="font-size:13px;color:var(--text)">Apply <span style="color:var(--blue)">"${cat}"</span> to all <strong>${count}</strong> transactions containing <span style="color:var(--blue)">"${short}"</span>?</span>
+      <span style="font-size:13px;color:var(--text)">Apply <span style="color:var(--blue)">"${label}"</span> to all <strong>${count}</strong> transactions containing <span style="color:var(--blue)">"${short}"</span>?</span>
       <div style="display:flex;gap:6px;margin-left:auto;flex-shrink:0">
         <button onclick="applyQuickRule('${short.replace(/'/g,"\\'")}','${cat.replace(/'/g,"\\'")}');hideQuickRule()" class="btn btn-primary btn-sm">Apply to all</button>
         <button onclick="hideQuickRule()" class="btn btn-ghost btn-sm">Just this one</button>
@@ -1669,10 +1701,11 @@ function hideQuickRule(){
   setTimeout(()=>el.style.display='none',200);
 }
 
+let _quickRuleCats2 = [];
 function applyQuickRule(nameFragment, cat){
   // Save as a rule
   const rules = getRules();
-  rules.push({ id: Date.now()+'', field:'name', operator:'contains', value: nameFragment.toLowerCase(), cat });
+  rules.push({ id: Date.now()+'', field:'name', operator:'contains', value: nameFragment.toLowerCase(), cat, cats2: _quickRuleCats2.slice() });
   saveRules(rules);
   // Apply immediately in memory
   D.txns = applyRules(D.txns);
@@ -1698,7 +1731,7 @@ function renderTxnList(txns){
         <div class="txn-sub">${t.merchant||t.name}</div>
       </div>
       <div style="text-align:center;width:100px;flex-shrink:0">
-        <span class="badge ${excluded?'b-gray':'b-gray'}" style="font-size:10px;${excluded?'opacity:.6':''}">${ico(catIco(t.cat),10)} ${t.cat}</span>
+        <span style="display:inline-flex;flex-direction:column;align-items:center;gap:3px;${excluded?'opacity:.6':''}">${catBadges(t,10)}</span>
         ${excluded?'<span style="font-size:9px;color:var(--text4);display:block;margin-top:2px">excluded</span>':''}
       </div>
       <div style="width:80px;font-size:12px;color:var(--text3);flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.acc}</div>
@@ -1720,8 +1753,8 @@ function filterTxns(q){
   const search = (q||document.querySelector('.search-inp')?.value||'').toLowerCase();
   const cat    = document.getElementById('catFilter')?.value||'';
   let list = applyOverrides(applyRules(D.txns));
-  if(search) list = list.filter(t=>(t.name||'').toLowerCase().includes(search)||(t.cat||'').toLowerCase().includes(search)||(t.acc||'').toLowerCase().includes(search));
-  if(cat)    list = list.filter(t=>t.cat===cat);
+  if(search) list = list.filter(t=>(t.name||'').toLowerCase().includes(search)||txnCats(t).some(c=>(c||'').toLowerCase().includes(search))||(t.acc||'').toLowerCase().includes(search));
+  if(cat)    list = list.filter(t=>txnHasCat(t,cat));
   if(_txnDateFilter){
     // match "Jun 04" style dates against iso
     const iso = _txnDateFilter; // "2026-06-04"
@@ -1782,6 +1815,12 @@ function pgTransactions(){
             ${allCatOpts}
           </select>
         </div>
+        <div style="flex:0 0 auto">
+          <div style="font-size:10px;color:var(--text3);margin-bottom:4px;text-transform:uppercase;letter-spacing:.06em">+ Also in</div>
+          <select id="r-cat2" style="background:var(--bg4);border:1px solid var(--border);border-radius:var(--r-xs);padding:7px 10px;color:var(--text);font-family:var(--font);font-size:12px;outline:none">
+            <option value="">(none)</option>${allCatOpts}
+          </select>
+        </div>
         <button onclick="addRule()" class="btn btn-primary btn-sm" style="flex-shrink:0;height:32px">+ Add</button>
       </div>
 
@@ -1812,7 +1851,9 @@ function pgTransactions(){
       <label style="display:block;font-size:11px;color:var(--text3);margin-bottom:4px;text-transform:uppercase;letter-spacing:.06em">Name</label>
       <input id="te-name" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-sm);padding:8px 12px;color:var(--text);font-family:var(--font);font-size:13px;outline:none;margin-bottom:14px" type="text">
       <label style="display:block;font-size:11px;color:var(--text3);margin-bottom:4px;text-transform:uppercase;letter-spacing:.06em">Category</label>
-      <select id="te-cat" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-sm);padding:8px 12px;color:var(--text);font-family:var(--font);font-size:13px;outline:none;margin-bottom:20px">${allCatOpts}</select>
+      <select id="te-cat" onchange="renderExtraCatChips()" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-sm);padding:8px 12px;color:var(--text);font-family:var(--font);font-size:13px;outline:none;margin-bottom:14px">${allCatOpts}</select>
+      <label style="display:block;font-size:11px;color:var(--text3);margin-bottom:6px;text-transform:uppercase;letter-spacing:.06em">Also in <span style="text-transform:none;letter-spacing:0;color:var(--text4)">· optional, counted once in totals</span></label>
+      <div id="te-cats2" class="cat-chips" style="margin-bottom:20px"></div>
       <label style="display:block;font-size:11px;color:var(--text3);margin-bottom:4px;text-transform:uppercase;letter-spacing:.06em">Amount</label>
       <input id="te-amt" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-sm);padding:8px 12px;color:var(--text);font-family:var(--font);font-size:13px;outline:none;margin-bottom:20px" type="number" step="0.01" readonly>
       <div style="display:flex;gap:8px;justify-content:flex-end">
@@ -1904,7 +1945,7 @@ function getBudgetItems(){
   const now      = new Date();
 
   // spending per cat this month
-  const catSpend = {};
+  const catSpend = {}, mainSpend = {};
   const nowMonth = now.getMonth();
   const nowYear  = now.getFullYear();
   txns.forEach(t=>{
@@ -1920,7 +1961,9 @@ function getBudgetItems(){
       d = new Date(raw);
     }
     if(d.getMonth()===nowMonth && d.getFullYear()===nowYear){
-      catSpend[t.cat] = (catSpend[t.cat]||0) + Math.abs(t.amt);
+      // Each category's budget sees the transaction; the overall total only counts it once
+      txnCats(t).forEach(c=>{ catSpend[c] = (catSpend[c]||0) + Math.abs(t.amt); });
+      mainSpend[t.cat] = (mainSpend[t.cat]||0) + Math.abs(t.amt);
     }
   });
 
@@ -1930,6 +1973,7 @@ function getBudgetItems(){
     cat,
     ico:   catIco(cat),
     spent: Math.round((catSpend[cat]||0)*100)/100,
+    mainSpent: mainSpend[cat]||0,
     lim:   limits[cat] || 0,
     hidden: hidden.has(cat),
   }));
@@ -1947,7 +1991,7 @@ let _budgetEditMode = false;
 function pgBudget(){
   const items    = getBudgetItems();
   const visible  = items.filter(b=>!b.hidden);
-  const spent    = visible.reduce((s,b)=>s+b.spent,0);
+  const spent    = visible.reduce((s,b)=>s+(b.mainSpent??b.spent),0);
   const total    = visible.filter(b=>b.lim>0).reduce((s,b)=>s+b.lim,0);
   const over     = visible.filter(b=>b.lim>0&&b.spent>b.lim);
   const pctUsed  = total>0?Math.min(Math.round(spent/total*100),999):0;
@@ -2292,7 +2336,7 @@ function pgSubscriptions(){
     return new Date(raw);
   }
 
-  const subs = txns.filter(t=>t.cat==='Subscriptions'&&t.amt<0);
+  const subs = txns.filter(t=>txnHasCat(t,'Subscriptions')&&t.amt<0);
   const curSubs  = subs.filter(t=>{ const d=parseDate(t); return d.getMonth()===curM&&d.getFullYear()===curY; });
   const prevSubs = subs.filter(t=>{ const d=parseDate(t); return d.getMonth()===prevM&&d.getFullYear()===prevY; });
 
