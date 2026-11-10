@@ -1188,6 +1188,7 @@ def _build_real_data_js(data, user=None):
   investHistoryLabels: {_js(inv['investHistoryLabels'])},
   brokers: {_js(inv['brokers'])},
   snaptradeEnabled: {json.dumps(inv['snaptradeEnabled'])},
+  plaidInvestments: {json.dumps(PLAID_INVESTMENTS)},
   crypto: {_js(data.get('crypto', []))},
   habits: [],
   gym: [],
@@ -2034,6 +2035,7 @@ def api_refresh():
     cfg = build_user_config(current_user)
     if not _has_any_account(cfg):
         return jsonify({'ok': False, 'msg': 'No accounts connected'}), 400
+    cfg['live_balances'] = True  # someone pressed Sync: worth a billed real-time balance call
     t = threading.Thread(target=fetch_data, args=(uid, cfg), daemon=True)
     t.start()
     return jsonify({'ok': True, 'msg': 'Refresh started'})
@@ -2344,6 +2346,10 @@ def _delete_postgres_user_rows(uid):
         db.session.execute(db.text(f'DELETE FROM "{table}" WHERE "{column}" = :uid'), {'uid': uid})
 
 PLAID_COUNTRY_CODES = [c.strip().upper() for c in os.getenv('PLAID_COUNTRY_CODES', 'CA').split(',') if c.strip()]
+# Plaid's investments product (holdings at banks and brokerages like RBC Direct
+# Investing or TD WebBroker). Off until Plaid enables it on our account: asking for a
+# product the account doesn't have makes every link token fail with INVALID_PRODUCT.
+PLAID_INVESTMENTS = os.getenv('PLAID_INVESTMENTS', '').strip().lower() in ('1', 'true', 'yes')
 
 def _plaid_failure(endpoint, r):
     """Log Plaid's own error (code/type/message, never secrets) and give the user
@@ -2370,6 +2376,17 @@ def plaid_link_token():
     base = ('https://production.plaid.com' if _env == 'production'
             else 'https://development.plaid.com' if _env == 'development'
             else 'https://sandbox.plaid.com')
+    # "products" filters which institutions Link lists, "optional_products" doesn't:
+    # banks are listed for transactions (with holdings when available), brokerages for
+    # investments, since most of them offer no bank transactions.
+    if (request.get_json(silent=True) or {}).get('mode') == 'brokerage':
+        if not PLAID_INVESTMENTS:
+            return jsonify({'ok': False, 'error': 'Brokerage connections through Plaid are not available yet.'}), 400
+        products = {'products': ['investments'], 'optional_products': ['transactions']}
+    else:
+        products = {'products': ['transactions']}
+        if PLAID_INVESTMENTS:
+            products['optional_products'] = ['investments']
     try:
         r = req.post(f'{base}/link/token/create', json={
             'client_id': plaid_client,
@@ -2380,7 +2397,7 @@ def plaid_link_token():
             'country_codes': PLAID_COUNTRY_CODES,
             'language': 'en',
             'user': {'client_user_id': str(uid)},
-            'products': ['transactions'],
+            **products,
         }, timeout=15)
         if r.status_code != 200:
             return _plaid_failure('link/token/create', r)

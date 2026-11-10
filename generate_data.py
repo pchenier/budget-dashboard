@@ -147,7 +147,11 @@ def pull_all(config):
             print(f"  Plaid: skipped balances (no client/secret)")
             return {}
         try:
-            data = gen.plaid_post("/accounts/balance/get", {"access_token": token})
+            # /accounts/balance/get asks the bank in real time and Plaid bills every call;
+            # /accounts/get returns the balances Plaid refreshes on its own several times
+            # a day, at no extra cost. Real-time only when someone presses Sync.
+            endpoint = "/accounts/balance/get" if config.get("live_balances") else "/accounts/get"
+            data = gen.plaid_post(endpoint, {"access_token": token})
             institution = (config.get("plaid_institutions") or {}).get(token, "")
             result = {}
             for acc in data.get("accounts", []):

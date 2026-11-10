@@ -2600,6 +2600,9 @@ function openBrokerConnect(){
     <h3 id="bk-title">Connect a brokerage</h3>
     <p>Read-only access: Fiscit can see balances and holdings, never trade, withdraw or move money.</p>
     <div class="broker-opts" id="bk-opts">
+      ${D.plaidInvestments?`<button class="broker-opt" onclick="document.getElementById('broker-modal').remove();openPlaidLink('brokerage')">
+        <b>RBC Direct Investing, TD WebBroker, Wealthsimple…</b><span>Sign in through Plaid, like your bank</span>
+      </button>`:''}
       <button class="broker-opt ${snap?'':'disabled'}" ${snap?'onclick="connectSnapTrade(this)"':'disabled'}>
         <b>Wealthsimple, Questrade, IBKR, BMO, CIBC…</b>
         <span>${snap?'Sign in to your broker through SnapTrade (recommended)':'Coming soon'}</span>
@@ -4690,10 +4693,10 @@ async function submitInvestment(){
 }
 
 // ═══════════════════════════ PLAID LINK ═══════════════════════════
-async function openPlaidLink() {
+async function openPlaidLink(mode) {
   try {
-    // Get link token from backend
-    const res = await fetch('/api/plaid/link_token', {method:'POST',headers:csrfHeaders()});
+    // Get link token from backend ("brokerage" lists brokerages instead of banks)
+    const res = await fetch('/api/plaid/link_token', {method:'POST',headers:csrfHeaders({'Content-Type':'application/json'}),body:JSON.stringify({mode: mode||'bank'})});
     const data = await res.json();
     if (!data.ok) { alert('Plaid error: ' + data.error); return; }
 
