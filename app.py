@@ -2389,6 +2389,20 @@ def plaid_link_token():
         app.logger.error('Plaid link/token/create failed: %s', type(e).__name__)
         return jsonify({'ok': False, 'error': 'Could not reach Plaid. Please try again.'}), 502
 
+# Plaid Link runs in the browser, so its errors (wrong password, bank down, bank not
+# enabled for our Plaid account...) never reach the server unless the page reports them.
+_LINK_EVENT_FIELDS = ('event', 'status', 'error_type', 'error_code', 'institution_id', 'institution_name',
+                      'link_session_id', 'request_id', 'exit_status', 'last_search')
+
+@app.route('/api/plaid/link_event', methods=['POST'])
+@api_auth_required
+def plaid_link_event():
+    body = request.get_json(silent=True) or {}
+    info = {k: str(body.get(k) or '')[:120] for k in _LINK_EVENT_FIELDS if body.get(k)}
+    app.logger.warning('Plaid Link %s for user %s: %s', info.get('event', 'event'), current_user.model.id,
+                       ' '.join(f'{k}={v}' for k, v in info.items() if k != 'event'))
+    return jsonify({'ok': True})
+
 @app.route('/api/plaid/exchange', methods=['POST'])
 @api_auth_required
 def plaid_exchange():
