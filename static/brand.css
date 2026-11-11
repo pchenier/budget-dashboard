@@ -280,5 +280,16 @@ html[data-surface="light"] .surface-dot{border-color:rgba(0,0,0,.15)}
 .acc-cur.manual{border-color:rgba(var(--lime-rgb),.45);color:var(--text)}
 .acc-cur.static{cursor:default}
 .acc-cur svg{width:11px;height:11px;opacity:.7}
-.acc-fx{margin:-4px 0 8px;font-size:11.5px;color:var(--text3)}
+.acc-fx{margin:-4px 0 8px;font-size:12px;color:var(--text3)}
+.acc-fx b{color:var(--text2);font-weight:600}
 .inv-edit-card select{display:block;width:100%;margin-top:6px;padding:10px 12px;border-radius:10px;border:1px solid var(--border-strong);background:var(--bg3);color:var(--text);font:500 14px var(--font);letter-spacing:0;text-transform:none;outline:none}
+
+/* CAD / USD switch on account cards */
+.cur-seg{display:inline-flex;align-items:center;gap:2px;padding:2px;border-radius:9px;border:1px solid var(--border);background:var(--bg3);transform:translateY(-3px)}
+.cur-seg button{padding:3px 8px;border:0;border-radius:7px;background:transparent;color:var(--text3);font:700 11px var(--font);letter-spacing:.06em;cursor:pointer;transition:background .15s,color .15s}
+.cur-seg button:hover:not(:disabled){color:var(--text)}
+.cur-seg button.on{background:var(--bg4,rgba(255,255,255,.08));color:var(--text)}
+.cur-seg button.on.set{background:rgba(var(--lime-rgb),.16);color:var(--text)}
+.cur-seg button.more{padding:3px 6px;letter-spacing:0}
+.cur-seg.saving{opacity:.55}
+.acc-cur-hint{margin:-4px 0 8px;font-size:11px;color:var(--text4)}

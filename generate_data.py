@@ -400,6 +400,10 @@ def pull_all(config):
             "name":    label,
             "inst":    chain.title(),
             "balance": round(total_usd * USD_TO_CAD, 2),
+            "native_balance":    round(total_usd, 2),
+            "currency":          "USD",
+            "currency_detected": "USD",
+            "currency_fixed":    True,   # priced in USD; not something to override
             "type":    "Crypto",
             "subtype": subtype,
             "sync":    sync,

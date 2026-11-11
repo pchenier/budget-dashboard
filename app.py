@@ -626,6 +626,22 @@ with app.app_context():
         raise
 
 # ── Vault HTML with data injection ───────────────────────────────────────────
+def _account_currency_js(a):
+    """Currency fields for an account card ("bal" stays in CAD). Shared by the page
+    and /api/data, so a card shows the same currency before and after a refresh."""
+    if not a.get("currency"):
+        return {}
+    return {"currency": a["currency"], "native": a.get("native_balance", a.get("balance", 0)),
+            "curDetected": a.get("currency_detected", a["currency"]), "curManual": bool(a.get("currency_manual")),
+            "curFixed": bool(a.get("currency_fixed")), "fxMissing": bool(a.get("fx_missing"))}
+
+def _txn_currency_js(t, amt):
+    """Original amount and currency of a converted transaction, signed like "amt"."""
+    if not t.get("orig_currency") or t.get("orig_amount") is None:
+        return {}
+    orig = abs(t["orig_amount"])
+    return {"orig": round(-orig if amt < 0 else orig, 2), "cur": t["orig_currency"]}
+
 def _normalize_api_data(data):
     """Normalize raw API data field names to match vault.html mock format.
     Raw data uses 'balance', 'amount', 'category', 'institution' etc.
@@ -661,6 +677,7 @@ def _normalize_api_data(data):
             "init":  a.get("init", init),
             "ico":   a.get("ico", ""),
             "logo":  logos.get(a.get("inst", a.get("institution", a.get("name", ""))), ""),
+            **_account_currency_js(a),
         })
     out["accounts"] = norm_accs
     # Normalize transactions
@@ -679,6 +696,7 @@ def _normalize_api_data(data):
             "cat":      t.get("cat", t.get("category", "")),
             "ico":      t.get("ico", ""),
             "account":  t.get("account", t.get("_account", "")),
+            **(_txn_currency_js(t, amt) if isinstance(amt, (int, float)) else {}),
         })
     out["transactions"] = norm_txns
     return out
@@ -1111,9 +1129,7 @@ def _build_real_data_js(data, user=None):
             "init":  init,
             "logo":  logos.get(a.get("inst", a["name"]), ""),
             # Original currency, when known ("bal" is always CAD)
-            **({"currency": a["currency"], "native": a.get("native_balance", a["balance"]),
-                "curDetected": a.get("currency_detected", a["currency"]), "curManual": bool(a.get("currency_manual")),
-                "fxMissing": bool(a.get("fx_missing"))} if a.get("currency") else {}),
+            **_account_currency_js(a),
         })
 
     # Normalize transactions to match mock field names
@@ -1131,8 +1147,7 @@ def _build_real_data_js(data, user=None):
             "cat":      CATEGORY_ALIASES.get(t["category"], t["category"]),
             "acc":      acc_name_map.get(t["account"], t["account"]),
             "ico":      CATEGORY_ICONS.get(CATEGORY_ALIASES.get(t["category"], t["category"]), t.get("ico", "folder")),
-            **({"orig": round(-abs(t["orig_amount"]) if amt > 0 else abs(t["orig_amount"]), 2), "cur": t["orig_currency"]}
-               if t.get("orig_currency") else {}),
+            **_txn_currency_js(t, display_amt),
         })
 
     # Budget: already matches mock format (cat, spent, limit, ico)
