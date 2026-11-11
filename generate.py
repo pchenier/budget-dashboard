@@ -31,6 +31,7 @@ PHANTOM_ADDR  = os.getenv("PHANTOM_WALLET", "")
 QT_REFRESH    = os.getenv("QUESTRADE_REFRESH_TOKEN", "")
 
 USD_TO_CAD    = float(os.getenv("USD_TO_CAD", "1.38"))
+FX_RATES      = {}   # {currency: CAD per unit}, set by generate_data from fx.rates_to_cad()
 START_DATE    = os.getenv("START_DATE", "2025-01-01")
 END_DATE      = date.today().isoformat()
 OUTPUT_PATH   = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dashboard.html")
@@ -206,7 +207,8 @@ def get_wise_transactions(balance_ids):
                 if not date_str:
                     continue
                 # Convert to CAD if USD
-                amt_cad = abs(raw_amt) * USD_TO_CAD if cur_t == "USD" else abs(raw_amt)
+                rate = 1.0 if cur_t == "CAD" else (FX_RATES.get(cur_t) or (USD_TO_CAD if cur_t == "USD" else 1.0))
+                amt_cad = abs(raw_amt) * rate
                 # Plaid convention: positive = spending (debit), negative = income (credit)
                 plaid_amt = amt_cad if t_type == "DEBIT" else -amt_cad
                 ref = t.get("referenceNumber", "") or f"wise_{currency}_{date_str}_{raw_amt}"
@@ -621,6 +623,8 @@ def process_transactions(raw_txns, wise_txns=None, csv_txns=None):
             "category": cat,
             "account": t["account_id"],
             "id":      t.get("transaction_id", ""),
+            "orig_amount":   t.get("orig_amount"),
+            "orig_currency": t.get("orig_currency"),
         })
     # Add Wise transactions (already pre-formatted)
     for t in (wise_txns or []):

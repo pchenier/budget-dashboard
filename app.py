@@ -17,8 +17,9 @@ from flask_login import LoginManager, UserMixin, login_user, login_required, log
 from authlib.integrations.flask_client import OAuth
 import jwt as pyjwt
 from pathlib import Path
-from models import db, User as UserModel, PlaidConnection, WiseConnection, CryptoWallet, InvestmentAccount, InvestmentSnapshot, UsedSsoToken, PasswordReset, InstitutionLogo, BrokerConnection, BrokerSnapshot
+from models import db, User as UserModel, PlaidConnection, WiseConnection, CryptoWallet, InvestmentAccount, InvestmentSnapshot, UsedSsoToken, PasswordReset, AccountCurrency, InstitutionLogo, BrokerConnection, BrokerSnapshot
 import brokers
+import fx
 
 # Normalize French categories to English (matches generate_data.py CATEGORY_ALIASES)
 CATEGORY_ALIASES = {
@@ -446,6 +447,8 @@ def build_user_config(user):
         if profile in ('your_wise_profile_id', 'your_wise_api_token', ''):
             profile = ''
         cfg['wise_profile'] = profile
+    # Currencies set by hand in Accounts (override what the bank reports)
+    cfg['currency_overrides'] = {r.account_id: r.currency for r in AccountCurrency.query.filter_by(user_id=user.model.id).all()}
     # Crypto wallets
     wallets = CryptoWallet.query.filter_by(user_id=user.model.id).all()
     cfg['wallets'] = [{'chain': w.chain, 'address': w.address, 'label': w.label} for w in wallets]
@@ -1107,6 +1110,10 @@ def _build_real_data_js(data, user=None):
             "color": color,
             "init":  init,
             "logo":  logos.get(a.get("inst", a["name"]), ""),
+            # Original currency, when known ("bal" is always CAD)
+            **({"currency": a["currency"], "native": a.get("native_balance", a["balance"]),
+                "curDetected": a.get("currency_detected", a["currency"]), "curManual": bool(a.get("currency_manual")),
+                "fxMissing": bool(a.get("fx_missing"))} if a.get("currency") else {}),
         })
 
     # Normalize transactions to match mock field names
@@ -1124,6 +1131,8 @@ def _build_real_data_js(data, user=None):
             "cat":      CATEGORY_ALIASES.get(t["category"], t["category"]),
             "acc":      acc_name_map.get(t["account"], t["account"]),
             "ico":      CATEGORY_ICONS.get(CATEGORY_ALIASES.get(t["category"], t["category"]), t.get("ico", "folder")),
+            **({"orig": round(-abs(t["orig_amount"]) if amt > 0 else abs(t["orig_amount"]), 2), "cur": t["orig_currency"]}
+               if t.get("orig_currency") else {}),
         })
 
     # Budget: already matches mock format (cat, spent, limit, ico)
@@ -1189,6 +1198,7 @@ def _build_real_data_js(data, user=None):
   brokers: {_js(inv['brokers'])},
   snaptradeEnabled: {json.dumps(inv['snaptradeEnabled'])},
   plaidInvestments: {json.dumps(PLAID_INVESTMENTS)},
+  fxCurrencies: {_js(fx.COMMON)},
   crypto: {_js(data.get('crypto', []))},
   habits: [],
   gym: [],
@@ -2040,6 +2050,35 @@ def api_refresh():
     t.start()
     return jsonify({'ok': True, 'msg': 'Refresh started'})
 
+@app.route('/api/accounts/currency', methods=['PUT'])
+@api_auth_required
+def api_set_account_currency():
+    """Set (or reset to "auto") the currency of one account, then re-sync so every
+    total is recomputed in CAD."""
+    if not session.get('csrf_token') or request.headers.get('X-CSRF-Token') != session.get('csrf_token'):
+        return jsonify({'error': 'CSRF token missing or invalid'}), 403
+    uid = current_user.model.id
+    body = request.get_json(silent=True) or {}
+    account_id = str(body.get('account_id') or '').strip()[:200]
+    currency = str(body.get('currency') or '').strip().upper()
+    if not account_id:
+        return jsonify({'ok': False, 'error': 'Missing account.'}), 400
+    row = AccountCurrency.query.filter_by(user_id=uid, account_id=account_id).first()
+    if currency in ('', 'AUTO'):
+        if row:
+            db.session.delete(row)
+    else:
+        if not re.fullmatch(r'[A-Z]{3}', currency) or (currency not in fx.COMMON and currency not in fx.rates_to_cad()):
+            return jsonify({'ok': False, 'error': 'Unknown currency.'}), 400
+        row = row or AccountCurrency(user_id=uid, account_id=account_id)
+        row.currency = currency
+        db.session.add(row)
+    db.session.commit()
+    cfg = build_user_config(current_user)
+    if _has_any_account(cfg):
+        threading.Thread(target=fetch_data, args=(uid, cfg), daemon=True).start()
+    return jsonify({'ok': True})
+
 @app.route('/api/wallets', methods=['GET'])
 @api_auth_required
 def api_list_wallets():
@@ -2307,6 +2346,7 @@ def api_delete_account():
             _delete_broker_connection(bc)
         InvestmentSnapshot.query.filter_by(user_id=uid).delete()
         PasswordReset.query.filter_by(user_id=uid).delete()
+        AccountCurrency.query.filter_by(user_id=uid).delete()
         InvestmentAccount.query.filter_by(user_id=uid).delete()
         PlaidConnection.query.filter_by(user_id=uid).delete()
         WiseConnection.query.filter_by(user_id=uid).delete()

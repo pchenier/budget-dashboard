@@ -14,6 +14,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 import generate as gen
 import crypto_balances
+import fx
 
 CATEGORY_ICONS = {
     "Groceries":         "🛒",
@@ -92,6 +93,13 @@ def pull_all(config):
     gen.END_DATE     = date.today().isoformat()
 
     USD_TO_CAD = gen.USD_TO_CAD
+    # Accounts can be in any currency (a Wise USD balance...): amounts are converted to
+    # CAD for every total, at Bank of Canada rates; the original amount is kept for display.
+    fx_rates = fx.rates_to_cad()
+    gen.FX_RATES = fx_rates
+    if fx_rates.get("USD"):
+        USD_TO_CAD = gen.USD_TO_CAD = fx_rates["USD"]
+    currency_overrides = config.get("currency_overrides") or {}
     status_cb = config.get("_status_cb") or (lambda msg: None)
 
     # ── Crypto wallets (multi-chain) ─────────────────────────────────────────
@@ -114,7 +122,8 @@ def pull_all(config):
                 if not a["id"].startswith("wise_") and not a["id"].startswith("sol_") and not a["id"].startswith("crypto_"):
                     _prev_plaid_accounts[a["id"]] = {
                         "name":    a["name"],
-                        "current": a.get("balance", 0),
+                        "current": a.get("native_balance", a.get("balance", 0)),
+                        "currency": a.get("currency_detected") or "CAD",
                         "type":    a.get("type", "depository").lower().replace("chequing / savings", "depository").replace("credit card", "credit"),
                         "subtype": a.get("subtype", ""),
                         "_from_cache": True,
@@ -130,7 +139,8 @@ def pull_all(config):
         if aid and not aid.startswith("wise_") and not aid.startswith("sol_") and not aid.startswith("crypto_"):
             _prev_plaid_accounts[aid] = {
                 "name":    a.get("name", ""),
-                "current": a.get("bal", a.get("balance", 0)),
+                "current": a.get("native_balance", a.get("bal", a.get("balance", 0))),
+                "currency": a.get("currency_detected") or "CAD",
                 "type":    a.get("type", "depository").lower().replace("chequing / savings", "depository").replace("credit card", "credit"),
                 "subtype": a.get("subtype", ""),
                 "_from_cache": True,
@@ -158,6 +168,8 @@ def pull_all(config):
                 aid = acc["account_id"]
                 result[aid] = {
                     "institution": institution or acc["name"],
+                    "currency": (acc["balances"].get("iso_currency_code")
+                                 or acc["balances"].get("unofficial_currency_code") or "CAD").upper(),
                     "name":    acc["name"],
                     "current": acc["balances"].get("current") or 0,
                     "type":    acc["type"],
@@ -276,6 +288,17 @@ def pull_all(config):
             print(f"  Crypto error: {e}")
 
     status_cb("Processing transactions...")
+    # Each account's currency: set by hand, else what the bank reports
+    account_currency = {aid: (currency_overrides.get(aid) or acc.get("currency") or "CAD")
+                        for aid, acc in balances.items()}
+    converted = []
+    for t in raw_txns:
+        cur = (account_currency.get(t.get("account_id")) or t.get("iso_currency_code") or "CAD").upper()
+        if cur != "CAD":
+            cad, ok = fx.to_cad(t["amount"], cur, fx_rates, USD_TO_CAD)
+            t = {**t, "orig_amount": t["amount"], "orig_currency": cur, "amount": cad}
+        converted.append(t)
+    raw_txns = converted
     txns = gen.process_transactions(raw_txns, wise_txns=wise_txns)
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -289,11 +312,19 @@ def pull_all(config):
         if acc["type"] == "credit":
             bal = -abs(bal)
         is_cached = acc.get("_from_cache", False)
+        detected = (acc.get("currency") or "CAD").upper()
+        currency = currency_overrides.get(aid) or detected
+        bal_cad, fx_ok = fx.to_cad(bal, currency, fx_rates, USD_TO_CAD)
         accounts.append({
             "id":      aid,
             "name":    acc["name"],
             "inst":    acc.get("institution", acc["name"]),
-            "balance": round(bal, 2),
+            "balance": round(bal_cad, 2),
+            "native_balance":    round(bal, 2),
+            "currency":          currency,
+            "currency_detected": detected,
+            "currency_manual":   aid in currency_overrides,
+            "fx_missing":        not fx_ok,
             "type":    ACCOUNT_TYPE_LABELS.get(acc["type"], acc["type"]),
             "subtype": acc.get("subtype", ""),
             "sync":    "cached" if is_cached else "just now",
@@ -305,16 +336,18 @@ def pull_all(config):
             amt = info.get("amount", 0) or 0
         else:
             amt = float(info or 0)
-        # Convert USD to CAD if needed
-        if currency == "USD":
-            amt_cad = round(amt * USD_TO_CAD, 2)
-        else:
-            amt_cad = round(amt, 2)
+        cur = currency_overrides.get(f"wise_{currency}") or currency
+        amt_cad, fx_ok = fx.to_cad(amt, cur, fx_rates, USD_TO_CAD)
         accounts.append({
             "id":      f"wise_{currency}",
             "name":    f"Wise {currency}",
             "inst":    "Wise",
-            "balance": amt_cad,
+            "balance": round(amt_cad, 2),
+            "native_balance":    round(amt, 2),
+            "currency":          cur,
+            "currency_detected": currency,
+            "currency_manual":   f"wise_{currency}" in currency_overrides,
+            "fx_missing":        not fx_ok,
             "type":    "International",
             "subtype": currency,
             "sync":    "just now",
@@ -387,6 +420,8 @@ def pull_all(config):
             "account":  t["account"],
             "id":       t.get("id", ""),
             "ico":      CATEGORY_ICONS.get(cat, "📂"),
+            **({"orig_amount": round(t["orig_amount"], 2), "orig_currency": t["orig_currency"]}
+               if t.get("orig_currency") else {}),
         })
 
     # ─────────────────────────────────────────────────────────────────────────

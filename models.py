@@ -106,6 +106,17 @@ class UsedSsoToken(db.Model):
     used_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
 
 
+class AccountCurrency(db.Model):
+    """Currency a person set by hand for one account, overriding the detected one
+    (e.g. a USD account a bank reports without a currency)."""
+    __tablename__ = 'account_currencies'
+    __table_args__ = (db.UniqueConstraint('user_id', 'account_id'),)
+    id         = db.Column(db.Integer, primary_key=True)
+    user_id    = db.Column(db.Integer, nullable=False, index=True)
+    account_id = db.Column(db.String(200), nullable=False)
+    currency   = db.Column(db.String(3), nullable=False)
+
+
 class PasswordReset(db.Model):
     """Pending "forgot password" links. Created and redeemed by fiscit.com; only the
     SHA-256 of the emailed token is stored, so a database leak can't reset passwords."""
