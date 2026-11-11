@@ -1407,6 +1407,13 @@ function instLogo(logo, text, color, cls){
     : `<div class="${cls}" style="color:${color};background:${color}15">${fallback}</div>`;
 }
 
+// YYYY-MM-DD in the person's own time zone. toISOString() is UTC, which in Québec
+// turns every evening after 7-8 p.m. into tomorrow.
+function localISO(d){
+  d = d || new Date();
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+
 // Amount in an account's own currency, e.g. US$3,298.22 or €120.00
 function fmtCur(n, cur){
   try{ return new Intl.NumberFormat('en-CA',{style:'currency',currency:cur,currencyDisplay:'narrowSymbol'}).format(n); }
@@ -2922,7 +2929,7 @@ function renderMiniCal(containerId, hiddenId, selectedISO){
   const el = document.getElementById(containerId);
   if(!el) return;
   const sel  = selectedISO ? new Date(selectedISO+'T00:00') : new Date();
-  const today= new Date().toISOString().slice(0,10);
+  const today= localISO();
   const year = sel.getFullYear(), month = sel.getMonth();
   const daysInMonth = new Date(year, month+1, 0).getDate();
   const firstDay    = (new Date(year, month, 1).getDay()+6)%7; // Mon-start
@@ -2963,11 +2970,11 @@ function pickCalDay(iso, hiddenId, containerId){
 
 function shiftMiniCal(containerId, hiddenId, delta){
   // find current month from the header text or hidden value
-  const cur = document.getElementById(hiddenId)?.value || new Date().toISOString().slice(0,10);
+  const cur = document.getElementById(hiddenId)?.value || localISO();
   const d   = new Date(cur+'T00:00');
   d.setMonth(d.getMonth()+delta);
   // keep same day if possible
-  const newISO = d.toISOString().slice(0,10);
+  const newISO = localISO(d);
   renderMiniCal(containerId, hiddenId, newISO);
 }
 
@@ -3127,7 +3134,7 @@ function getGymLogs(){ try{ return JSON.parse(localStorage.getItem(GYM_KEY)||'[]
 function saveGymLogs(l){ localStorage.setItem(GYM_KEY, JSON.stringify(l)); }
 
 function openWorkoutModal(){
-  const today=new Date().toISOString().slice(0,10);
+  const today=localISO();
   _wmType=null; _wmDur=null; _wmExs=new Set();
   const m=document.getElementById('workout-modal');
   m.style.display='flex';
@@ -3177,7 +3184,7 @@ function pgGym(){
   const heatDays = [];
   for(let i=29;i>=0;i--){
     const d = new Date(); d.setDate(d.getDate()-i);
-    const iso = d.toISOString().slice(0,10);
+    const iso = localISO(d);
     heatDays.push(logs.some(l=>l.date===iso));
   }
   const heatmap  = heatDays.map(w=>`<div class="hm-day ${w?'w':'r'}"></div>`).join('');
@@ -3187,7 +3194,7 @@ function pgGym(){
   let streak=0;
   for(let i=0;i<30;i++){
     const d=new Date(); d.setDate(d.getDate()-i);
-    if(logs.some(l=>l.date===d.toISOString().slice(0,10))) streak++;
+    if(logs.some(l=>l.date===localISO(d))) streak++;
     else break;
   }
 
@@ -3285,7 +3292,7 @@ function getMeals(){ try{ return JSON.parse(localStorage.getItem(MEAL_KEY)||'[]'
 function saveMeals(m){ localStorage.setItem(MEAL_KEY, JSON.stringify(m)); }
 
 function openMealModal(){
-  const today=new Date().toISOString().slice(0,10);
+  const today=localISO();
   _mmType='Breakfast'; _mmTpl=null;
   const m=document.getElementById('meal-modal');
   m.style.display='flex';
@@ -3339,7 +3346,7 @@ function editEatingGoal(field, label){
 
 function pgEating(){
   const meals  = getMeals();
-  const today  = new Date().toISOString().slice(0,10);
+  const today  = localISO();
   const todayM = meals.filter(m=>m.date===today);
   const totalCal = todayM.reduce((s,m)=>s+m.cal,0);
   const totalPro = todayM.reduce((s,m)=>s+m.protein,0);
@@ -3511,7 +3518,7 @@ function deleteHabit(id){
   navigate('habits');
 }
 function toggleHabitDay(id){
-  const today = new Date().toISOString().slice(0,10);
+  const today = localISO();
   const habits = getHabits();
   const h = habits.find(x=>x.id===id);
   if(!h) return;
@@ -3524,21 +3531,21 @@ function toggleHabitDay(id){
 
 function pgHabits(){
   const habits = getHabits();
-  const today  = new Date().toISOString().slice(0,10);
+  const today  = localISO();
 
   // calc streak for a habit
   function calcStreak(log){
     let s=0;
     for(let i=0;i<60;i++){
       const d=new Date(); d.setDate(d.getDate()-i);
-      if(log.includes(d.toISOString().slice(0,10))) s++;
+      if(log.includes(localISO(d))) s++;
       else break;
     }
     return s;
   }
 
   // overall 30-day rate
-  const last30 = Array.from({length:30},(_,i)=>{ const d=new Date(); d.setDate(d.getDate()-i); return d.toISOString().slice(0,10); });
+  const last30 = Array.from({length:30},(_,i)=>{ const d=new Date(); d.setDate(d.getDate()-i); return localISO(d); });
   const totalPossible = habits.length * 30;
   const totalDone = habits.reduce((s,h)=>s+last30.filter(d=>h.log.includes(d)).length,0);
   const overallRate = totalPossible>0?Math.round(totalDone/totalPossible*100):0;
@@ -4147,7 +4154,7 @@ function pgCalendar(){
     const dd=new Date(today); dd.setDate(dd.getDate()+i);
     const mo=dd.getMonth(), yr=dd.getFullYear(), dy=dd.getDate();
     const evs=(_calBuildEvents(yr,mo)[dy]||[]).filter(e=>e.type.startsWith('custom_'));
-    evs.forEach(e=>upcoming.push({...e, date:dd.toLocaleDateString('en',{month:'short',day:'numeric'}), iso:dd.toISOString().slice(0,10)}));
+    evs.forEach(e=>upcoming.push({...e, date:dd.toLocaleDateString('en',{month:'short',day:'numeric'}), iso:localISO(dd)}));
   }
 
   return modal + `
@@ -4539,7 +4546,7 @@ function checkCalendarNotifications() {
       const msUntil   = eventTime - now;
       const minsUntil = msUntil / 60000;
 
-      const dateStr  = eventTime.toISOString().slice(0,10);
+      const dateStr  = localISO(eventTime);
       const fireKey  = `${ev.id||ev.title}_${dateStr}`;
 
       // Fire if within the reminder window and not already notified
