@@ -429,7 +429,7 @@ button{font-family:var(--font)}
 }
 @media (prefers-reduced-motion: reduce){.mmore-sheet,.mmore{transition:none}}
 </style>
-<link rel="stylesheet" href="/static/brand.css?v=9">
+<link rel="stylesheet" href="/static/brand.css?v=10">
 </head>
 <body>
 
@@ -1409,7 +1409,7 @@ function instLogo(logo, text, color, cls){
 
 // Amount in an account's own currency, e.g. US$3,298.22 or €120.00
 function fmtCur(n, cur){
-  try{ return new Intl.NumberFormat('en-CA',{style:'currency',currency:cur}).format(n); }
+  try{ return new Intl.NumberFormat('en-CA',{style:'currency',currency:cur,currencyDisplay:'narrowSymbol'}).format(n); }
   catch(e){ return (Math.round(n*100)/100).toLocaleString('en-CA')+' '+cur; }
 }
 
@@ -1460,11 +1460,13 @@ function pgAccounts(){
         </div>
         <div style="margin-left:auto"><span class="badge b-gray">${a.type}</span></div>
       </div>
-      <div class="acc-bal" style="${a.bal<0?'color:var(--red)':''}">${a.currency&&a.currency!=='CAD'?fmtCur(a.native,a.currency):fmt(a.bal,2)}</div>
-      ${a.currency?`<div class="acc-fx">
-        ${a.currency!=='CAD'?(a.fxMissing?'No CAD rate for '+a.currency+' yet':'≈ '+fmt(a.bal,2)+' CAD'):''}
-        <button class="cur-chip${a.curManual?' manual':''}" data-acc="${String(a.id).replace(/"/g,'&quot;')}" onclick="openCurrencyPicker(this.dataset.acc)" title="Change this account's currency">${a.currency}${a.curManual?' · set by you':''} <svg data-feather="chevron-down"></svg></button>
-      </div>`:''}
+      <div class="acc-bal-row">
+        <div class="acc-bal" style="${a.bal<0?'color:var(--red)':''}">${a.currency&&a.currency!=='CAD'?fmtCur(a.native,a.currency):fmt(a.bal,2)}</div>
+        ${a.currency
+          ? `<button class="acc-cur${a.curManual?' manual':''}" data-acc="${String(a.id).replace(/"/g,'&quot;')}" onclick="openCurrencyPicker(this.dataset.acc)" title="Currency of this account${a.curManual?' (set by you)':''}. Click to change.">${a.currency}<svg data-feather="chevron-down"></svg></button>`
+          : `<span class="acc-cur static">CAD</span>`}
+      </div>
+      ${a.currency&&a.currency!=='CAD'?`<div class="acc-fx">${a.fxMissing?'No CAD rate for '+a.currency+' yet':'≈ '+fmt(a.bal,2)+' CAD'}</div>`:''}
       <div class="acc-meta">
         <span class="${deltaClass(a.delta)}" style="font-size:11px">${deltaIcon(a.delta)} ${fmt(Math.abs(a.delta),0)} this month</span>
         <span>Synced ${a.sync}</span>

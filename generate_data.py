@@ -4,7 +4,7 @@ generate_data.py — Pull Plaid + Wise + Phantom → return clean JSON data dict
 Used by app.py to feed real data into Vault UI.
 """
 
-import os, sys, json, requests
+import os, re, sys, json, requests
 from datetime import datetime, date
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -170,6 +170,7 @@ def pull_all(config):
                     "institution": institution or acc["name"],
                     "currency": (acc["balances"].get("iso_currency_code")
                                  or acc["balances"].get("unofficial_currency_code") or "CAD").upper(),
+                    "_currency_reported": bool(acc["balances"].get("iso_currency_code") or acc["balances"].get("unofficial_currency_code")),
                     "name":    acc["name"],
                     "current": acc["balances"].get("current") or 0,
                     "type":    acc["type"],
@@ -289,7 +290,16 @@ def pull_all(config):
 
     status_cb("Processing transactions...")
     # Each account's currency: set by hand, else what the bank reports
-    account_currency = {aid: (currency_overrides.get(aid) or acc.get("currency") or "CAD")
+    def _detected_currency(acc):
+        # Wise names its balances "USD account", "EUR account"... while Plaid reports
+        # them all as CAD: a currency code in the name wins over a reported CAD
+        cur = (acc.get("currency") or "CAD").upper()
+        m = re.match(r"^([A-Z]{3}) (account|balance|wallet)\b", acc.get("name") or "")
+        if m and cur == "CAD" and m.group(1) != "CAD" and (m.group(1) in fx_rates or m.group(1) in fx.COMMON):
+            cur = m.group(1)
+        return cur
+
+    account_currency = {aid: (currency_overrides.get(aid) or _detected_currency(acc))
                         for aid, acc in balances.items()}
     converted = []
     for t in raw_txns:
@@ -306,13 +316,16 @@ def pull_all(config):
     # ─────────────────────────────────────────────────────────────────────────
     print(f"  Building accounts from {len(balances)} Plaid balances + {len(wise_bal or {})} Wise + {len(crypto_balances_list)} crypto")
     accounts = []
+    # What each bank says about currencies (names only), to diagnose wrong detections
+    print("  Plaid account currencies: " + ", ".join(
+        f"{a.get('name')}={a.get('currency') or '?'}{'*' if a.get('_currency_reported') is False else ''}" for a in balances.values()))
     for aid, acc in balances.items():
         bal = acc["current"]
         # credit cards: Plaid reports available as positive, owe = negative UX
         if acc["type"] == "credit":
             bal = -abs(bal)
         is_cached = acc.get("_from_cache", False)
-        detected = (acc.get("currency") or "CAD").upper()
+        detected = _detected_currency(acc)
         currency = currency_overrides.get(aid) or detected
         bal_cad, fx_ok = fx.to_cad(bal, currency, fx_rates, USD_TO_CAD)
         accounts.append({
