@@ -15,10 +15,10 @@ import os, json, re, threading, time, uuid
 # Dates follow Québec time, not the server's UTC: otherwise "today", "this month"
 # and the sync timestamp jump to tomorrow every evening after 7-8 p.m.
 _tz = os.getenv('APP_TIMEZONE', 'America/Toronto')
-# Railway's image has no tz database, where a zone name is silently ignored (UTC);
-# the POSIX rule for Eastern time (EDT from the 2nd Sunday of March to the 1st
+# Railway's Python doesn't find the tz database, so a zone name is silently ignored
+# (UTC); the POSIX rule for Eastern time (EDT from the 2nd Sunday of March to the 1st
 # Sunday of November) needs no files.
-if _tz == 'America/Toronto' and not os.path.exists('/usr/share/zoneinfo/America/Toronto'):
+if _tz == 'America/Toronto':
     _tz = 'EST5EDT,M3.2.0,M11.1.0'
 os.environ['TZ'] = _tz
 if hasattr(time, 'tzset'):
