@@ -448,29 +448,21 @@ def pull_all(config):
     monthly_spending = 0.0
     category_spending = defaultdict(float)
 
+    # Transactions keep Plaid's sign: positive = money out, negative = money in.
+    # (This used to be read the other way round, so income and spending were swapped
+    # and the budget counted income categories; only the web page, which recomputes
+    # its own totals, looked right.) Person-to-person transfers are left out, as on the web.
     for t in txns:
         dt = t["date"] if isinstance(t["date"], datetime) else datetime.strptime(t["date"], "%Y-%m-%d")
         cat = CATEGORY_ALIASES.get(t["category"], t["category"])
-        if dt.month == current_month and dt.year == current_year:
-            amt = t["amount"]
-            if amt < 0:  # spending (Plaid: positive = debit, but we flip in process_transactions... check)
-                monthly_spending += abs(amt)
-                category_spending[cat] += abs(amt)
-            else:
-                monthly_income += abs(amt)
-
-    # fallback: if process_transactions keeps Plaid convention (positive = debit from account)
-    if monthly_income < 1 and monthly_spending < 1:
-        for t in txns:
-            dt = t["date"] if isinstance(t["date"], datetime) else datetime.strptime(t["date"], "%Y-%m-%d")
-            cat = CATEGORY_ALIASES.get(t["category"], t["category"])
-            if dt.month == current_month and dt.year == current_year:
-                amt = t["amount"]
-                if amt > 0:  # Plaid: positive = money out
-                    monthly_spending += amt
-                    category_spending[cat] += amt
-                else:
-                    monthly_income += abs(amt)
+        if dt.month != current_month or dt.year != current_year or cat == "P2P/Personal Transfer":
+            continue
+        amt = t["amount"]
+        if amt > 0:
+            monthly_spending += amt
+            category_spending[cat] += amt
+        else:
+            monthly_income += abs(amt)
 
     cash_flow = monthly_income - monthly_spending
 

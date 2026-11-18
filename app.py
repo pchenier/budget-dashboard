@@ -698,8 +698,10 @@ def _normalize_api_data(data):
     norm_txns = []
     for t in raw_txns:
         amt = t.get("amt", t.get("amount", 0))
-        if isinstance(amt, (int, float)) and amt > 0:
-            amt = -abs(amt)  # debit display convention
+        if isinstance(amt, (int, float)) and "amt" not in t:
+            # Plaid sign (positive = money out) to display sign (negative = money out),
+            # same as the page; income used to come out negative here
+            amt = -amt
         norm_txns.append({
             "name":     t.get("name", ""),
             "merchant": t.get("merchant", t.get("name", "")),
@@ -2012,6 +2014,16 @@ def api_status():
     uid = current_user.model.id
     state = _get_state(uid)
     has_plaid = bool(os.getenv('PLAID_CLIENT_ID') and os.getenv('PLAID_SECRET'))
+    # The mobile app never loads the web page that starts the first sync after a
+    # restart, so asking for the status starts it (cached balances, no billed call)
+    with _user_state_lock:
+        idle_empty = state['status'] == 'idle' and state['data'] is None
+    if idle_empty:
+        cfg = build_user_config(current_user)
+        if _has_any_account(cfg):
+            with _user_state_lock:
+                state['status'] = 'loading'
+            threading.Thread(target=fetch_data, args=(uid, cfg), daemon=True).start()
     with _user_state_lock:
         return jsonify({
             'status': state['status'],
@@ -2083,7 +2095,10 @@ def api_refresh():
 def api_set_account_currency():
     """Set (or reset to "auto") the currency of one account, then re-sync so every
     total is recomputed in CAD."""
-    if not session.get('csrf_token') or request.headers.get('X-CSRF-Token') != session.get('csrf_token'):
+    # CSRF only threatens cookie sessions; a Bearer token (the mobile app) is never
+    # sent by the browser on its own
+    bearer = request.headers.get('Authorization', '').startswith('Bearer ')
+    if not bearer and (not session.get('csrf_token') or request.headers.get('X-CSRF-Token') != session.get('csrf_token')):
         return jsonify({'error': 'CSRF token missing or invalid'}), 403
     uid = current_user.model.id
     body = request.get_json(silent=True) or {}
