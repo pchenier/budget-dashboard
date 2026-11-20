@@ -9,6 +9,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="/static/i18n-fr.js?v=1"></script>
+<script src="/static/i18n.js?v=1"></script>
 <script src="/static/feather.min.js"></script>
 <script src="/static/tour-demo.js?v=5" defer></script>
 <script src="/static/tour.js?v=7" defer></script>
@@ -1101,13 +1103,17 @@ const D = {
 };
 
 // ═══════════════════════════ HELPERS ═══════════════════════════
+// Locale for numbers and dates (static/i18n.js picks fr-CA or en-CA)
+const LOC = (window.FiscitI18n && FiscitI18n.locale) || 'en-CA';
+const IS_FR = LOC === 'fr-CA';
 const fmt = (n,decimals=0)=>{
   if(typeof n!=='number'||isNaN(n)) return '—';
   const abs = Math.abs(n);
-  const s = abs.toLocaleString('en-CA',{minimumFractionDigits:decimals,maximumFractionDigits:decimals});
+  const s = abs.toLocaleString(LOC,{minimumFractionDigits:decimals,maximumFractionDigits:decimals});
+  if(IS_FR) return (n<0?'-':'')+s+'\u00a0$';
   return n<0?'-$'+s:'$'+s;
 };
-const fmtPct = p => (p>=0?'+':'')+p.toFixed(1)+'%';
+const fmtPct = p => (p>=0?'+':'')+(IS_FR ? p.toFixed(1).replace('.',',')+'\u00a0%' : p.toFixed(1)+'%');
 const deltaClass = d => d>0?'up':d<0?'down':'flat';
 const deltaIcon = d => d>0?'▲':d<0?'▼':'–';
 
@@ -1139,7 +1145,7 @@ function navigate(page){
   });
   toggleMore(false);
   const now = new Date();
-  const nowStr = now.toLocaleString('en',{month:'long',year:'numeric'});
+  const nowStr = now.toLocaleString(LOC,{month:'long',year:'numeric'});
   const titles={dashboard:'Dashboard',accounts:'Accounts',transactions:'Transactions',
     budget:'Budget',insights:'Insights',investments:'Investments',crypto:'Crypto',
     gym:'Gym Tracker',eating:'Eating',habits:'Habits',calendar:'Calendar',settings:'Settings'};
@@ -1416,8 +1422,8 @@ function localISO(d){
 
 // Amount in an account's own currency, e.g. US$3,298.22 or €120.00
 function fmtCur(n, cur){
-  try{ return new Intl.NumberFormat('en-CA',{style:'currency',currency:cur,currencyDisplay:'narrowSymbol'}).format(n); }
-  catch(e){ return (Math.round(n*100)/100).toLocaleString('en-CA')+' '+cur; }
+  try{ return new Intl.NumberFormat(LOC,{style:'currency',currency:cur,currencyDisplay:'narrowSymbol'}).format(n); }
+  catch(e){ return (Math.round(n*100)/100).toLocaleString(LOC)+' '+cur; }
 }
 
 function openCurrencyPicker(accId){
@@ -1838,7 +1844,7 @@ function filterTxns(q){
     // match "Jun 04" style dates against iso
     const iso = _txnDateFilter; // "2026-06-04"
     const d = new Date(iso+'T00:00');
-    const moShort = d.toLocaleString('en',{month:'short'}); // "Jun"
+    const moShort = d.toLocaleString('en',{month:'short'}); // "Jun" (matches server dates: stays English)
     const dayNum  = d.getDate(); // 4
     const dayPad  = String(dayNum).padStart(2,'0'); // "04"
     list = list.filter(t=>{
@@ -1954,7 +1960,7 @@ function pgTransactions(){
     </select>
     <button class="btn btn-ghost btn-sm" onclick="openRulesModal()"><svg data-feather="sliders" style="width:13px;height:13px"></svg> Rules (${getRules().length})</button>
     ${_txnDateFilter?`<div style="display:flex;align-items:center;gap:6px;padding:4px 10px;background:var(--accent);border-radius:var(--r-sm)">
-      <span style="font-size:11px;font-weight:600;color:var(--bg);display:inline-flex;align-items:center;gap:3px"><svg data-feather="calendar" style="width:11px;height:11px"></svg> ${new Date(_txnDateFilter+'T00:00').toLocaleDateString('en',{month:'short',day:'numeric',year:'numeric'})}</span>
+      <span style="font-size:11px;font-weight:600;color:var(--bg);display:inline-flex;align-items:center;gap:3px"><svg data-feather="calendar" style="width:11px;height:11px"></svg> ${new Date(_txnDateFilter+'T00:00').toLocaleDateString(LOC,{month:'short',day:'numeric',year:'numeric'})}</span>
       <button onclick="_txnDateFilter='';filterTxns()" style="background:none;border:none;color:var(--bg);cursor:pointer;font-size:14px;line-height:1;padding:0 2px">×</button>
     </div>`:''}
     <div style="margin-left:auto;font-size:12px;color:var(--text3)" id="txn-count">${D.txns.length} transactions</div>
@@ -2261,7 +2267,7 @@ function pgSavings(){
   const months = [];
   for(let i=11; i>=0; i--){
     const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
-    months.push({ year: d.getFullYear(), month: d.getMonth(), label: d.toLocaleString('en-CA',{month:'short'})+' '+d.getFullYear().toString().slice(2) });
+    months.push({ year: d.getFullYear(), month: d.getMonth(), label: d.toLocaleString(LOC,{month:'short'})+' '+d.getFullYear().toString().slice(2) });
   }
 
   const mData = months.map(m=>{
@@ -2368,7 +2374,7 @@ function initSavingsChart(){
     const d=new Date(now.getFullYear(),now.getMonth()-i,1);
     const inc=txns.filter(t=>{if(t.amt<=0)return false;const raw=t.date_iso||t.date||'';let dd;if(/^\d{4}-\d{2}-\d{2}$/.test(raw)){const[y,m,dy]=raw.split('-').map(Number);dd=new Date(y,m-1,dy);}else{dd=new Date(raw);}return dd.getMonth()===d.getMonth()&&dd.getFullYear()===d.getFullYear();}).reduce((s,t)=>s+t.amt,0);
     const exp=txns.filter(t=>{if(t.amt>=0)return false;const raw=t.date_iso||t.date||'';let dd;if(/^\d{4}-\d{2}-\d{2}$/.test(raw)){const[y,m,dy]=raw.split('-').map(Number);dd=new Date(y,m-1,dy);}else{dd=new Date(raw);}return dd.getMonth()===d.getMonth()&&dd.getFullYear()===d.getFullYear();}).reduce((s,t)=>s+Math.abs(t.amt),0);
-    labels.push(d.toLocaleString('en-CA',{month:'short'}));
+    labels.push(d.toLocaleString(LOC,{month:'short'}));
     rates.push(inc>0?parseFloat(((inc-exp)/inc*100).toFixed(1)):null);
     cashflows.push(inc>0?Math.round(inc-exp):null);
   }
@@ -2570,7 +2576,7 @@ function pgInvestments(){
   const totalVal = sum(invs);
   const hist = D.investHistory || [];
   const change = hist.length>1 ? hist[hist.length-1]-hist[0] : 0;
-  const fmtDate = iso => iso ? new Date(iso+'T12:00:00').toLocaleDateString('en',{month:'short',day:'numeric',year:'numeric'}) : '';
+  const fmtDate = iso => iso ? new Date(iso+'T12:00:00').toLocaleDateString(LOC,{month:'short',day:'numeric',year:'numeric'}) : '';
 
   const rows = invs.map(inv=>{
     const isManual = inv.source==='manual';
@@ -2584,7 +2590,7 @@ function pgInvestments(){
         <summary>Holdings</summary>
         <div class="inv-pos-grid">
           <span>Symbol</span><span>Quantity</span><span>Price</span><span>Value (CAD)</span>
-          ${inv.positions.map(p=>`<b title="${p.description||''}">${p.symbol||'—'}</b><span>${(+p.quantity||0).toLocaleString('en-CA',{maximumFractionDigits:6})}</span><span>${p.price?(+p.price).toLocaleString('en-CA',{maximumFractionDigits:2})+(p.currency&&p.currency!=='CAD'?' '+p.currency:''):'—'}</span><span>${fmt(p.value_cad||0,2)}</span>`).join('')}
+          ${inv.positions.map(p=>`<b title="${p.description||''}">${p.symbol||'—'}</b><span>${(+p.quantity||0).toLocaleString(LOC,{maximumFractionDigits:6})}</span><span>${p.price?(+p.price).toLocaleString(LOC,{maximumFractionDigits:2})+(p.currency&&p.currency!=='CAD'?' '+p.currency:''):'—'}</span><span>${fmt(p.value_cad||0,2)}</span>`).join('')}
         </div>
       </details>` : '';
     return `
@@ -2934,7 +2940,7 @@ function renderMiniCal(containerId, hiddenId, selectedISO){
   const daysInMonth = new Date(year, month+1, 0).getDate();
   const firstDay    = (new Date(year, month, 1).getDay()+6)%7; // Mon-start
 
-  const moName = sel.toLocaleString('en',{month:'long'});
+  const moName = sel.toLocaleString(LOC,{month:'long'});
   const dayH   = ['M','T','W','T','F','S','S'].map(d=>`<div style="font-size:9.5px;text-align:center;color:var(--text4);font-weight:600">${d}</div>`).join('');
 
   let cells = '<div style="opacity:0"></div>'.repeat(firstDay);
@@ -3728,7 +3734,7 @@ function calSelectDay(d){
   // update title
   const titleEl = document.getElementById('cal-day-title');
   if(titleEl){
-    const monthName = new Date(_calYear,_calMonth,1).toLocaleString('en',{month:'long'});
+    const monthName = new Date(_calYear,_calMonth,1).toLocaleString(LOC,{month:'long'});
     titleEl.textContent = _calSelDay ? _calSelDay+' '+monthName : 'Day detail';
   }
   // update add button
@@ -3829,12 +3835,12 @@ function _calBuildDayPanel(day, year, month){
     </div>`;
   }).join('');
 
-  const empty = !evs.length ? `<div style="padding:12px 0;text-align:center;color:var(--text3);font-size:12px">No events on ${day} ${new Date(year,month,day).toLocaleString('en',{month:'short'})}</div>` : '';
+  const empty = !evs.length ? `<div style="padding:12px 0;text-align:center;color:var(--text3);font-size:12px">No events on ${day} ${new Date(year,month,day).toLocaleString(LOC,{month:'short'})}</div>` : '';
 
   const txnBtn = txnCount>0 ? `
     <button onclick="goToTxnDate('${isoDate}')"
       style="width:100%;margin-top:10px;padding:8px 12px;background:var(--bg4);border:1px solid var(--border);border-radius:var(--r-sm);color:var(--text2);font-family:var(--font);font-size:12px;cursor:pointer;text-align:left;display:flex;align-items:center;justify-content:space-between">
-      <span style="display:inline-flex;align-items:center;gap:4px"><svg data-feather="minus" style="width:14px;height:14px"></svg> Transactions on ${day} ${new Date(year,month,day).toLocaleString('en',{month:'short'})}</span>
+      <span style="display:inline-flex;align-items:center;gap:4px"><svg data-feather="minus" style="width:14px;height:14px"></svg> Transactions on ${day} ${new Date(year,month,day).toLocaleString(LOC,{month:'short'})}</span>
       <span style="color:var(--text3)">${txnCount} →</span>
     </button>` : '';
 
@@ -3934,8 +3940,8 @@ function pgCalendar(){
     const dayNames = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
     const ws = _calWeekStart;
     const we = new Date(ws); we.setDate(we.getDate()+6);
-    const rangeLabel = ws.toLocaleDateString('en',{month:'long',day:'numeric'}) + ' - ' +
-      (ws.getMonth()!==we.getMonth() ? we.toLocaleDateString('en',{month:'long',day:'numeric'}) : we.getDate().toString()) + ', ' + we.getFullYear();
+    const rangeLabel = ws.toLocaleDateString(LOC,{month:'long',day:'numeric'}) + ' - ' +
+      (ws.getMonth()!==we.getMonth() ? we.toLocaleDateString(LOC,{month:'long',day:'numeric'}) : we.getDate().toString()) + ', ' + we.getFullYear();
     const addDay = todayDate.getDate();
 
     // Column headers
@@ -4026,8 +4032,8 @@ function pgCalendar(){
   if(_calView==='day'){
     const dayDate = new Date(_calDayDate);
     const y=dayDate.getFullYear(), m=dayDate.getMonth(), d=dayDate.getDate();
-    const dayName = dayDate.toLocaleDateString('en',{weekday:'long'});
-    const dateLabel = dayDate.toLocaleDateString('en',{month:'long',day:'numeric',year:'numeric'});
+    const dayName = dayDate.toLocaleDateString(LOC,{weekday:'long'});
+    const dateLabel = dayDate.toLocaleDateString(LOC,{month:'long',day:'numeric',year:'numeric'});
     const dayEvs = _calBuildEvents(y,m)[d]||[];
     const isToday = dayDate.getTime()===todayDate.getTime();
 
@@ -4102,7 +4108,7 @@ function pgCalendar(){
 
   // ════════════════════════════ MONTH VIEW ════════════════════════════
   const year = _calYear, month = _calMonth;
-  const monthName = new Date(year,month,1).toLocaleString('en',{month:'long'});
+  const monthName = new Date(year,month,1).toLocaleString(LOC,{month:'long'});
   const daysInMonth = new Date(year,month+1,0).getDate();
   const offset = (new Date(year,month,1).getDay()+6)%7;
   const isCurrentMonth = today.getFullYear()===year && today.getMonth()===month;
@@ -4154,7 +4160,7 @@ function pgCalendar(){
     const dd=new Date(today); dd.setDate(dd.getDate()+i);
     const mo=dd.getMonth(), yr=dd.getFullYear(), dy=dd.getDate();
     const evs=(_calBuildEvents(yr,mo)[dy]||[]).filter(e=>e.type.startsWith('custom_'));
-    evs.forEach(e=>upcoming.push({...e, date:dd.toLocaleDateString('en',{month:'short',day:'numeric'}), iso:localISO(dd)}));
+    evs.forEach(e=>upcoming.push({...e, date:dd.toLocaleDateString(LOC,{month:'short',day:'numeric'}), iso:localISO(dd)}));
   }
 
   return modal + `
@@ -4265,6 +4271,9 @@ function pgSettings(){
     row('Bill reminders','Upcoming bills 3 days before',tog(true)),
   ].join(''))}
   ${section('Appearance',[
+    row('Language','Fiscit in English or French',`<select class="sel" data-i18n-skip onchange="FiscitI18n.setLang(this.value)">
+      <option value="fr" ${(window.FiscitI18n&&FiscitI18n.lang)==='fr'?'selected':''}>Français</option>
+      <option value="en" ${(window.FiscitI18n&&FiscitI18n.lang)!=='fr'?'selected':''}>English</option></select>`),
     row('Accent color','Highlights, charts and buttons',accentPicker()),
     row('Background','Dark, midnight blue, pure black or light',surfacePicker()),
     row('Compact mode','Reduce spacing for more content',tog(false)),
@@ -4877,7 +4886,7 @@ function updateHeaderClock(){
   const el=document.getElementById('header-clock');
   if(!el) return;
   const now=new Date();
-  el.textContent=now.toLocaleTimeString('en-CA',{hour:'2-digit',minute:'2-digit',timeZone:'America/Montreal'});
+  el.textContent=now.toLocaleTimeString(LOC,{hour:'2-digit',minute:'2-digit',timeZone:'America/Montreal'});
 }
 
 // ═══════════════════════════ NOTIFICATIONS DROPDOWN ═══════════════════════════
@@ -4909,7 +4918,7 @@ function toggleNotifDropdown(){
           '<span style="display:flex;align-items:center;justify-content:center;width:18px;height:18px;flex-shrink:0">'+ico(t.icon||'calendar',14)+'</span>'+
           '<div style="flex:1;min-width:0">'+
             '<div style="font-size:12px;font-weight:500;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+e.title+'</div>'+
-            '<div style="font-size:11px;color:var(--text3)">'+(isToday?'Today':d.toLocaleDateString('en-CA',{month:'short',day:'numeric'}))+' · '+t.label+'</div>'+
+            '<div style="font-size:11px;color:var(--text3)">'+(isToday?'Today':d.toLocaleDateString(LOC,{month:'short',day:'numeric'}))+' · '+t.label+'</div>'+
           '</div></div>';
       }).join('');
       feather.replace({width:14,height:14});

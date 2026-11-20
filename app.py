@@ -1245,6 +1245,7 @@ LOADING_HTML = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <title>Fiscit — Loading</title>
+<script src="/static/i18n-fr.js?v=1"></script><script src="/static/i18n.js?v=1"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -1286,6 +1287,7 @@ LOGIN_HTML = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Fiscit — Log In</title>
+<script src="/static/i18n-fr.js?v=1"></script><script src="/static/i18n.js?v=1"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
