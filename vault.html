@@ -10,7 +10,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="/static/i18n-fr.js?v=1"></script>
-<script src="/static/i18n.js?v=2"></script>
+<script src="/static/i18n.js?v=3"></script>
 <script src="/static/feather.min.js"></script>
 <script src="/static/tour-demo.js?v=5" defer></script>
 <script src="/static/tour.js?v=7" defer></script>
@@ -431,7 +431,7 @@ button{font-family:var(--font)}
 }
 @media (prefers-reduced-motion: reduce){.mmore-sheet,.mmore{transition:none}}
 </style>
-<link rel="stylesheet" href="/static/brand.css?v=11">
+<link rel="stylesheet" href="/static/brand.css?v=12">
 </head>
 <body>
 
@@ -4264,6 +4264,9 @@ function pgSettings(){
     row('Wise','International transfers',`<a href="javascript:void(0)" onclick="openInvestmentModal('Wise')" style="text-decoration:none">${badge(cn.wise)}</a>`),
     connRow('Crypto Wallets','Solana, Ethereum, Bitcoin wallets','crypto','javascript:void(0)'),
   ].join(''))}
+  ${D.billing && D.billing.billingEnabled ? section('Subscription',[
+    row('Plan', billingSummary(), '<a class="btn btn-ghost btn-sm" href="https://fiscit.com/billing"><svg data-feather="credit-card"></svg> Manage</a>'),
+  ].join('')) : ''}
   ${section('Notifications',[
     row('Budget alerts','Notify when over budget',tog(true)),
     row('Weekly summary','Weekly financial digest on Monday',tog(true)),
@@ -4449,6 +4452,44 @@ function pollRefresh(){
       setTimeout(pollRefresh,1500);
     }
   }).catch(()=>setTimeout(pollRefresh,2000));
+}
+
+// ═══════════════════════════ SUBSCRIPTION ═══════════════════════════
+// Plans and payment live on fiscit.com/billing (Stripe); here we only show where the
+// person stands, and a blocking panel once the free trial is over.
+const BILLING_URL = 'https://fiscit.com/billing';
+function billingSummary(){
+  const b = D.billing || {};
+  const date = iso => iso ? new Date(iso+'T12:00:00').toLocaleDateString(LOC,{day:'numeric',month:'long',year:'numeric'}) : '';
+  if(b.state==='comped') return 'Free access';
+  if(b.state==='past_due') return 'Payment failed: update your card';
+  if(b.state==='subscribed'){
+    const plan = b.plan==='yearly' ? 'Yearly plan' : 'Monthly plan';
+    return b.cancelAtPeriodEnd ? plan+' · ends '+date(b.periodEnd) : plan+' · renews '+date(b.periodEnd);
+  }
+  if(b.state==='trial') return 'Free trial · '+b.daysLeft+' day'+(b.daysLeft===1?'':'s')+' left';
+  return 'Free trial ended';
+}
+
+function showPaywall(){
+  const b = D.billing || {}, p = b.prices || {monthly:10, yearly:96};
+  const o = document.createElement('div');
+  o.className = 'paywall';
+  o.innerHTML = `<div class="paywall-card" role="dialog" aria-modal="true" aria-labelledby="pw-title">
+    <div class="paywall-ico"><svg data-feather="lock"></svg></div>
+    <h2 id="pw-title">Your free trial has ended</h2>
+    <p>Pick a plan to keep your dashboard, budgets and history. Your connections and data are kept. Cancel anytime.</p>
+    <div class="paywall-plans">
+      <a class="paywall-plan" href="${BILLING_URL}?plan=monthly"><b>Monthly</b><span class="pw-price">${fmt(p.monthly,0)}<small> / month</small></span><span>Billed monthly</span></a>
+      <a class="paywall-plan best" href="${BILLING_URL}?plan=yearly"><em>Save 20%</em><b>Yearly</b><span class="pw-price">${fmt(p.yearly,0)}<small> / year</small></span><span>${fmt(p.yearly/12,0)} per month</span></a>
+    </div>
+    <div class="paywall-foot"><a href="https://fiscit.com/api/auth/logout" onclick="fetch('/api/auth/logout',{method:'POST',headers:csrfHeaders(),credentials:'include'})">Sign out</a> · <a href="mailto:support@fiscit.com">Contact support</a></div>
+  </div>`;
+  document.body.appendChild(o);
+  feather.replace({width:18,height:18});
+}
+if(D.billing && D.billing.state==='expired'){
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', showPaywall); else showPaywall();
 }
 
 // Init sync timestamp from injected data

@@ -293,3 +293,21 @@ html[data-surface="light"] .surface-dot{border-color:rgba(0,0,0,.15)}
 .cur-seg button.more{padding:3px 6px;letter-spacing:0}
 .cur-seg.saving{opacity:.55}
 .acc-cur-hint{margin:-4px 0 8px;font-size:11px;color:var(--text4)}
+
+/* ── Subscription: panel shown once the free trial is over ── */
+.paywall{position:fixed;inset:0;z-index:5000;display:grid;place-items:center;padding:16px;background:rgba(0,0,0,.72);backdrop-filter:blur(10px)}
+.paywall-card{width:100%;max-width:480px;background:var(--bg2);border:1px solid var(--border-strong);border-radius:22px;padding:30px;text-align:center;box-shadow:0 40px 100px rgba(0,0,0,.5)}
+.paywall-ico{width:52px;height:52px;margin:0 auto 14px;border-radius:16px;display:grid;place-items:center;background:rgba(var(--lime-rgb),.12);color:var(--lime)}
+.paywall-card h2{font-size:22px;font-weight:650;letter-spacing:-.02em;color:var(--text)}
+.paywall-card p{font-size:14px;color:var(--text3);line-height:1.6;margin:8px 0 22px}
+.paywall-plans{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.paywall-plan{position:relative;display:flex;flex-direction:column;gap:4px;padding:18px 14px;border-radius:16px;border:1px solid var(--border-strong);background:var(--bg3);color:var(--text3);font-size:12px;text-decoration:none;transition:border-color .15s,transform .15s}
+.paywall-plan:hover{border-color:rgba(var(--lime-rgb),.6);transform:translateY(-2px)}
+.paywall-plan b{color:var(--text);font-size:14px}
+.paywall-plan .pw-price{color:var(--text);font-size:24px;font-weight:700;letter-spacing:-.02em}
+.paywall-plan .pw-price small{font-size:12px;font-weight:500;color:var(--text3)}
+.paywall-plan.best{border-color:rgba(var(--lime-rgb),.45)}
+.paywall-plan em{position:absolute;top:-10px;left:50%;transform:translateX(-50%);font-style:normal;font-size:10.5px;font-weight:700;padding:2px 9px;border-radius:999px;background:var(--lime);color:#080808;white-space:nowrap}
+.paywall-foot{margin-top:20px;font-size:12px;color:var(--text4)}
+.paywall-foot a{color:var(--text3)}
+@media(max-width:420px){.paywall-plans{grid-template-columns:1fr}}

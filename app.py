@@ -32,6 +32,7 @@ import jwt as pyjwt
 from pathlib import Path
 from models import db, User as UserModel, PlaidConnection, WiseConnection, CryptoWallet, InvestmentAccount, InvestmentSnapshot, UsedSsoToken, PasswordReset, AccountCurrency, InstitutionLogo, BrokerConnection, BrokerSnapshot
 import brokers
+import billing
 import fx
 
 # Normalize French categories to English (matches generate_data.py CATEGORY_ALIASES)
@@ -613,6 +614,14 @@ with app.app_context():
             db.session.execute(text('ALTER TABLE users ADD COLUMN tour_seen BOOLEAN NOT NULL DEFAULT FALSE'))
             db.session.commit()
             print("  Migrated: added users.tour_seen")
+        for col, ddl in (('stripe_customer_id', 'VARCHAR(64)'), ('stripe_subscription_id', 'VARCHAR(64)'),
+                         ('subscription_status', 'VARCHAR(32)'), ('subscription_plan', 'VARCHAR(16)'),
+                         ('subscription_period_end', 'TIMESTAMP'),
+                         ('subscription_cancel_at_period_end', 'BOOLEAN NOT NULL DEFAULT FALSE')):
+            if col not in existing_cols:
+                db.session.execute(text(f'ALTER TABLE users ADD COLUMN {col} {ddl}'))
+                db.session.commit()
+                print(f"  Migrated: added users.{col}")
         if 'token_version' not in existing_cols:
             db.session.execute(text('ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0'))
             db.session.commit()
@@ -1229,6 +1238,7 @@ def _build_real_data_js(data, user=None):
   snaptradeEnabled: {json.dumps(inv['snaptradeEnabled'])},
   plaidInvestments: {json.dumps(PLAID_INVESTMENTS)},
   fxCurrencies: {_js(fx.COMMON)},
+  billing: {_js(billing.access(user) if user is not None else None)},
   crypto: {_js(data.get('crypto', []))},
   habits: [],
   gym: [],
@@ -1948,6 +1958,8 @@ def health():
 @login_required
 def index():
     uid = current_user.model.id
+    if not billing.access(current_user.model)['ok']:
+        return build_vault_html({}, user=current_user.model)
     state = _get_state(uid)
     with _user_state_lock:
         status = state["status"]
@@ -2013,6 +2025,8 @@ def api_tour_seen():
 @app.route('/api/status')
 @api_auth_required
 def api_status():
+    if not billing.access(current_user.model)['ok']:
+        return jsonify({'error': 'subscription_required', 'billing': billing.access(current_user.model)}), 402
     uid = current_user.model.id
     state = _get_state(uid)
     has_plaid = bool(os.getenv('PLAID_CLIENT_ID') and os.getenv('PLAID_SECRET'))
@@ -2045,6 +2059,8 @@ def _api_investments(uid, accounts):
 @app.route('/api/data')
 @api_auth_required
 def api_data():
+    if not billing.access(current_user.model)['ok']:
+        return jsonify({'error': 'subscription_required', 'billing': billing.access(current_user.model)}), 402
     uid = current_user.model.id
     state = _get_state(uid)
     with _user_state_lock:
@@ -2077,6 +2093,8 @@ def api_data():
 @app.route('/api/refresh', methods=['POST'])
 @api_auth_required
 def api_refresh():
+    if not billing.access(current_user.model)['ok']:
+        return jsonify({'error': 'subscription_required', 'billing': billing.access(current_user.model)}), 402
     uid = current_user.model.id
     state = _get_state(uid)
     with _user_state_lock:
@@ -2384,6 +2402,10 @@ def api_delete_account():
     except Exception:
         db.session.rollback()
     _plaid_remove_items(set(t for t in tokens if t))
+    # Stop billing before the account disappears (best effort, like Plaid above)
+    sub_id = current_user.model.stripe_subscription_id
+    if sub_id and not billing.cancel_subscription(sub_id):
+        app.logger.warning('Account deletion: could not cancel Stripe subscription for user %s', uid)
 
     try:
         CryptoWallet.query.filter_by(user_id=uid).delete()

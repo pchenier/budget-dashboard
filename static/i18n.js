@@ -44,6 +44,23 @@
     'Please confirm your email first — check your inbox for the link from Fiscit.': 'Confirme d\'abord ton courriel — vérifie ta boîte de réception pour le lien de Fiscit.',
     'Google sign-in failed. Please try again.': 'La connexion avec Google a échoué. Réessaie.',
     'Fiscit — Log In': 'Fiscit — Connexion', 'Fiscit — Loading': 'Fiscit — Chargement',
+    // Subscription
+    "Subscription": "Abonnement",
+    "Plan": "Forfait",
+    "Manage": "Gérer",
+    "Free access": "Accès gratuit",
+    "Payment failed: update your card": "Paiement refusé : mets ta carte à jour",
+    "Free trial ended": "Essai gratuit terminé",
+    "Your free trial has ended": "Ton essai gratuit est terminé",
+    "Pick a plan to keep your dashboard, budgets and history. Your connections and data are kept. Cancel anytime.": "Choisis un forfait pour garder ton tableau de bord, tes budgets et ton historique. Tes connexions et tes données sont conservées. Annulable en tout temps.",
+    "Monthly": "Mensuel",
+    "Yearly": "Annuel",
+    "/ month": "/ mois",
+    "/ year": "/ an",
+    "Billed monthly": "Facturé chaque mois",
+    "Save 20%": "Économise 20 %",
+    "Sign out": "Se déconnecter",
+    "Contact support": "Contacter le soutien",
   };
   for (var k in EXTRA) if (!Object.prototype.hasOwnProperty.call(DICT, k)) DICT[k] = EXTRA[k];
   DICT['Alert for transactions over $200'] = 'Alerte pour les transactions de plus de 200 $';
@@ -92,6 +109,9 @@
     // "Groceries · Scene+ Visa card": translate the category, never the account's own name
     [/^([^·]+) · (.+)$/, function (_, a, b) { return Object.prototype.hasOwnProperty.call(DICT, a) ? DICT[a] + ' · ' + b : null; }],
     [/^Crypto: (.+)\.\.\.$/, function (_, a) { return 'Crypto : ' + a + '…'; }],
+    [/^(Monthly|Yearly) plan · (renews|ends) (.+)$/, function (_, p, w, d) { return 'Forfait ' + (p === 'Yearly' ? 'annuel' : 'mensuel') + ' · ' + (w === 'renews' ? 'renouvelé le ' : 'se termine le ') + d; }],
+    [/^Free trial · (\d+) days? left$/, function (_, n) { return 'Essai gratuit · ' + n + ' ' + plural(n, 'jour restant', 'jours restants'); }],
+    [/^(.+) per month$/, function (_, a) { return a + ' par mois'; }],
     [/^Plaid error: (.*)$/, function (_, a) { return 'Erreur Plaid : ' + a; }],
     [/^Exchange error: (.*)$/, function (_, a) { return 'Erreur lors de l\'enregistrement : ' + a; }],
     [/^Failed to open Plaid Link: (.*)$/, function (_, a) { return 'Impossible d\'ouvrir Plaid : ' + a; }],

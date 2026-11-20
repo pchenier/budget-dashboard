@@ -40,6 +40,13 @@ class User(db.Model):
     email_confirmed = db.Column(db.Boolean, default=True, nullable=False)  # auto-confirmed for API users
     # Bumped to sign out every device: sessions and tokens carry the version they were issued with
     token_version = db.Column(db.Integer, default=0, nullable=False)
+    # Subscription, written by fiscit.com's Stripe webhook (see billing.py)
+    stripe_customer_id     = db.Column(db.String(64), nullable=True, index=True)
+    stripe_subscription_id = db.Column(db.String(64), nullable=True)
+    subscription_status    = db.Column(db.String(32), nullable=True)   # active, past_due, canceled...
+    subscription_plan      = db.Column(db.String(16), nullable=True)   # monthly / yearly
+    subscription_period_end = db.Column(db.DateTime, nullable=True)
+    subscription_cancel_at_period_end = db.Column(db.Boolean, default=False, nullable=False)
     created_at    = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     # Relationships
