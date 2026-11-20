@@ -44,6 +44,38 @@
     'Please confirm your email first — check your inbox for the link from Fiscit.': 'Confirme d\'abord ton courriel — vérifie ta boîte de réception pour le lien de Fiscit.',
     'Google sign-in failed. Please try again.': 'La connexion avec Google a échoué. Réessaie.',
     'Fiscit — Log In': 'Fiscit — Connexion', 'Fiscit — Loading': 'Fiscit — Chargement',
+    // Money assistant
+    "Assistant": "Assistant",
+    "Ask about your money": "Pose tes questions sur ton argent",
+    "Where did my money go this month?": "Où est passé mon argent ce mois-ci?",
+    "How can I save $200 a month?": "Comment épargner 200 $ par mois?",
+    "Which subscriptions could I cancel?": "Quels abonnements pourrais-je annuler?",
+    "Am I on track with my budget?": "Est-ce que je respecte mon budget?",
+    "Compare my spending with last month": "Compare mes dépenses avec le mois dernier",
+    "How are my investments spread out?": "Comment mes placements sont-ils répartis?",
+    "Looking at your overview…": "Je regarde ton portrait financier…",
+    "Looking at your spending…": "Je regarde tes dépenses…",
+    "Comparing your months…": "Je compare tes mois…",
+    "Searching your transactions…": "Je cherche dans tes transactions…",
+    "Checking your accounts…": "Je regarde tes comptes…",
+    "Checking your budgets…": "Je regarde tes budgets…",
+    "Finding recurring charges…": "Je cherche tes paiements récurrents…",
+    "Looking at your investments…": "Je regarde tes placements…",
+    "Thinking…": "Je réfléchis…",
+    "You reached today’s limit of questions. It resets tomorrow.": "Tu as atteint la limite de questions pour aujourd’hui. Elle se réinitialise demain.",
+    "The assistant isn’t available yet.": "L’assistant n’est pas encore disponible.",
+    "I can’t help with that one. Try asking about your spending, budget or savings.": "Je ne peux pas t’aider avec ça. Essaie une question sur tes dépenses, ton budget ou ton épargne.",
+    "The assistant is busy right now. Please try again in a moment.": "L’assistant est occupé en ce moment. Réessaie dans un instant.",
+    "Couldn’t reach the assistant. Check your connection and try again.": "Impossible de joindre l’assistant. Vérifie ta connexion et réessaie.",
+    "That question needed too many steps. Try asking something more specific.": "Cette question demandait trop d’étapes. Essaie quelque chose de plus précis.",
+    "The answer got too long. Try a more specific question.": "La réponse est devenue trop longue. Essaie une question plus précise.",
+    "Something went wrong. Please try again.": "Un problème est survenu. Réessaie.",
+    "Type a question first.": "Écris d’abord une question.",
+    "Ask about your spending, budget or savings…": "Pose une question sur tes dépenses, ton budget ou ton épargne…",
+    "Send": "Envoyer",
+    "New conversation": "Nouvelle conversation",
+    "Answers come from your own accounts. Read-only. General information, not financial advice.": "Les réponses viennent de tes propres comptes. En lecture seule. Information générale, pas un conseil financier.",
+    "I look at your real accounts and transactions to answer: where your money goes, how to save, your budget, your investments.": "Je regarde tes vrais comptes et tes transactions pour répondre : où va ton argent, comment épargner, ton budget, tes placements.",
   };
   for (var k in EXTRA) if (!Object.prototype.hasOwnProperty.call(DICT, k)) DICT[k] = EXTRA[k];
   DICT['Alert for transactions over $200'] = 'Alerte pour les transactions de plus de 200 $';
@@ -149,7 +181,8 @@
     var n;
     while ((n = w.nextNode())) {
       if (n.nodeType === 3) doText(n);
-      else if (!SKIP.test(n.tagName)) doAttrs(n);
+      // A text field's content is the person's, but its placeholder is ours
+      else if (!/^(SCRIPT|STYLE)$/.test(n.tagName) && !(n.parentElement && skipped(n.parentElement))) doAttrs(n);
     }
   }
 
@@ -157,7 +190,7 @@
     for (var i = 0; i < list.length; i++) {
       var r = list[i];
       if (r.type === 'characterData') doText(r.target);
-      else if (r.type === 'attributes') { if (!skipped(r.target)) doAttrs(r.target); }
+      else if (r.type === 'attributes') { if (!skipped(r.target.parentElement || r.target)) doAttrs(r.target); }
       else for (var j = 0; j < r.addedNodes.length; j++) walk(r.addedNodes[j]);
     }
     if (document.title && translate(document.title) !== document.title) document.title = translate(document.title);

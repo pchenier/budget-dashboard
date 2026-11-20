@@ -10,7 +10,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="/static/i18n-fr.js?v=1"></script>
-<script src="/static/i18n.js?v=1"></script>
+<script src="/static/i18n.js?v=2"></script>
 <script src="/static/feather.min.js"></script>
 <script src="/static/tour-demo.js?v=5" defer></script>
 <script src="/static/tour.js?v=7" defer></script>
@@ -431,7 +431,7 @@ button{font-family:var(--font)}
 }
 @media (prefers-reduced-motion: reduce){.mmore-sheet,.mmore{transition:none}}
 </style>
-<link rel="stylesheet" href="/static/brand.css?v=11">
+<link rel="stylesheet" href="/static/brand.css?v=12">
 </head>
 <body>
 
@@ -446,6 +446,9 @@ button{font-family:var(--font)}
     <div class="nav-label">Overview</div>
     <div class="nav-item active" data-page="dashboard" onclick="navigate('dashboard')">
       <svg class="ico" data-feather="home"></svg> Dashboard
+    </div>
+    <div class="nav-item" data-page="assistant" onclick="navigate('assistant')">
+      <svg class="ico" data-feather="message-circle"></svg> Assistant
     </div>
     <div class="nav-item" data-page="accounts" onclick="navigate('accounts')">
       <svg class="ico" data-feather="credit-card"></svg> Accounts
@@ -547,6 +550,7 @@ button{font-family:var(--font)}
     <div class="mmore-grip"></div>
     <div class="mmore-label">Overview</div>
     <div class="mmore-grid">
+      <button onclick="navigate('assistant')"><svg data-feather="message-circle"></svg>Assistant</button>
       <button onclick="navigate('insights')"><svg data-feather="bar-chart-2"></svg>Insights</button>
       <button onclick="navigate('savings')"><svg data-feather="percent"></svg>Savings</button>
       <button onclick="navigate('subscriptions')"><svg data-feather="repeat"></svg>Subs</button>
@@ -1146,10 +1150,10 @@ function navigate(page){
   toggleMore(false);
   const now = new Date();
   const nowStr = now.toLocaleString(LOC,{month:'long',year:'numeric'});
-  const titles={dashboard:'Dashboard',accounts:'Accounts',transactions:'Transactions',
+  const titles={assistant:'Assistant',dashboard:'Dashboard',accounts:'Accounts',transactions:'Transactions',
     budget:'Budget',insights:'Insights',investments:'Investments',crypto:'Crypto',
     gym:'Gym Tracker',eating:'Eating',habits:'Habits',calendar:'Calendar',settings:'Settings'};
-  const subs={dashboard:nowStr,accounts:D.accounts?(D.accounts.length+' connected account'+(D.accounts.length!==1?'s':'')):'0 connected accounts',transactions:'All transactions',
+  const subs={assistant:'Ask about your money',dashboard:nowStr,accounts:D.accounts?(D.accounts.length+' connected account'+(D.accounts.length!==1?'s':'')):'0 connected accounts',transactions:'All transactions',
     budget:nowStr,insights:'AI-powered insights',investments:'Portfolio overview',
     crypto:'Crypto holdings',gym:'Workout tracker',eating:'Nutrition',habits:'Daily habits',
     calendar:nowStr,settings:'Account & preferences'};
@@ -1161,6 +1165,7 @@ function navigate(page){
   updateBudgetBadge();
   requestAnimationFrame(()=>{
     if(page==='dashboard')initDashCharts();
+    if(page==='assistant')initAssistant();
     if(page==='savings')initSavingsChart();
     if(page==='investments')initInvCharts();
     if(page==='crypto')initCryptoCharts();
@@ -1178,6 +1183,7 @@ function toggleMore(open){
 function renderPage(p){
   switch(p){
     case 'dashboard':     return pgDashboard();
+    case 'assistant':     return pgAssistant();
     case 'accounts':      return pgAccounts();
     case 'transactions':  return pgTransactions();
     case 'budget':        return pgBudget();
@@ -1193,6 +1199,153 @@ function renderPage(p){
     case 'settings':      return pgSettings();
     default: return pgDashboard();
   }
+}
+
+// ═══════════════════════════ ASSISTANT ═══════════════════════════
+// Questions go to /api/assistant/chat, which answers from the person's own data with
+// read-only tools and streams the reply. The conversation lives in this tab only
+// (sessionStorage); the server keeps nothing but daily usage counts.
+const AST_KEY = 'fiscit_assistant';
+const AST_SUGGESTIONS = [
+  'Where did my money go this month?',
+  'How can I save $200 a month?',
+  'Which subscriptions could I cancel?',
+  'Am I on track with my budget?',
+  'Compare my spending with last month',
+  'How are my investments spread out?',
+];
+const AST_STATUS = {
+  get_overview: 'Looking at your overview…', get_spending_by_category: 'Looking at your spending…',
+  get_monthly_history: 'Comparing your months…', search_transactions: 'Searching your transactions…',
+  get_accounts: 'Checking your accounts…', get_budgets: 'Checking your budgets…',
+  get_recurring_charges: 'Finding recurring charges…', get_investments: 'Looking at your investments…',
+};
+const AST_ERRORS = {
+  daily_limit: 'You reached today\u2019s limit of questions. It resets tomorrow.',
+  not_configured: 'The assistant isn\u2019t available yet.',
+  refusal: 'I can\u2019t help with that one. Try asking about your spending, budget or savings.',
+  busy: 'The assistant is busy right now. Please try again in a moment.',
+  unavailable: 'Couldn\u2019t reach the assistant. Check your connection and try again.',
+  too_many_steps: 'That question needed too many steps. Try asking something more specific.',
+  too_long: 'The answer got too long. Try a more specific question.',
+  failed: 'Something went wrong. Please try again.',
+  empty: 'Type a question first.',
+};
+let _ast = { msgs: [], busy: false, status: '' };
+try { _ast.msgs = JSON.parse(sessionStorage.getItem(AST_KEY) || '[]'); } catch(e) {}
+const astSave = () => { try { sessionStorage.setItem(AST_KEY, JSON.stringify(_ast.msgs.slice(-40))); } catch(e) {} };
+const astT = s => (window.FiscitI18n ? FiscitI18n.t(s) : s);
+
+// Minimal, safe Markdown: escape everything, then **bold**, bullet and numbered lists, paragraphs
+function astMarkdown(text){
+  const esc = String(text||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const blocks = esc.split(/\n{2,}/).map(b=>{
+    const lines = b.split('\n');
+    if(lines.every(l=>/^\s*([-*•]|\d+[.)])\s+/.test(l))){
+      const ordered = /^\s*\d/.test(lines[0]);
+      const items = lines.map(l=>'<li>'+l.replace(/^\s*([-*•]|\d+[.)])\s+/,'')+'</li>').join('');
+      return ordered ? '<ol>'+items+'</ol>' : '<ul>'+items+'</ul>';
+    }
+    return '<p>'+lines.join('<br>')+'</p>';
+  }).join('');
+  return blocks.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
+}
+
+function pgAssistant(){
+  if(!D.assistantEnabled){
+    return `<div class="card" style="text-align:center;padding:48px 24px"><h3 style="color:var(--text)">Assistant</h3>
+      <p style="color:var(--text3);margin-top:6px">The assistant isn\u2019t available yet.</p></div>`;
+  }
+  return `<div class="ast">
+    <div class="ast-log" id="ast-log" aria-live="polite"></div>
+    <div class="ast-suggest" id="ast-suggest"></div>
+    <form class="ast-form" onsubmit="event.preventDefault();astSend()">
+      <textarea id="ast-input" rows="1" maxlength="1500" placeholder="Ask about your spending, budget or savings…"
+        onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();astSend();}"
+        oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,160)+'px'"></textarea>
+      <button type="submit" class="btn btn-primary" id="ast-send" aria-label="Send"><svg data-feather="send"></svg></button>
+    </form>
+    <div class="ast-foot">
+      <span>Answers come from your own accounts. Read-only. General information, not financial advice.</span>
+      <button class="btn btn-ghost btn-sm" onclick="astReset()"><svg data-feather="rotate-ccw"></svg> New conversation</button>
+    </div>
+  </div>`;
+}
+
+function initAssistant(){ astRender(); document.getElementById('ast-input')?.focus(); }
+
+function astRender(){
+  const log = document.getElementById('ast-log');
+  if(!log) return;
+  if(!_ast.msgs.length){
+    log.innerHTML = `<div class="ast-empty"><div class="ast-empty-ico"><svg data-feather="message-circle"></svg></div>
+      <h3>Ask about your money</h3>
+      <p>I look at your real accounts and transactions to answer: where your money goes, how to save, your budget, your investments.</p></div>`;
+  } else {
+    // Messages are the person's words and the assistant's (already in the right
+    // language): data-i18n-skip keeps the page's translation layer away from them
+    log.innerHTML = _ast.msgs.map(m => m.role==='user'
+      ? `<div class="ast-msg user" data-i18n-skip>${String(m.content).replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div>`
+      : `<div class="ast-msg bot${m.error?' err':''}" data-i18n-skip>${m.error ? astT(m.content) : astMarkdown(m.content)}</div>`
+    ).join('') + (_ast.busy ? `<div class="ast-status"><span class="ast-dot"></span>${astT(_ast.status || 'Thinking…')}</div>` : '');
+    log.scrollTop = log.scrollHeight;
+  }
+  const sug = document.getElementById('ast-suggest');
+  if(sug) sug.innerHTML = _ast.msgs.length ? '' : AST_SUGGESTIONS.map(q =>
+    `<button type="button" class="ast-chip" data-q="${q.replace(/"/g,'&quot;')}" onclick="astSend(window.FiscitI18n?FiscitI18n.t(this.dataset.q):this.dataset.q)">${q}</button>`).join('');
+  const btn = document.getElementById('ast-send');
+  if(btn) btn.disabled = _ast.busy;
+  feather.replace({width:16,height:16});
+}
+
+function astReset(){ if(_ast.busy) return; _ast.msgs = []; astSave(); astRender(); }
+
+async function astSend(text){
+  const input = document.getElementById('ast-input');
+  const q = (text || input?.value || '').trim();
+  if(!q || _ast.busy) return;
+  if(input){ input.value=''; input.style.height='auto'; }
+  _ast.msgs.push({role:'user', content:q});
+  const reply = {role:'assistant', content:''};
+  _ast.msgs.push(reply);
+  _ast.busy = true; _ast.status = '';
+  astRender();
+
+  let budgets = {};
+  try { budgets = JSON.parse(localStorage.getItem(BUDGET_KEY) || '{}'); } catch(e) {}
+  const history = _ast.msgs.filter(m => m !== reply && !m.error).map(m => ({role:m.role, content:m.content}));
+  try{
+    const res = await fetch('/api/assistant/chat', {method:'POST', credentials:'include',
+      headers: csrfHeaders({'Content-Type':'application/json'}),
+      body: JSON.stringify({messages: history, lang: (window.FiscitI18n&&FiscitI18n.lang)||'en', budgets})});
+    if(!res.ok || !res.body){
+      const d = await res.json().catch(()=>({}));
+      throw new Error(d.error || 'failed');
+    }
+    const reader = res.body.getReader(), dec = new TextDecoder();
+    let buf = '', paint = 0;
+    for(;;){
+      const {value, done} = await reader.read();
+      if(done) break;
+      buf += dec.decode(value, {stream:true});
+      let i;
+      while((i = buf.indexOf('\n\n')) >= 0){
+        const line = buf.slice(0, i).replace(/^data: /, ''); buf = buf.slice(i + 2);
+        let ev; try { ev = JSON.parse(line); } catch(e) { continue; }
+        if(ev.type === 'text'){ reply.content += ev.value; _ast.status = ''; }
+        else if(ev.type === 'status'){ _ast.status = AST_STATUS[ev.value] || 'Thinking…'; }
+        else if(ev.type === 'error'){ reply.error = true; reply.content = AST_ERRORS[ev.value] || AST_ERRORS.failed; }
+      }
+      const now = Date.now();
+      if(now - paint > 60){ paint = now; astRender(); }
+    }
+  }catch(e){
+    reply.error = true; reply.content = AST_ERRORS[e.message] || AST_ERRORS.failed;
+  }
+  if(!reply.content){ reply.error = true; reply.content = AST_ERRORS.failed; }
+  _ast.busy = false; _ast.status = '';
+  astSave(); astRender();
+  document.getElementById('ast-input')?.focus();
 }
 
 // ═══════════════════════════ DASHBOARD ═══════════════════════════
@@ -4449,6 +4602,11 @@ function pollRefresh(){
       setTimeout(pollRefresh,1500);
     }
   }).catch(()=>setTimeout(pollRefresh,2000));
+}
+
+// The assistant only shows once the server has an API key for it
+if(!D.assistantEnabled){
+  document.querySelectorAll('[data-page="assistant"], .mmore-grid button[onclick*="assistant"]').forEach(el=>el.remove());
 }
 
 // Init sync timestamp from injected data

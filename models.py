@@ -117,6 +117,19 @@ class AccountCurrency(db.Model):
     currency   = db.Column(db.String(3), nullable=False)
 
 
+class AssistantUsage(db.Model):
+    """Questions and tokens per person per day: the assistant's daily cap and its cost."""
+    __tablename__ = 'assistant_usage'
+    __table_args__ = (db.UniqueConstraint('user_id', 'day'),)
+    id            = db.Column(db.Integer, primary_key=True)
+    user_id       = db.Column(db.Integer, nullable=False, index=True)
+    day           = db.Column(db.Date, nullable=False)
+    questions     = db.Column(db.Integer, nullable=False, default=0)
+    input_tokens  = db.Column(db.Integer, nullable=False, default=0)
+    output_tokens = db.Column(db.Integer, nullable=False, default=0)
+    cache_read_tokens = db.Column(db.Integer, nullable=False, default=0)
+
+
 class PasswordReset(db.Model):
     """Pending "forgot password" links. Created and redeemed by fiscit.com; only the
     SHA-256 of the emailed token is stored, so a database leak can't reset passwords."""
