@@ -293,31 +293,3 @@ html[data-surface="light"] .surface-dot{border-color:rgba(0,0,0,.15)}
 .cur-seg button.more{padding:3px 6px;letter-spacing:0}
 .cur-seg.saving{opacity:.55}
 .acc-cur-hint{margin:-4px 0 8px;font-size:11px;color:var(--text4)}
-
-/* ── Money assistant ── */
-.ast{display:flex;flex-direction:column;gap:12px;max-width:820px;margin:0 auto;height:calc(100vh - 150px);min-height:420px}
-.ast-log{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:12px;padding:4px 2px}
-.ast-msg{max-width:85%;padding:12px 15px;border-radius:16px;font-size:14px;line-height:1.6;word-wrap:break-word}
-.ast-msg.user{align-self:flex-end;background:rgba(var(--lime-rgb),.14);border:1px solid rgba(var(--lime-rgb),.25);color:var(--text);white-space:pre-wrap;border-bottom-right-radius:6px}
-.ast-msg.bot{align-self:flex-start;background:var(--bg2);border:1px solid var(--border);color:var(--text2);border-bottom-left-radius:6px}
-.ast-msg.bot p{margin:0 0 8px}.ast-msg.bot p:last-child{margin:0}
-.ast-msg.bot ul,.ast-msg.bot ol{margin:4px 0 8px 18px;padding:0}.ast-msg.bot li{margin:3px 0}
-.ast-msg.bot strong{color:var(--text);font-weight:650}
-.ast-msg.err{border-color:rgba(248,113,113,.35);color:var(--red)}
-.ast-status{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--text3);padding-left:4px}
-.ast-dot{width:8px;height:8px;border-radius:50%;background:var(--lime);animation:astPulse 1s ease-in-out infinite}
-@keyframes astPulse{0%,100%{opacity:.3;transform:scale(.8)}50%{opacity:1;transform:scale(1)}}
-.ast-empty{margin:auto;text-align:center;max-width:440px;padding:24px}
-.ast-empty h3{font-size:20px;font-weight:650;color:var(--text);margin:14px 0 6px}
-.ast-empty p{font-size:13.5px;color:var(--text3);line-height:1.6}
-.ast-empty-ico{width:52px;height:52px;margin:0 auto;border-radius:16px;display:grid;place-items:center;background:rgba(var(--lime-rgb),.12);color:var(--lime)}
-.ast-empty-ico svg{width:24px;height:24px}
-.ast-suggest{display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
-.ast-chip{padding:8px 13px;border-radius:999px;border:1px solid var(--border);background:var(--bg2);color:var(--text2);font:500 13px var(--font);cursor:pointer;transition:border-color .15s,color .15s}
-.ast-chip:hover{border-color:rgba(var(--lime-rgb),.5);color:var(--text)}
-.ast-form{display:flex;gap:8px;align-items:flex-end;background:var(--bg2);border:1px solid var(--border-strong);border-radius:16px;padding:8px}
-.ast-form textarea{flex:1;resize:none;border:0;outline:none;background:transparent;color:var(--text);font:400 14.5px var(--font);line-height:1.5;padding:7px 8px;max-height:160px}
-.ast-form .btn{height:38px;width:42px;padding:0;display:grid;place-items:center;border-radius:12px}
-.ast-form .btn:disabled{opacity:.5;cursor:default}
-.ast-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:11.5px;color:var(--text4);flex-wrap:wrap}
-@media(max-width:700px){.ast{height:calc(100vh - 210px)}.ast-msg{max-width:92%}}

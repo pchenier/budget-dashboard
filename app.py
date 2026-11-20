@@ -24,15 +24,14 @@ os.environ['TZ'] = _tz
 if hasattr(time, 'tzset'):
     time.tzset()
 print(f"  Local time: {time.strftime('%Y-%m-%d %H:%M %Z')} ({os.environ['TZ']})")
-from flask import Flask, Response, request, session, redirect, url_for, render_template_string, jsonify, send_from_directory, flash, stream_with_context
+from flask import Flask, request, session, redirect, url_for, render_template_string, jsonify, send_from_directory, flash
 from datetime import datetime, timedelta, timezone
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from authlib.integrations.flask_client import OAuth
 import jwt as pyjwt
 from pathlib import Path
-from models import db, User as UserModel, PlaidConnection, WiseConnection, CryptoWallet, InvestmentAccount, InvestmentSnapshot, UsedSsoToken, PasswordReset, AccountCurrency, AssistantUsage, InstitutionLogo, BrokerConnection, BrokerSnapshot
+from models import db, User as UserModel, PlaidConnection, WiseConnection, CryptoWallet, InvestmentAccount, InvestmentSnapshot, UsedSsoToken, PasswordReset, AccountCurrency, InstitutionLogo, BrokerConnection, BrokerSnapshot
 import brokers
-import assistant
 import fx
 
 # Normalize French categories to English (matches generate_data.py CATEGORY_ALIASES)
@@ -1230,7 +1229,6 @@ def _build_real_data_js(data, user=None):
   snaptradeEnabled: {json.dumps(inv['snaptradeEnabled'])},
   plaidInvestments: {json.dumps(PLAID_INVESTMENTS)},
   fxCurrencies: {_js(fx.COMMON)},
-  assistantEnabled: {json.dumps(assistant.enabled())},
   crypto: {_js(data.get('crypto', []))},
   habits: [],
   gym: [],
@@ -1247,7 +1245,7 @@ LOADING_HTML = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <title>Fiscit — Loading</title>
-<script src="/static/i18n-fr.js?v=1"></script><script src="/static/i18n.js?v=1"></script>
+<script src="/static/i18n-fr.js?v=1"></script><script src="/static/i18n.js?v=2"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -1289,7 +1287,7 @@ LOGIN_HTML = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Fiscit — Log In</title>
-<script src="/static/i18n-fr.js?v=1"></script><script src="/static/i18n.js?v=1"></script>
+<script src="/static/i18n-fr.js?v=1"></script><script src="/static/i18n.js?v=2"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -2038,67 +2036,6 @@ def api_status():
             'onboarded': current_user.model.onboarded,
         })
 
-# ── Money assistant (Claude) ─────────────────────────────────────────────────
-ASSISTANT_DAILY_LIMIT = int(os.getenv('ASSISTANT_DAILY_LIMIT', '50'))
-
-@app.route('/api/assistant/chat', methods=['POST'])
-@api_auth_required
-def api_assistant_chat():
-    """Streams the assistant's answer as Server-Sent Events. The browser keeps the
-    conversation; nothing of it is stored here, only the daily usage counts."""
-    bearer = request.headers.get('Authorization', '').startswith('Bearer ')
-    if not bearer and (not session.get('csrf_token') or request.headers.get('X-CSRF-Token') != session.get('csrf_token')):
-        return jsonify({'error': 'CSRF token missing or invalid'}), 403
-    if not assistant.enabled():
-        return jsonify({'error': 'not_configured'}), 503
-    uid = current_user.model.id
-    body = request.get_json(silent=True) or {}
-    history = body.get('messages') if isinstance(body.get('messages'), list) else []
-    lang = 'fr' if body.get('lang') == 'fr' else 'en'
-    limits = body.get('budgets') if isinstance(body.get('budgets'), dict) else {}
-    budget_limits = {str(k)[:60]: float(v) for k, v in list(limits.items())[:60]
-                     if isinstance(v, (int, float)) and 0 < v < 1e7}
-
-    today = datetime.now().date()
-    usage = AssistantUsage.query.filter_by(user_id=uid, day=today).first()
-    if usage and usage.questions >= ASSISTANT_DAILY_LIMIT:
-        return jsonify({'error': 'daily_limit', 'limit': ASSISTANT_DAILY_LIMIT}), 429
-    # Counted before answering, so questions sent in parallel can't get past the cap
-    usage = usage or AssistantUsage(user_id=uid, day=today, questions=0, input_tokens=0, output_tokens=0, cache_read_tokens=0)
-    usage.questions += 1
-    db.session.add(usage)
-    db.session.commit()
-
-    # Snapshot of what the dashboard already shows; the tools only read it
-    state = _get_state(uid)
-    with _user_state_lock:
-        data = dict(state.get('data') or {})
-    ctx = {'data': data, 'today': today, 'budget_limits': budget_limits,
-           'acc_names': {a.get('id'): a.get('name') for a in data.get('accounts') or []},
-           'investments': _api_investments(uid, data.get('accounts', []))['investments']}
-
-    def record(u):
-        try:
-            row = AssistantUsage.query.filter_by(user_id=uid, day=today).first()
-            row.input_tokens += u['input'] + u['cache_write']
-            row.output_tokens += u['output']
-            row.cache_read_tokens += u['cache_read']
-            db.session.add(row)
-            db.session.commit()
-            app.logger.info('Assistant: user %s, %s in / %s out tokens (%s cached)', uid,
-                            u['input'] + u['cache_write'], u['output'], u['cache_read'])
-        except Exception as e:
-            db.session.rollback()
-            app.logger.warning('Assistant usage not recorded: %s', type(e).__name__)
-
-    def events():
-        for kind, value in assistant.stream_reply(ctx, history, lang, record):
-            yield f"data: {json.dumps({'type': kind, 'value': value}, ensure_ascii=False)}\n\n"
-        yield 'data: {"type": "done"}\n\n'
-
-    return Response(stream_with_context(events()), mimetype='text/event-stream',
-                    headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})
-
 def _api_investments(uid, accounts):
     p = _investments_payload(uid, accounts)
     return {'investments': p['investments'], 'investHistory': p['investHistory'],
@@ -2455,7 +2392,6 @@ def api_delete_account():
         InvestmentSnapshot.query.filter_by(user_id=uid).delete()
         PasswordReset.query.filter_by(user_id=uid).delete()
         AccountCurrency.query.filter_by(user_id=uid).delete()
-        AssistantUsage.query.filter_by(user_id=uid).delete()
         InvestmentAccount.query.filter_by(user_id=uid).delete()
         PlaidConnection.query.filter_by(user_id=uid).delete()
         WiseConnection.query.filter_by(user_id=uid).delete()
