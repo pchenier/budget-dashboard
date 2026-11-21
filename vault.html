@@ -2136,8 +2136,10 @@ let _budgetEditMode = false;
 function pgBudget(){
   const items    = getBudgetItems();
   const visible  = items.filter(b=>!b.hidden);
-  const spent    = visible.reduce((s,b)=>s+(b.mainSpent??b.spent),0);
-  const total    = visible.filter(b=>b.lim>0).reduce((s,b)=>s+b.lim,0);
+  // Spent and remaining compare like with like: only categories that have a budget
+  const budgeted = visible.filter(b=>b.lim>0);
+  const spent    = budgeted.reduce((s,b)=>s+(b.mainSpent??b.spent),0);
+  const total    = budgeted.reduce((s,b)=>s+b.lim,0);
   const over     = visible.filter(b=>b.lim>0&&b.spent>b.lim);
   const pctUsed  = total>0?Math.min(Math.round(spent/total*100),999):0;
 
