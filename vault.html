@@ -4264,7 +4264,7 @@ function pgSettings(){
     row('Wise','International transfers',`<a href="javascript:void(0)" onclick="openInvestmentModal('Wise')" style="text-decoration:none">${badge(cn.wise)}</a>`),
     connRow('Crypto Wallets','Solana, Ethereum, Bitcoin wallets','crypto','javascript:void(0)'),
   ].join(''))}
-  ${D.billing && D.billing.billingEnabled ? section('Subscription',[
+  ${D.billing && (D.billing.billingEnabled || D.billing.state==='subscribed' || D.billing.state==='past_due') ? section('Subscription',[
     row('Plan', billingSummary(), '<a class="btn btn-ghost btn-sm" href="https://fiscit.com/billing"><svg data-feather="credit-card"></svg> Manage</a>'),
   ].join('')) : ''}
   ${section('Notifications',[
