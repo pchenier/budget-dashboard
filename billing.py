@@ -50,7 +50,9 @@ def access(user):
     info = {'plan': user.subscription_plan or '', 'status': status,
             'periodEnd': period_end.date().isoformat() if period_end else '',
             'cancelAtPeriodEnd': bool(user.subscription_cancel_at_period_end),
-            'prices': PRICES, 'trialDays': TRIAL_DAYS, 'billingEnabled': enabled()}
+            'prices': PRICES, 'trialDays': TRIAL_DAYS, 'billingEnabled': enabled(),
+            # BILLING_START is set (maybe in the future): the trial countdown is real
+            'trialCounting': bool(_start())}
     if comped(user.email):
         return {**info, 'state': 'comped', 'ok': True}
     if status in PAYING:

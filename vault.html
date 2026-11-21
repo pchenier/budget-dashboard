@@ -399,7 +399,17 @@ button{font-family:var(--font)}
   .metrics-row{grid-template-columns:1fr 1fr}
   #header-clock,#sync-ts{display:none}
   .tour-pill span{display:none}
+  .trial-pill-long{display:none}
+  .trial-pill-short{display:inline}
 }
+/* Top bar free-trial countdown (links to fiscit.com/billing) */
+.trial-pill{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px;margin-right:2px;border-radius:8px;text-decoration:none;
+  border:1px solid var(--border);background:var(--bg3, rgba(255,255,255,.04));color:var(--text2);font:600 12px var(--font);white-space:nowrap;transition:border-color .15s,color .15s}
+.trial-pill:hover{border-color:rgba(var(--lime-rgb),.5);color:var(--text)}
+.trial-pill svg{width:14px;height:14px}
+.trial-pill.soon{border-color:rgba(245,166,35,.45);background:rgba(245,166,35,.1);color:#f5a623}
+.trial-pill-short{display:none}
+.trial-pill[hidden]{display:none}
 /* Top bar "Tour" button */
 .tour-pill{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px;margin-right:2px;border-radius:8px;
   border:1px solid rgba(var(--lime-rgb),.3);background:rgba(var(--lime-rgb),.08);color:var(--green);font:600 12px var(--font);cursor:pointer;transition:background .15s,border-color .15s}
@@ -517,6 +527,7 @@ button{font-family:var(--font)}
       <div class="sync-dot" title="Live sync" id="sync-dot"></div>
       <span id="sync-ts" style="font-size:11px;color:var(--text3);margin-right:4px"></span>
       <span id="header-clock" style="font-size:12px;color:var(--text2);font-variant-numeric:tabular-nums;font-weight:500;margin-right:2px"></span>
+      <a class="trial-pill" id="trial-pill" href="https://fiscit.com/billing" title="Choose a plan" hidden><svg data-feather="clock"></svg><span class="trial-pill-long" id="trial-pill-long"></span><span class="trial-pill-short" id="trial-pill-short"></span></a>
       <button class="tour-pill" title="Take the guided tour" onclick="window.FiscitTour&&FiscitTour.start()" id="tour-btn"><svg data-feather="map"></svg><span>Tour</span></button>
       <button class="icon-btn" title="Refresh data" onclick="doRefresh()" id="refresh-btn"><svg data-feather="refresh-cw"></svg></button>
       <div style="position:relative;display:inline-block">
@@ -4491,6 +4502,19 @@ function showPaywall(){
 if(D.billing && D.billing.state==='expired'){
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', showPaywall); else showPaywall();
 }
+
+// "Free trial · N days left" in the top bar, once the trial actually counts down
+function showTrialPill(){
+  const b = D.billing || {}, el = document.getElementById('trial-pill');
+  if(!el || b.state!=='trial' || !(b.billingEnabled || b.trialCounting)) return;
+  const n = b.daysLeft;
+  document.getElementById('trial-pill-long').textContent = 'Free trial · '+n+' day'+(n===1?'':'s')+' left';
+  document.getElementById('trial-pill-short').textContent = n+(IS_FR?' j':'d');
+  el.title = IS_FR ? 'Choisir un forfait' : 'Choose a plan';
+  el.classList.toggle('soon', n<=3);
+  el.hidden = false;
+}
+if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', showTrialPill); else showTrialPill();
 
 // Init sync timestamp from injected data
 if(D.generated){
