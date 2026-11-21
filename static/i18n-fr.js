@@ -71,6 +71,8 @@ window.FISCIT_FR = {
   "Upcoming Bills": "Factures à venir",
   "Habit Streaks": "Séries d'habitudes",
   "Completion rate": "Taux de réussite",
+  "No recurring bills detected yet. They show up after a charge repeats two months in a row.": "Aucune facture récurrente détectée pour l’instant. Elles apparaissent quand un prélèvement revient deux mois de suite.",
+  "No habits yet. Add one on the Habits page to track your streaks.": "Pas encore d’habitudes. Ajoutez-en une dans la page Habitudes pour suivre vos séries.",
   "Last 30 days": "30 derniers jours",
   "0 days": "0 jour",
   "Currency": "Devise",

@@ -30,7 +30,7 @@ from flask_login import LoginManager, UserMixin, login_user, login_required, log
 from authlib.integrations.flask_client import OAuth
 import jwt as pyjwt
 from pathlib import Path
-from models import db, User as UserModel, PlaidConnection, WiseConnection, CryptoWallet, InvestmentAccount, InvestmentSnapshot, UsedSsoToken, PasswordReset, AccountCurrency, InstitutionLogo, BrokerConnection, BrokerSnapshot
+from models import db, User as UserModel, PlaidConnection, WiseConnection, CryptoWallet, InvestmentAccount, InvestmentSnapshot, UsedSsoToken, PasswordReset, AccountCurrency, InstitutionLogo, BrokerConnection, BrokerSnapshot, NetWorthSnapshot
 import brokers
 import billing
 import fx
@@ -1105,6 +1105,63 @@ def _js(obj):
             .replace('<', '\\u003c').replace('>', '\\u003e').replace('&', '\\u0026')
             .replace('\u2028', '\\u2028').replace('\u2029', '\\u2029'))
 
+def _net_worth_history(raw_txns, net_worth, user_id=None, has_accounts=False):
+    """Net worth at the end of each of the last 12 months, as ("YYYY-MM", value).
+
+    Past months are rebuilt backwards from today's net worth: undo the money that moved
+    in and out of the accounts since then (transfers between two connected accounts
+    cancel out). That misses changes in investment value, so months where we saw the
+    real figure (NetWorthSnapshot, kept while the dashboard is used) win over the estimate.
+    Months before the first transaction aren't shown: there's nothing to rebuild them from.
+    """
+    today = datetime.now().date()
+    months = []
+    for i in range(11, -1, -1):
+        y, m = today.year, today.month - i
+        while m <= 0:
+            m += 12
+            y -= 1
+        months.append(f'{y:04d}-{m:02d}')
+
+    flows, first = {}, None
+    for t in raw_txns or []:
+        iso = str(t.get('date_iso') or '')[:7]
+        if len(iso) != 7 or iso[4] != '-':
+            continue
+        try:
+            amt = float(t.get('amount') or 0)
+        except (TypeError, ValueError):
+            continue
+        flows[iso] = flows.get(iso, 0.0) - amt  # Plaid: positive = money out
+        first = iso if first is None or iso < first else first
+
+    real = {}
+    if user_id and has_accounts:
+        try:
+            cur = months[-1]
+            snap = NetWorthSnapshot.query.filter_by(user_id=user_id, month=cur).first()
+            if snap is None:
+                db.session.add(NetWorthSnapshot(user_id=user_id, month=cur, value=net_worth))
+            elif abs(snap.value - net_worth) > 0.005:
+                snap.value, snap.updated_at = net_worth, datetime.now(timezone.utc)
+            db.session.commit()
+            for s in NetWorthSnapshot.query.filter(NetWorthSnapshot.user_id == user_id,
+                                                   NetWorthSnapshot.month >= months[0]).all():
+                real[s.month] = s.value
+        except Exception as e:
+            db.session.rollback()
+            app.logger.warning('Net worth snapshot failed: %s', e)
+
+    out, value = [], net_worth
+    for mo in reversed(months):           # walk back from this month
+        shown = real.get(mo, value)
+        if mo == months[-1] or mo in real or (first is not None and mo >= first):
+            out.append((mo, round(shown, 2)))
+        value = shown - flows.get(mo, 0.0)  # end of previous month
+    out.reverse()
+    return out
+
+
 def _build_real_data_js(data, user=None):
     """Convert Python data dict to JS const D = {...} that matches vault.html mock field names."""
     raw_accounts = data.get("accounts", [])
@@ -1118,6 +1175,8 @@ def _build_real_data_js(data, user=None):
     spending     = data.get("monthlySpending", 0)
     cash_flow    = data.get("cashFlow", 0)
     total_debt   = data.get("totalDebt", 0)
+    # Only record a snapshot from a real sync (the trial-ended page renders with no data)
+    nw_hist      = _net_worth_history(raw_txns, net_worth, user.id if user else None, has_accounts=bool(raw_accounts))
     generated    = data.get("_generated", "")
 
     # Auto-assign colors per account type
@@ -1211,8 +1270,8 @@ def _build_real_data_js(data, user=None):
   cashFlow:        {cash_flow},
   generated:       {_js(generated)},
 
-  netWorthHistory: [{net_worth}],
-  monthLabels:     ["Now"],
+  netWorthHistory: {_js([v for _, v in nw_hist])},
+  monthLabels:     {_js([m for m, _ in nw_hist])},
 
   accounts: {_js(accounts)},
   txns: {_js(txns[:200])},

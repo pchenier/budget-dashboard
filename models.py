@@ -124,6 +124,18 @@ class AccountCurrency(db.Model):
     currency   = db.Column(db.String(3), nullable=False)
 
 
+class NetWorthSnapshot(db.Model):
+    """Net worth as last seen in each month (one row per person per month, kept up to
+    date while the month runs). Real values replace the estimate rebuilt from transactions."""
+    __tablename__ = 'net_worth_snapshots'
+    __table_args__ = (db.UniqueConstraint('user_id', 'month'),)
+    id         = db.Column(db.Integer, primary_key=True)
+    user_id    = db.Column(db.Integer, nullable=False, index=True)
+    month      = db.Column(db.String(7), nullable=False)   # "YYYY-MM"
+    value      = db.Column(db.Float, nullable=False)
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+
+
 class PasswordReset(db.Model):
     """Pending "forgot password" links. Created and redeemed by fiscit.com; only the
     SHA-256 of the emailed token is stored, so a database leak can't reset passwords."""
