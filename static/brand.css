@@ -6,6 +6,7 @@
   --border:#1f1f1f;--border2:#161616;--border-strong:#2a2a2a;
   --text:#f4f4f5;--text2:#8a8a93;--text3:#5c5c66;--text4:#3f3f46;
   --lime:#b8f566;--lime-rgb:184,245,102;
+  --accent:var(--lime); /* older dashboard code says --accent: same color, follows the theme */
   --green:var(--lime);--green-bg:rgba(var(--lime-rgb),.1);--green-br:rgba(var(--lime-rgb),.22);
   --r:16px;--r-sm:10px;--r-xs:8px;
   --font:'Geist',-apple-system,BlinkMacSystemFont,system-ui,sans-serif;

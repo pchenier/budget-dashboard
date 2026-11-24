@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<script src="/static/i18n-fr.js?v=3"></script>
+<script src="/static/i18n-fr.js?v=4"></script>
 <script src="/static/i18n.js?v=3"></script>
 <script src="/static/feather.min.js"></script>
 <script src="/static/tour-demo.js?v=5" defer></script>
@@ -415,6 +415,46 @@ button{font-family:var(--font)}
   border:1px solid rgba(var(--lime-rgb),.3);background:rgba(var(--lime-rgb),.08);color:var(--green);font:600 12px var(--font);cursor:pointer;transition:background .15s,border-color .15s}
 .tour-pill:hover{background:rgba(var(--lime-rgb),.15);border-color:rgba(var(--lime-rgb),.5)}
 .tour-pill svg{width:14px;height:14px}
+/* Top bar date range (Dashboard + Transactions) */
+.range-slot{position:relative;display:flex;align-items:center}
+.range-btn{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px;border-radius:8px;border:1px solid var(--border);
+  background:var(--bg2);color:var(--text2);font:500 12.5px var(--font);cursor:pointer;white-space:nowrap;transition:border-color .15s,color .15s}
+.range-btn:hover,.range-btn.open{border-color:rgba(var(--lime-rgb),.5);color:var(--text)}
+.range-btn svg{width:14px;height:14px;flex-shrink:0}
+.range-btn .range-caret{width:12px;height:12px;opacity:.6}
+.range-short{display:none}
+.range-pop{position:absolute;top:calc(100% + 8px);left:0;z-index:1000;display:flex;gap:4px;padding:8px;background:var(--bg2);
+  border:1px solid var(--border);border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,.45)}
+.range-pop[hidden]{display:none}
+.range-presets{display:flex;flex-direction:column;gap:2px;min-width:150px;padding-right:8px;border-right:1px solid var(--border)}
+.range-presets button{text-align:left;padding:7px 10px;border:none;border-radius:7px;background:none;color:var(--text2);font:500 12.5px var(--font);cursor:pointer;white-space:nowrap}
+.range-presets button:hover{background:var(--bg3);color:var(--text)}
+.range-presets button.on{background:rgba(var(--lime-rgb),.12);color:var(--text)}
+.range-cal{width:262px;padding:2px 2px 2px 8px}
+.range-cal-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.range-cal-hdr span{font:600 13px var(--font);color:var(--text);text-transform:capitalize}
+.range-cal-hdr button{width:28px;height:28px;display:flex;align-items:center;justify-content:center;border:none;border-radius:7px;background:none;color:var(--text2);cursor:pointer}
+.range-cal-hdr button:hover:not(:disabled){background:var(--bg3);color:var(--text)}
+.range-cal-hdr button:disabled{opacity:.3;cursor:default}
+.range-cal-hdr svg{width:15px;height:15px}
+.range-grid{display:grid;grid-template-columns:repeat(7,1fr);row-gap:2px}
+.range-wd{font:600 10px var(--font);color:var(--text4);text-align:center;padding:4px 0;text-transform:uppercase}
+.range-day{height:32px;border:none;background:none;color:var(--text2);font:500 12.5px var(--font);cursor:pointer;font-variant-numeric:tabular-nums;padding:0}
+.range-day:hover:not(:disabled){color:var(--text);background:var(--bg3);border-radius:7px}
+.range-day.today{text-decoration:underline;text-underline-offset:3px}
+.range-day.in{background:rgba(var(--lime-rgb),.12);color:var(--text);border-radius:0}
+.range-day.edge{background:var(--accent);color:var(--bg);border-radius:7px;font-weight:600}
+.range-day:disabled{color:var(--text4);opacity:.45;cursor:default}
+.range-hint{font-size:11px;color:var(--text3);margin-top:8px;text-align:center}
+.txn-more{display:block;margin:10px auto 2px}
+@media(max-width:700px){
+  .range-pop{position:fixed;left:12px;right:12px;top:calc(var(--topbar) + 6px);flex-direction:column}
+  .range-presets{flex-direction:row;overflow-x:auto;min-width:0;border-right:none;border-bottom:1px solid var(--border);padding:0 0 8px}
+  .range-cal{width:auto;padding:4px 0 0}
+  .range-btn{padding:0 9px}
+  .range-btn #range-label,.range-btn .range-caret{display:none}
+  .range-btn .range-short{display:inline;max-width:96px;overflow:hidden;text-overflow:ellipsis}
+}
 /* Mobile bottom tabs + "More" sheet */
 .mtabs,.mmore{display:none}
 @media(max-width:700px){
@@ -441,7 +481,7 @@ button{font-family:var(--font)}
 }
 @media (prefers-reduced-motion: reduce){.mmore-sheet,.mmore{transition:none}}
 </style>
-<link rel="stylesheet" href="/static/brand.css?v=12">
+<link rel="stylesheet" href="/static/brand.css?v=13">
 </head>
 <body>
 
@@ -523,6 +563,7 @@ button{font-family:var(--font)}
   <header class="topbar">
     <span class="topbar-title" id="page-title">Dashboard</span>
     <span class="topbar-breadcrumb" id="page-sub">June 2025</span>
+    <div class="range-slot" id="range-slot"></div>
     <div class="topbar-right">
       <div class="sync-dot" title="Live sync" id="sync-dot"></div>
       <span id="sync-ts" style="font-size:11px;color:var(--text3);margin-right:4px"></span>
@@ -1082,7 +1123,7 @@ const FEATHER_RESOLVE = {
   'zoom-in':'zoom-in',
   'zoom-out':'zoom-out'
 };
-const EMOJI_TO_FEATHER={'🛒':'shopping-cart','🍽️':'coffee','🍽':'coffee','⛽':'fuel','🚇':'map','🛍️':'shopping-bag','💪':'zap','💊':'heart','📱':'smartphone','🎬':'film','📺':'monitor','🏠':'home','⚡':'zap','💸':'minus','📈':'plus','💼':'briefcase','📂':'folder','💳':'credit-card'};
+const EMOJI_TO_FEATHER={'🛒':'shopping-cart','🍽️':'coffee','🍽':'coffee','⛽':'droplet','🚗':'truck','🏍️':'truck','🏍':'truck','💻':'cpu','🏦':'archive','🚇':'map','🛍️':'shopping-bag','💪':'zap','💊':'heart','📱':'smartphone','🎬':'film','📺':'monitor','🏠':'home','⚡':'zap','💸':'minus','📈':'plus','💼':'briefcase','📂':'folder','💳':'credit-card'};
 function ico(name,sz){sz=sz||14;const fn=EMOJI_TO_FEATHER[name]||FEATHER_RESOLVE[name]||name;return '<svg data-feather="'+fn+'" width="'+sz+'" height="'+sz+'"></svg>';}
 
 // ═══════════════════════════ MOCK DATA ═══════════════════════════
@@ -1166,6 +1207,8 @@ function navigate(page){
     calendar:nowStr,settings:'Account & preferences'};
   document.getElementById('page-title').textContent=titles[page]||'Dashboard';
   document.getElementById('page-sub').textContent=subs[page]||'';
+  _curPage = page;
+  renderRangeSlot(page);
   const c=document.getElementById('content');
   c.innerHTML='<div class="fade-in">'+renderPage(page)+'</div>';
   Object.keys(chartRegistry).forEach(destroyChart);
@@ -1206,27 +1249,198 @@ function renderPage(p){
   }
 }
 
+// ═══════════════════════════ DATE RANGE ═══════════════════════════
+// One period for the Dashboard and the Transactions page: the last 30 days unless the
+// person picks another one. Kept for this browser tab (a sync reload keeps it); a new
+// visit starts again at 30 days. Budgets stay on calendar months: their limits are monthly.
+const RANGE_PRESETS = [
+  ['7d','Last 7 days'], ['30d','Last 30 days'], ['90d','Last 90 days'],
+  ['month','This month'], ['lastmonth','Last month'], ['year','This year'],
+  ['12m','Last 12 months'], ['all','All time'],
+];
+const RANGE_PAGES = new Set(['dashboard','transactions']);
+const RANGE_KEY = 'fiscit_range';
+let _curPage = 'dashboard';
+let RANGE = (function(){
+  try{
+    const r = JSON.parse(sessionStorage.getItem(RANGE_KEY)||'null');
+    const iso = /^\d{4}-\d{2}-\d{2}$/;
+    if(r && (RANGE_PRESETS.some(p=>p[0]===r.preset) || (r.preset==='custom' && iso.test(r.from) && iso.test(r.to)))) return r;
+  }catch(e){}
+  return {preset:'30d'};
+})();
+let _rangeDraft = null;   // {from} after the first click of a custom range
+let _rangeMonth = null;   // month shown in the picker (1st of the month)
+
+// Inclusive "YYYY-MM-DD" bounds; '' = open-ended
+function rangeBounds(r){
+  r = r || RANGE;
+  const t = new Date(); t.setHours(0,0,0,0);
+  const daysBack = n => { const d = new Date(t); d.setDate(d.getDate()-(n-1)); return localISO(d); };
+  switch(r.preset){
+    case '7d':        return {from: daysBack(7),  to: ''};
+    case '30d':       return {from: daysBack(30), to: ''};
+    case '90d':       return {from: daysBack(90), to: ''};
+    case 'month':     return {from: localISO(new Date(t.getFullYear(), t.getMonth(), 1)), to: ''};
+    case 'lastmonth': return {from: localISO(new Date(t.getFullYear(), t.getMonth()-1, 1)), to: localISO(new Date(t.getFullYear(), t.getMonth(), 0))};
+    case 'year':      return {from: t.getFullYear()+'-01-01', to: ''};
+    case '12m':       { const d = new Date(t.getFullYear()-1, t.getMonth(), t.getDate()+1); return {from: localISO(d), to: ''}; }
+    case 'all':       return {from: '', to: ''};
+    default:          return {from: r.from||'', to: r.to||''};
+  }
+}
+function txnISO(t){ const raw = t.date_iso||t.date||''; return /^\d{4}-\d{2}-\d{2}/.test(raw) ? raw.slice(0,10) : ''; }
+function inRange(t, b){
+  b = b || rangeBounds();
+  const d = txnISO(t);
+  if(!d) return true;   // undated rows can't be placed: keep them
+  return (!b.from || d >= b.from) && (!b.to || d <= b.to);
+}
+function rangeLabel(r){
+  r = r || RANGE;
+  const p = RANGE_PRESETS.find(x=>x[0]===r.preset);
+  if(p) return p[1];
+  const y = new Date().getFullYear();
+  const f = iso => { const d = new Date(iso+'T00:00'); return d.toLocaleDateString(LOC, d.getFullYear()===y ? {month:'short',day:'numeric'} : {month:'short',day:'numeric',year:'numeric'}); };
+  return r.from===r.to ? f(r.from) : f(r.from)+' – '+f(r.to);
+}
+// Phone top bar: same period in a few characters ("30 j", "nov.", "2–15 nov.")
+function rangeShort(r){
+  r = r || RANGE;
+  const t = new Date();
+  const mon = d => d.toLocaleDateString(LOC,{month:'short'});
+  const short = {'7d':IS_FR?'7 j':'7d', '30d':IS_FR?'30 j':'30d', '90d':IS_FR?'90 j':'90d', '12m':IS_FR?'12 m':'12m', 'all':IS_FR?'Tout':'All'};
+  if(short[r.preset]) return short[r.preset];
+  if(r.preset==='month') return mon(t);
+  if(r.preset==='lastmonth') return mon(new Date(t.getFullYear(), t.getMonth()-1, 1));
+  if(r.preset==='year') return String(t.getFullYear());
+  const a = new Date(r.from+'T00:00'), z = new Date(r.to+'T00:00');
+  const day = d => d.toLocaleDateString(LOC,{month:'short',day:'numeric'});
+  if(r.from===r.to) return day(a);
+  if(a.getFullYear()===z.getFullYear() && a.getMonth()===z.getMonth())
+    return IS_FR ? a.getDate()+'–'+z.getDate()+' '+mon(a) : mon(a)+' '+a.getDate()+'–'+z.getDate();
+  return day(a)+'–'+day(z);
+}
+
+function renderRangeSlot(page){
+  const slot = document.getElementById('range-slot');
+  const sub = document.getElementById('page-sub');
+  if(!slot) return;
+  const on = RANGE_PAGES.has(page);
+  if(sub) sub.style.display = on ? 'none' : '';
+  slot.innerHTML = on ? `<button type="button" class="range-btn" id="range-btn" onclick="toggleRangePicker()" title="Change the period" aria-haspopup="dialog" aria-expanded="false">
+      <svg data-feather="calendar"></svg><span id="range-label">${esc(rangeLabel())}</span><span id="range-short" class="range-short">${esc(rangeShort())}</span><svg data-feather="chevron-down" class="range-caret"></svg>
+    </button>
+    <div class="range-pop" id="range-pop" hidden role="dialog" aria-label="Date range"></div>` : '';
+}
+
+function toggleRangePicker(force){
+  const pop = document.getElementById('range-pop'), btn = document.getElementById('range-btn');
+  if(!pop || !btn) return;
+  const open = force===undefined ? pop.hidden : force;
+  if(open){
+    _rangeDraft = null;
+    const b = rangeBounds();
+    const d = new Date((b.to || localISO())+'T00:00');   // open on the period's last month
+    _rangeMonth = new Date(d.getFullYear(), d.getMonth(), 1);
+    renderRangePicker();
+  }
+  pop.hidden = !open;
+  btn.classList.toggle('open', open);
+  btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+
+function renderRangePicker(){
+  const pop = document.getElementById('range-pop');
+  if(!pop || !_rangeMonth) return;
+  const year = _rangeMonth.getFullYear(), mo = _rangeMonth.getMonth();
+  const todayISO = localISO();
+  const b = rangeBounds();
+  // What to highlight: the half-picked custom range, else the current period
+  const selFrom = _rangeDraft ? _rangeDraft.from : (b.from || null);
+  const selTo   = _rangeDraft ? _rangeDraft.from : (b.to || todayISO);
+  const days = new Date(year, mo+1, 0).getDate();
+  const offset = (new Date(year, mo, 1).getDay()+6)%7;   // weeks start on Monday, like the Calendar page
+  const heads = Array.from({length:7}, (_,i)=>`<div class="range-wd">${new Date(2024,0,1+i).toLocaleDateString(LOC,{weekday:'narrow'})}</div>`).join('');
+  let cells = '';
+  for(let i=0;i<offset;i++) cells += '<div></div>';
+  for(let d=1; d<=days; d++){
+    const iso = year+'-'+String(mo+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+    const cls = ['range-day'];
+    if(selFrom && iso>=selFrom && iso<=selTo) cls.push('in');
+    if(iso===selFrom || (selFrom && iso===selTo)) cls.push('edge');
+    if(iso===todayISO) cls.push('today');
+    cells += `<button type="button" class="${cls.join(' ')}" ${iso>todayISO?'disabled':''} onclick="pickRangeDay('${iso}')">${d}</button>`;
+  }
+  const atCurrentMonth = year===new Date().getFullYear() && mo===new Date().getMonth();
+  pop.innerHTML = `
+    <div class="range-presets">${RANGE_PRESETS.map(([k,l])=>`<button type="button" class="${RANGE.preset===k&&!_rangeDraft?'on':''}" onclick="applyRange({preset:'${k}'})">${l}</button>`).join('')}</div>
+    <div class="range-cal">
+      <div class="range-cal-hdr">
+        <button type="button" onclick="stepRangeMonth(-1)" aria-label="Previous month"><svg data-feather="chevron-left"></svg></button>
+        <span>${_rangeMonth.toLocaleDateString(LOC,{month:'long',year:'numeric'})}</span>
+        <button type="button" onclick="stepRangeMonth(1)" aria-label="Next month" ${atCurrentMonth?'disabled':''}><svg data-feather="chevron-right"></svg></button>
+      </div>
+      <div class="range-grid">${heads}${cells}</div>
+      <div class="range-hint">${_rangeDraft ? 'Now pick the end date' : 'Pick a start date, then an end date'}</div>
+    </div>`;
+  feather.replace({width:15,height:15});
+}
+
+function stepRangeMonth(n){
+  _rangeMonth = new Date(_rangeMonth.getFullYear(), _rangeMonth.getMonth()+n, 1);
+  renderRangePicker();
+}
+
+function pickRangeDay(iso){
+  if(!_rangeDraft){ _rangeDraft = {from: iso}; renderRangePicker(); return; }
+  let a = _rangeDraft.from, z = iso;
+  if(z < a) [a, z] = [z, a];
+  applyRange({preset:'custom', from:a, to:z});
+}
+
+function applyRange(r){
+  RANGE = r;
+  try{ sessionStorage.setItem(RANGE_KEY, JSON.stringify(RANGE)); }catch(e){}
+  _rangeDraft = null;
+  toggleRangePicker(false);
+  const lbl = document.getElementById('range-label'), shortLbl = document.getElementById('range-short');
+  if(lbl) lbl.textContent = rangeLabel();
+  if(shortLbl) shortLbl.textContent = rangeShort();
+  // Transactions: keep the search and filters, just refresh the list
+  if(_curPage==='transactions' && !_txnDateFilter){ _txnLimit = TXN_PAGE; filterTxns(); }
+  else { _txnDateFilter = ''; navigate(_curPage); }
+}
+
+// Close on a click outside (the path is read at click time: re-rendering the picker
+// detaches the clicked day, so .closest() would miss it) or on Escape
+document.addEventListener('click', e=>{
+  const pop = document.getElementById('range-pop'), btn = document.getElementById('range-btn');
+  if(!pop || pop.hidden) return;
+  const path = e.composedPath ? e.composedPath() : [];
+  if(path.includes(pop) || path.includes(btn)) return;
+  toggleRangePicker(false);
+});
+document.addEventListener('keydown', e=>{ if(e.key==='Escape') toggleRangePicker(false); });
+
 // ═══════════════════════════ DASHBOARD ═══════════════════════════
 function pgDashboard(){
   // Apply overrides + exclude P2P/self transfers from all calculations
   const allTxns = applyOverrides(applyRules(D.txns));
   const txns = allTxns.filter(t => !EXCLUDED_CATS.has(t.cat));
 
-  // Monthly cards cover the current calendar month only (D.txns spans several months)
+  // Income, spending, cash flow and recent transactions follow the chosen period
+  // (last 30 days by default); the budget card stays on the calendar month
   const now = new Date();
-  const ym = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
-  const monthTxns = txns.filter(t=>{
-    const raw = t.date_iso || t.date || '';
-    if(/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0,7)===ym;
-    const d = new Date(raw);
-    return !isNaN(d) && d.getFullYear()===now.getFullYear() && d.getMonth()===now.getMonth();
-  });
+  const bounds = rangeBounds();
+  const periodTxns = txns.filter(t=>inRange(t,bounds));
   // No transactions loaded at all → fall back to the server's current-month figures
-  const income   = allTxns.length ? monthTxns.filter(t=>t.amt>0).reduce((s,t)=>s+t.amt,0) : (D.income||0);
-  const spending = allTxns.length ? monthTxns.filter(t=>t.amt<0).reduce((s,t)=>s+Math.abs(t.amt),0) : (D.spending||0);
+  const income   = allTxns.length ? periodTxns.filter(t=>t.amt>0).reduce((s,t)=>s+t.amt,0) : (D.income||0);
+  const spending = allTxns.length ? periodTxns.filter(t=>t.amt<0).reduce((s,t)=>s+Math.abs(t.amt),0) : (D.spending||0);
   const cashFlow = income - spending;
 
-  const txn5 = allTxns.slice(0,5).map(t=>{
+  const recent = allTxns.filter(t=>inRange(t,bounds)).slice(0,5);
+  const txn5 = !recent.length ? `<div style="padding:14px 0;font-size:12px;color:var(--text3)">No transactions in this period</div>` : recent.map(t=>{
     const excl = EXCLUDED_CATS.has(t.cat);
     return`
     <div class="txn" style="${excl?'opacity:.4':''}">
@@ -1282,12 +1496,12 @@ function pgDashboard(){
       <div class="metric-delta up">▲ All accounts</div>
     </div>
     <div class="metric">
-      <div class="metric-label">Monthly Income</div>
+      <div class="metric-label">Income</div>
       <div class="metric-val">${fmt(income,0)}</div>
-      <div class="metric-delta flat">This month</div>
+      <div class="metric-delta flat">${esc(rangeLabel())}</div>
     </div>
     <div class="metric">
-      <div class="metric-label">Monthly Spending</div>
+      <div class="metric-label">Spending</div>
       <div class="metric-val">${fmt(spending,0)}</div>
       <div class="metric-delta flat">Excl. P2P & transfers</div>
     </div>
@@ -1323,7 +1537,7 @@ function pgDashboard(){
     <div>
       <div class="card mb16">
         <div class="sec-hdr">
-          <span class="sec-title">Budget</span>
+          <span class="sec-title">Budget · ${now.toLocaleDateString(LOC,{month:'long'})}</span>
           <button class="sec-link" onclick="navigate('budget')">View all</button>
         </div>
         ${budget3}
@@ -1430,17 +1644,22 @@ function initDashCharts(){
 
   const catCtx=document.getElementById('catChart')?.getContext('2d');
   if(catCtx){
-    // Use real budget items (from transactions) if available, else fall back to mock
-    const realBudget = (typeof getBudgetItems==='function') ? getBudgetItems().filter(b=>!b.hidden && b.spent>0).slice(0,6) : [];
-    const labels = realBudget.length ? realBudget.map(b=>b.cat) : (D.catLabels && D.catLabels.length) ? D.catLabels : D.budget.slice(0,5).map(b=>b.cat);
-    const amounts = realBudget.length ? realBudget.map(b=>b.spent) : (D.catAmounts && D.catAmounts.length) ? D.catAmounts : D.budget.slice(0,5).map(b=>b.spent);
+    // Spending in the chosen period by main category (each transaction counted once)
+    const b = rangeBounds(), hidden = getHidden(), byCat = {};
+    applyOverrides(applyRules(D.txns)).forEach(t=>{
+      if(t.amt>=0 || EXCLUDED_CATS.has(t.cat) || hidden.has(t.cat) || !inRange(t,b)) return;
+      byCat[t.cat] = (byCat[t.cat]||0) + Math.abs(t.amt);
+    });
+    const top = Object.entries(byCat).sort((x,y)=>y[1]-x[1]).slice(0,6);
+    const labels = top.map(x=>x[0]);
+    const amounts = top.map(x=>Math.round(x[1]*100)/100);
     chartRegistry.cat=new Chart(catCtx,{
       type:'doughnut',
       data:{
         labels:labels,
         datasets:[{
           data:amounts,
-          backgroundColor:[accent(),'#60a5fa','#a78bfa','#fbbf24','#f87171'],
+          backgroundColor:[accent(),'#60a5fa','#a78bfa','#fbbf24','#f87171','#2dd4bf'],
           borderWidth:0,hoverBorderWidth:0
         }]
       },
@@ -1863,7 +2082,7 @@ function applyQuickRule(nameFragment, cat){
   D.txns = applyRules(D.txns);
   filterTxns();
 }
-const CAT_ICOS = {'Groceries':'shopping-cart','Food/Dining':'coffee','Gas':'droplet','Transport':'map','Shopping':'shopping-bag','Gym':'zap','Health':'heart','Phone/Internet':'smartphone','Entertainment':'film','Subscriptions':'monitor','Housing':'home','Utilities':'zap','Cash/Transfers':'minus','Investments':'plus','Income':'briefcase','P2P/Personal Transfer':'repeat','Other':'folder'};
+const CAT_ICOS = {'Groceries':'shopping-cart','Food/Dining':'coffee','Gas':'droplet','Transport':'map','Shopping':'shopping-bag','Gym':'zap','Health':'heart','Phone/Internet':'smartphone','Entertainment':'film','Subscriptions':'monitor','Housing':'home','Utilities':'zap','Cash/Transfers':'minus','Investments':'plus','Income':'briefcase','P2P/Personal Transfer':'repeat','Other':'folder','Auto':'truck','Business/Tech':'cpu','Savings':'archive'};
 
 // Categories excluded from spending/budget calculations
 const EXCLUDED_CATS = new Set(['P2P/Personal Transfer']);
@@ -1873,7 +2092,7 @@ let _filteredTxns = [];
 
 function renderTxnList(txns){
   _filteredTxns = txns;
-  const rows = txns.map((t,i)=>{
+  const rows = txns.slice(0,_txnLimit).map((t,i)=>{
     const excluded = EXCLUDED_CATS.has(t.cat);
     return`
     <div class="txn" style="padding:10px 0;cursor:pointer;${excluded?'opacity:.45':''}" onclick="openTxnEdit(${i})" title="${excluded?'Excluded from calculations — click to edit':'Click to edit'}">
@@ -1892,7 +2111,8 @@ function renderTxnList(txns){
     </div>`;
   }).join('');
   const el = document.getElementById('txn-list');
-  if(el) el.innerHTML = rows || '<div style="padding:24px;text-align:center;color:var(--text3)">No transactions found</div>';
+  const more = txns.length > _txnLimit ? `<button type="button" class="btn btn-ghost btn-sm txn-more" onclick="_txnLimit+=TXN_PAGE;filterTxns()">Show more</button>` : '';
+  if(el) el.innerHTML = rows ? rows+more : '<div style="padding:24px;text-align:center;color:var(--text3)">No transactions found</div>';
   feather.replace({width:14,height:14});
 }
 
@@ -1901,12 +2121,19 @@ function goToTxnDate(iso){
   _txnDateFilter = iso;
   navigate('transactions');
 }
+const TXN_PAGE = 200;     // rows drawn at once; "Show more" adds the next ones
+let _txnLimit = TXN_PAGE;
 function filterTxns(q){
-  const search = (q||document.querySelector('.search-inp')?.value||'').toLowerCase();
+  if(typeof q === 'string') _txnLimit = TXN_PAGE;   // typing a search starts from the top
+  const search = (typeof q === 'string' ? q : (document.querySelector('.search-inp')?.value||'')).toLowerCase();
   const cat    = document.getElementById('catFilter')?.value||'';
+  const acc    = document.getElementById('accFilter')?.value||'';
   let list = applyOverrides(applyRules(D.txns));
   if(search) list = list.filter(t=>(t.name||'').toLowerCase().includes(search)||txnCats(t).some(c=>(c||'').toLowerCase().includes(search))||(t.acc||'').toLowerCase().includes(search));
   if(cat)    list = list.filter(t=>txnHasCat(t,cat));
+  if(acc)    list = list.filter(t=>t.acc===acc);
+  // A day picked on the Calendar page wins over the period
+  if(!_txnDateFilter){ const b = rangeBounds(); list = list.filter(t=>inRange(t,b)); }
   if(_txnDateFilter){
     // match "Jun 04" style dates against iso
     const iso = _txnDateFilter; // "2026-06-04"
@@ -1920,6 +2147,15 @@ function filterTxns(q){
       // "Jun 04" format
       return raw===`${moShort} ${dayPad}` || raw===`${moShort} ${dayNum}`;
     });
+  }
+  // Count and totals for what's shown (P2P transfers left out of the totals, as elsewhere)
+  const cnt = document.getElementById('txn-count');
+  if(cnt) cnt.textContent = list.length+' transaction'+(list.length===1?'':'s');
+  const tot = document.getElementById('txn-total');
+  if(tot){
+    const kept = list.filter(t=>!EXCLUDED_CATS.has(t.cat));
+    const inn = kept.filter(t=>t.amt>0).reduce((s,t)=>s+t.amt,0), out = kept.filter(t=>t.amt<0).reduce((s,t)=>s+Math.abs(t.amt),0);
+    tot.innerHTML = list.length ? `<span style="color:var(--green)">+${fmt(inn,0)}</span> · <span style="color:var(--red)">−${fmt(out,0)}</span>` : '';
   }
   renderTxnList(list);
 }
@@ -2017,20 +2253,20 @@ function pgTransactions(){
 
   <div class="filter-bar">
     <input class="search-inp" type="text" placeholder="Search transactions..." oninput="filterTxns(this.value)">
-    <select class="sel" id="catFilter" onchange="filterTxns()">
+    <select class="sel" id="catFilter" onchange="_txnLimit=TXN_PAGE;filterTxns()">
       <option value="">All Categories</option>
       ${catOpts}
     </select>
-    <select class="sel" id="accFilter" onchange="filterTxns()">
+    <select class="sel" id="accFilter" onchange="_txnLimit=TXN_PAGE;filterTxns()">
       <option value="">All Accounts</option>
       ${[...new Set(D.txns.map(t=>t.acc))].map(a=>`<option value="${a}">${a}</option>`).join('')}
     </select>
     <button class="btn btn-ghost btn-sm" onclick="openRulesModal()"><svg data-feather="sliders" style="width:13px;height:13px"></svg> Rules (${getRules().length})</button>
     ${_txnDateFilter?`<div style="display:flex;align-items:center;gap:6px;padding:4px 10px;background:var(--accent);border-radius:var(--r-sm)">
       <span style="font-size:11px;font-weight:600;color:var(--bg);display:inline-flex;align-items:center;gap:3px"><svg data-feather="calendar" style="width:11px;height:11px"></svg> ${new Date(_txnDateFilter+'T00:00').toLocaleDateString(LOC,{month:'short',day:'numeric',year:'numeric'})}</span>
-      <button onclick="_txnDateFilter='';filterTxns()" style="background:none;border:none;color:var(--bg);cursor:pointer;font-size:14px;line-height:1;padding:0 2px">×</button>
+      <button onclick="_txnDateFilter='';navigate('transactions')" style="background:none;border:none;color:var(--bg);cursor:pointer;font-size:14px;line-height:1;padding:0 2px">×</button>
     </div>`:''}
-    <div style="margin-left:auto;font-size:12px;color:var(--text3)" id="txn-count">${D.txns.length} transactions</div>
+    <div style="margin-left:auto;font-size:12px;color:var(--text3);display:flex;gap:8px;align-items:center"><span id="txn-count"></span><span id="txn-total" style="font-variant-numeric:tabular-nums"></span></div>
   </div>
   <div class="card">
     <div style="display:flex;gap:10px;padding:8px 0 10px;border-bottom:1px solid var(--border);margin-bottom:2px">

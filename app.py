@@ -1168,7 +1168,7 @@ def _build_real_data_js(data, user=None):
     raw_txns     = data.get("transactions", [])
     budget       = data.get("budget", [])
     cat_spend    = data.get("categorySpending", [])
-    inv = _investments_payload(user.id, raw_accounts) if user else {'investments': [], 'manualTotal': 0, 'investHistory': [], 'investHistoryLabels': []}
+    inv = _investments_payload(user.id, raw_accounts) if user else {'investments': [], 'manualTotal': 0, 'externalTotal': 0, 'investHistory': [], 'investHistoryLabels': [], 'brokers': [], 'snaptradeEnabled': False}
     # Manually tracked investments aren't part of the bank sync: add them to net worth
     net_worth    = round((data.get("netWorth", 0) or 0) + inv['externalTotal'], 2)
     income       = data.get("monthlyIncome", 0)
@@ -1274,7 +1274,7 @@ def _build_real_data_js(data, user=None):
   monthLabels:     {_js([m for m, _ in nw_hist])},
 
   accounts: {_js(accounts)},
-  txns: {_js(txns[:200])},
+  txns: {_js(txns[:5000])},  // all of them in practice: the date range picker filters in the browser
   budget: {_js(budget_js)},
   catLabels: {_js(cat_labels)},
   catAmounts: {json.dumps(cat_amounts)},
