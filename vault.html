@@ -9,8 +9,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<script src="/static/i18n-fr.js?v=4"></script>
-<script src="/static/i18n.js?v=3"></script>
+<script src="/static/i18n-fr.js?v=5"></script>
+<script src="/static/i18n.js?v=4"></script>
 <script src="/static/feather.min.js"></script>
 <script src="/static/tour-demo.js?v=5" defer></script>
 <script src="/static/tour.js?v=7" defer></script>
@@ -1202,7 +1202,7 @@ function navigate(page){
     budget:'Budget',insights:'Insights',investments:'Investments',crypto:'Crypto',
     gym:'Gym Tracker',eating:'Eating',habits:'Habits',calendar:'Calendar',settings:'Settings'};
   const subs={dashboard:nowStr,accounts:D.accounts?(D.accounts.length+' connected account'+(D.accounts.length!==1?'s':'')):'0 connected accounts',transactions:'All transactions',
-    budget:nowStr,insights:'AI-powered insights',investments:'Portfolio overview',
+    budget:'Last 30 days',insights:'AI-powered insights',investments:'Portfolio overview',
     crypto:'Crypto holdings',gym:'Workout tracker',eating:'Nutrition',habits:'Daily habits',
     calendar:nowStr,settings:'Account & preferences'};
   document.getElementById('page-title').textContent=titles[page]||'Dashboard';
@@ -1252,7 +1252,7 @@ function renderPage(p){
 // ═══════════════════════════ DATE RANGE ═══════════════════════════
 // One period for the Dashboard and the Transactions page: the last 30 days unless the
 // person picks another one. Kept for this browser tab (a sync reload keeps it); a new
-// visit starts again at 30 days. Budgets stay on calendar months: their limits are monthly.
+// visit starts again at 30 days. Budgets ignore it: they always compare the last 30 days.
 const RANGE_PRESETS = [
   ['7d','Last 7 days'], ['30d','Last 30 days'], ['90d','Last 90 days'],
   ['month','This month'], ['lastmonth','Last month'], ['year','This year'],
@@ -1430,7 +1430,7 @@ function pgDashboard(){
   const txns = allTxns.filter(t => !EXCLUDED_CATS.has(t.cat));
 
   // Income, spending, cash flow and recent transactions follow the chosen period
-  // (last 30 days by default); the budget card stays on the calendar month
+  // (last 30 days by default); budgets always use the last 30 days
   const now = new Date();
   const bounds = rangeBounds();
   const periodTxns = txns.filter(t=>inRange(t,bounds));
@@ -1537,7 +1537,7 @@ function pgDashboard(){
     <div>
       <div class="card mb16">
         <div class="sec-hdr">
-          <span class="sec-title">Budget · ${now.toLocaleDateString(LOC,{month:'long'})}</span>
+          <span class="sec-title">Budget<span style="margin-left:8px;font-size:11px;font-weight:500;color:var(--text3)">Last 30 days</span></span>
           <button class="sec-link" onclick="navigate('budget')">View all</button>
         </div>
         ${budget3}
@@ -2330,29 +2330,18 @@ function getBudgetItems(){
   const hidden   = getHidden();
   const order    = getBudgetOrder();
   const txns     = applyOverrides(applyRules(D.txns));
-  const now      = new Date();
 
-  // spending per cat this month
+  // Spending per category over the last 30 days (rolling, whatever period the top bar
+  // shows): a limit is compared with a full 30 days of spending, every day of the month
   const catSpend = {}, mainSpend = {};
-  const nowMonth = now.getMonth();
-  const nowYear  = now.getFullYear();
+  const last30 = rangeBounds({preset:'30d'});
   txns.forEach(t=>{
     if(EXCLUDED_CATS.has(t.cat)) return;
     if(t.amt>=0) return; // income
-    const raw = t.date_iso || t.date || '';
-    // Parse YYYY-MM-DD safely (avoid UTC offset bug)
-    let d;
-    if(/^\d{4}-\d{2}-\d{2}$/.test(raw)){
-      const [y,m,day] = raw.split('-').map(Number);
-      d = new Date(y, m-1, day);
-    } else {
-      d = new Date(raw);
-    }
-    if(d.getMonth()===nowMonth && d.getFullYear()===nowYear){
-      // Each category's budget sees the transaction; the overall total only counts it once
-      txnCats(t).forEach(c=>{ catSpend[c] = (catSpend[c]||0) + Math.abs(t.amt); });
-      mainSpend[t.cat] = (mainSpend[t.cat]||0) + Math.abs(t.amt);
-    }
+    if(!txnISO(t) || !inRange(t, last30)) return;
+    // Each category's budget sees the transaction; the overall total only counts it once
+    txnCats(t).forEach(c=>{ catSpend[c] = (catSpend[c]||0) + Math.abs(t.amt); });
+    mainSpend[t.cat] = (mainSpend[t.cat]||0) + Math.abs(t.amt);
   });
 
   // Build from ALL_CATS + any cats with spending not in ALL_CATS
@@ -2394,7 +2383,7 @@ function pgBudget(){
         <span style="font-size:14px;font-weight:600;color:var(--text)">Edit Budgets</span>
         <button onclick="closeBudgetModal()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px">×</button>
       </div>
-      <div style="font-size:12px;color:var(--text3);margin-bottom:16px">Set monthly limits. Hidden categories are dimmed. Drag rows to reorder.</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:16px">Set a limit for each category, over 30 days. Hidden categories are dimmed. Drag rows to reorder.</div>
       <div id="budget-edit-list"></div>
       <div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">
         <button onclick="closeBudgetModal()" class="btn btn-primary btn-sm">Done</button>
@@ -2406,7 +2395,7 @@ function pgBudget(){
     <div class="metric">
       <div class="metric-label">Total Budget</div>
       <div class="metric-val">${fmt(total,0)}</div>
-      <div class="metric-delta flat">This month</div>
+      <div class="metric-delta flat">Last 30 days</div>
     </div>
     <div class="metric">
       <div class="metric-label">Spent</div>
@@ -2428,7 +2417,7 @@ function pgBudget(){
   ${over.length?`<div class="insight mb20" style="border-color:var(--red-br);background:var(--red-bg)">
     <div class="insight-ico" style="background:var(--red-bg)"><svg data-feather="alert-triangle" style="width:14px;height:14px"></svg></div>
     <div><h4 style="color:var(--red)">Over budget in ${over.length} ${over.length===1?'category':'categories'}</h4>
-    <p>${over.map(b=>b.cat).join(', ')} exceeded this month.</p></div>
+    <p>${over.map(b=>b.cat).join(', ')} went over the limit in the last 30 days.</p></div>
   </div>`:''}
 
   <div class="g2">
@@ -2442,12 +2431,6 @@ function pgBudget(){
           const pct = b.lim>0?Math.min((b.spent/b.lim)*100,100):0;
           const cls = pct>=100?'over':pct>=85?'warn':'ok';
           const remaining = b.lim>0?(b.lim-b.spent):null;
-          // Projection alert: if >80% spent and before day 20
-          const today = new Date();
-          const dayOfMonth = today.getDate();
-          const daysInMonth = new Date(today.getFullYear(), today.getMonth()+1, 0).getDate();
-          const projPct = b.lim>0 ? (b.spent / dayOfMonth) * daysInMonth : 0;
-          const showProj = b.lim>0 && dayOfMonth<=20 && (b.spent/b.lim)>=0.8 && projPct>b.lim;
           return`<div class="budget-item" style="padding:14px 0">
             <div class="budget-row">
               <div class="budget-cat"><span class="budget-cat-ico">${ico(b.ico,15)}</span>${b.cat}</div>
@@ -2460,17 +2443,13 @@ function pgBudget(){
               <div class="pbar" style="flex:1;height:4px"><div class="pfill ${cls}" style="width:${pct.toFixed(1)}%"></div></div>
               <div style="font-size:11px;color:var(--text3);width:32px;text-align:right">${Math.round(pct)}%</div>
             </div>`:''}
-            ${showProj?`<div style="margin-top:7px;padding:7px 10px;background:rgba(251,191,36,0.07);border:1px solid rgba(251,191,36,0.2);border-radius:6px;display:flex;align-items:flex-start;gap:8px">
-              <span style="font-size:13px;display:inline-flex;align-items:center"><svg data-feather="bar-chart-2" style="width:13px;height:13px"></svg></span>
-              <div style="font-size:11px;color:#fbbf24;line-height:1.5">At this rate you will spend <strong>${fmt(projPct,0)}</strong> this month — <strong>${fmt(projPct-b.lim,0)} more</strong> than your budget of ${fmt(b.lim,0)}.</div>
-            </div>`:''}
           </div>`;
         }).join('')}
       </div>
     </div>
     <div>
       <div class="card mb14">
-        <div class="sec-hdr"><span class="sec-title">Monthly Overview</span></div>
+        <div class="sec-hdr"><span class="sec-title">30-day overview</span></div>
         ${total>0?`<div style="display:flex;align-items:center;gap:16px;margin-bottom:12px">
           <div style="flex:1">
             <div style="font-size:11px;color:var(--text3);margin-bottom:4px">Spent vs Budget</div>
