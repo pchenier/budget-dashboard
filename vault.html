@@ -1644,7 +1644,7 @@ function addCat(){
   if(cats.includes(name)){ inp.value=''; return; }
   cats.push(name);
   saveCats(cats);
-  ALL_CATS = cats;
+  ALL_CATS = withDataCats(cats);
   inp.value='';
   renderCatsList();
   // refresh all selects in the modal
@@ -1653,7 +1653,7 @@ function addCat(){
 function deleteCat(name){
   const cats = getCats().filter(c=>c!==name);
   saveCats(cats);
-  ALL_CATS = cats;
+  ALL_CATS = withDataCats(cats);
   renderCatsList();
   refreshCatSelects();
 }
@@ -1740,7 +1740,7 @@ function getTxnOverrides(){ try{ return JSON.parse(localStorage.getItem(TXN_OVER
 function saveTxnOverride(id, patch){ const o=getTxnOverrides(); o[id]=Object.assign(o[id]||{},patch); localStorage.setItem(TXN_OVERRIDES_KEY,JSON.stringify(o)); }
 function applyOverrides(txns){ const o=getTxnOverrides(); return txns.map(t=>o[t.id||t.name+t.date]?Object.assign({},t,o[t.id||t.name+t.date]):t); }
 
-const DEFAULT_CATS = ['Groceries','Food/Dining','Gas','Transport','Shopping','Business/Tech','Gym','Health','Phone/Internet','Entertainment','Subscriptions','Housing','Utilities','Cash/Transfers','Investments','Income','P2P/Personal Transfer','Other'];
+const DEFAULT_CATS = ['Groceries','Food/Dining','Gas','Transport','Auto','Shopping','Business/Tech','Gym','Health','Phone/Internet','Entertainment','Subscriptions','Housing','Utilities','Cash/Transfers','Investments','Income','P2P/Personal Transfer','Other'];
 const CATS_KEY = 'vault_categories';
 // A transaction has one main category (used for totals and charts) plus optional
 // extra ones, e.g. Anytime Fitness = Gym + Subscriptions. Extras make it show up in
@@ -1750,7 +1750,14 @@ function txnHasCat(t,c){ return txnCats(t).includes(c); }
 function catBadges(t,size){ return txnCats(t).map(c=>`<span class="badge b-gray" style="font-size:${size||10}px">${ico(catIco(c),size||10)} ${c}</span>`).join(''); }
 function getCats(){ try{ const s=localStorage.getItem(CATS_KEY); return s?JSON.parse(s):DEFAULT_CATS; }catch(e){return DEFAULT_CATS;} }
 function saveCats(cats){ localStorage.setItem(CATS_KEY,JSON.stringify(cats)); }
-let ALL_CATS = getCats();
+// The person's list, plus any category their transactions already use (e.g. "Auto",
+// set by the automatic categorizer), so every budget line can be found and filtered
+function withDataCats(cats){
+  const out=[...cats];
+  (D.txns||[]).forEach(t=>txnCats(t).forEach(c=>{ if(c && !out.includes(c)) out.push(c); }));
+  return out;
+}
+let ALL_CATS = withDataCats(getCats());
 
 function openTxnEdit(idx){
   const t = _filteredTxns[idx];
